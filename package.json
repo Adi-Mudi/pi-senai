@@ -1,0 +1,33 @@
+{
+  "name": "pi-orchestra",
+  "version": "0.1.0",
+  "description": "Stage-gated agent orchestration extension for Pi — Plan → Implement → Document → Deliver",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourname/pi-orchestra"
+  },
+  "scripts": {
+    "build": "tsc",
+    "test": "npm run build && node --test dist/pi-extension/test/**/*.test.js"
+  },
+  "pi": {
+    "extensions": [
+      "pi-extension/src/index.ts"
+    ],
+    "skills": [
+      "skills/orchestra-plan",
+      "skills/orchestra-implement",
+      "skills/orchestra-document",
+      "skills/orchestra-deliver"
+    ]
+  },
+  "peerDependencies": {
+    "@mariozechner/pi-coding-agent": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3"
+  }
+}
