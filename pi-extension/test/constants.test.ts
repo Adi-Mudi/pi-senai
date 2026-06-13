@@ -14,42 +14,66 @@ import {
 describe("constants", () => {
   const cwd = "/fake/project";
 
-  it("getOrchestraDir returns .pi/orchestra under cwd", () => {
-    assert.strictEqual(getOrchestraDir(cwd), path.join(cwd, ".pi/orchestra"));
+  it("getOrchestraDir returns .IDE_Plans/orchestra under cwd", () => {
+    assert.strictEqual(getOrchestraDir(cwd), path.join(cwd, ".IDE_Plans/orchestra"));
   });
 
   it("getStatePath returns state.json under orchestra dir", () => {
     assert.strictEqual(
       getStatePath(cwd),
-      path.join(cwd, ".pi/orchestra/state.json"),
+      path.join(cwd, ".IDE_Plans/orchestra/state.json"),
     );
   });
 
   it("getRunDir returns run-specific directory", () => {
     assert.strictEqual(
       getRunDir(cwd, "2026-06-12-hello"),
-      path.join(cwd, ".pi/orchestra/runs/2026-06-12-hello"),
+      path.join(cwd, ".IDE_Plans/orchestra/runs/2026-06-12-hello"),
     );
   });
 
   it("getArtifactPaths returns all artifact paths for a run", () => {
     const artifacts = getArtifactPaths(cwd, "run-1");
-    assert.strictEqual(artifacts.plan, path.join(cwd, ".pi/orchestra/runs/run-1/plan.md"));
+
+    assert.strictEqual(artifacts.runDir, path.join(cwd, ".IDE_Plans/orchestra/runs/run-1"));
+    assert.strictEqual(artifacts.planDir, path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan"));
+    assert.strictEqual(
+      artifacts.planScoutsDir,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/scouts"),
+    );
+    assert.strictEqual(
+      artifacts.planReviewsDir,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/reviews"),
+    );
+    assert.strictEqual(
+      artifacts.implementDir,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/implement"),
+    );
+    assert.strictEqual(
+      artifacts.documentDir,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/document"),
+    );
+    assert.strictEqual(
+      artifacts.deliverDir,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/deliver"),
+    );
+
+    assert.strictEqual(artifacts.plan, path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan.md"));
     assert.strictEqual(
       artifacts.discussionNotes,
-      path.join(cwd, ".pi/orchestra/runs/run-1/discussion-notes.md"),
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/discussion-notes.md"),
     );
     assert.strictEqual(
       artifacts.scoutAngle1,
-      path.join(cwd, ".pi/orchestra/runs/run-1/scout-angle_1.md"),
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/scouts/scout-angle_1.md"),
     );
     assert.strictEqual(
       artifacts.reviewCorrectness,
-      path.join(cwd, ".pi/orchestra/runs/run-1/review-correctness.md"),
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/reviews/review-correctness.md"),
     );
     assert.strictEqual(
       artifacts.securityReport,
-      path.join(cwd, ".pi/orchestra/runs/run-1/security-report.md"),
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/deliver/security-report.md"),
     );
   });
 

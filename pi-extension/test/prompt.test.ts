@@ -36,7 +36,7 @@ describe("prompt", () => {
     assert.strictEqual(context.stage, "plan");
     assert.strictEqual(
       context.artifacts.plan,
-      path.join(cwd, ".pi/orchestra/runs/run-1/plan.md"),
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan.md"),
     );
 
     assert.ok(prompt.includes('<pi-orchestra stage="plan">'));

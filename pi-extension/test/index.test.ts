@@ -64,8 +64,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".pi/orchestra"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".pi/orchestra/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/orchestra"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/orchestra/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },

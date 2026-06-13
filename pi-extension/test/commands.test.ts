@@ -129,7 +129,7 @@ describe("commands", () => {
     await commandHandlers["orchestra-approve"]("", makeCtx());
 
     const state = loadState(tmpDir);
-    const planPath = path.join(tmpDir, ".pi/orchestra/runs", state.runId, "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
 
@@ -159,7 +159,7 @@ describe("commands", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
 
-    const planPath = path.join(tmpDir, ".pi/orchestra/runs", state.runId, "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
 

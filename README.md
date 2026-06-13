@@ -53,22 +53,28 @@ See [`Doc/step-by-step-guide.md`](Doc/step-by-step-guide.md) for a detailed walk
 
 ## State & artifacts
 
-State is persisted locally under `.pi/orchestra/state.json`. Each run produces artifacts under `.pi/orchestra/runs/<run-id>/`:
+State is persisted locally under `.IDE_Plans/orchestra/state.json`. Each run produces artifacts under `.IDE_Plans/orchestra/runs/<run-id>/`:
 
 ```text
-.pi/orchestra/
+.IDE_Plans/orchestra/
 ├── state.json
 └── runs/<run-id>/
-    ├── plan.md
-    ├── discussion-notes.md
-    ├── scout-angle_1.md
-    ├── scout-angle_2.md
-    ├── scout-angle_3.md
-    ├── review-correctness.md
-    ├── review-security.md
-    ├── review-tests.md
-    ├── security-report.md
-    └── deliver-summary.md
+    ├── plan/
+    │   ├── plan.md
+    │   ├── discussion-notes.md
+    │   ├── scouts/
+    │   │   ├── scout-angle_1.md
+    │   │   ├── scout-angle_2.md
+    │   │   └── scout-angle_3.md
+    │   └── reviews/
+    │       ├── review-correctness.md
+    │       ├── review-security.md
+    │       └── review-tests.md
+    ├── implement/
+    ├── document/
+    └── deliver/
+        ├── security-report.md
+        └── deliver-summary.md
 ```
 
 ## Development
@@ -102,7 +108,7 @@ npm test
 ├── pi-extension/src/
 │   ├── index.ts          # extension entry: commands, hooks
 │   ├── commands.ts       # slash command handlers
-│   ├── state.ts          # read/write .pi/orchestra/state.json
+│   ├── state.ts          # read/write .IDE_Plans/orchestra/state.json
 │   ├── prompt.ts         # build stage prompts / skill loads
 │   └── constants.ts      # paths, stage names, artifact layout
 ├── pi-extension/test/    # unit tests

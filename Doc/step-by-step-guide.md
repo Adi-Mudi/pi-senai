@@ -44,7 +44,7 @@ This guide walks you through running a full **Plan → Implement → Document �
 
 What happens:
 
-1. The extension creates `.pi/orchestra/state.json` with the mission and a run ID.
+1. The extension creates `.IDE_Plans/orchestra/state.json` with the mission and a run ID.
 2. It sets the current stage to `planning`.
 3. It sends the Plan stage skill prompt to the main agent.
 4. The main agent spawns three scouts in parallel:
@@ -55,8 +55,9 @@ What happens:
 6. The main agent asks you those questions live using the **AskUserQuestion** tool.
 7. You answer the questions.
 8. The main agent writes your answers into `discussion-notes.md`.
-9. The planner writes `plan.md` under `.pi/orchestra/runs/<run-id>/`.
-10. Three reviewers (correctness, security, tests) review the plan in parallel.
+9. The planner writes `plan.md` under `.IDE_Plans/orchestra/runs/<run-id>/plan/`.
+10. Scout reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/`.
+11. Review reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/`.
 
 ### Approve the plan
 
@@ -189,7 +190,7 @@ If you want to start over:
 /orchestra-reset
 ```
 
-This deletes `.pi/orchestra/state.json`. Artifacts under `.pi/orchestra/runs/<run-id>/` are preserved.
+This deletes `.IDE_Plans/orchestra/state.json`. Artifacts under `.IDE_Plans/orchestra/runs/<run-id>/` are preserved.
 
 ---
 
@@ -216,5 +217,5 @@ This deletes `.pi/orchestra/state.json`. Artifacts under `.pi/orchestra/runs/<ru
 
 - **Do not skip `/orchestra-approve`**. Stage commands check the current stage and will block if the previous stage is not approved.
 - **Each stage is user-driven**. The main agent pauses at each approval gate and waits for you.
-- **Artifacts are local**. Everything lives inside `.pi/orchestra/` in this project directory.
+- **Artifacts are local**. Everything lives inside `.IDE_Plans/orchestra/` in this project directory.
 - **Subagents need a multiplexer**. Make sure you run Pi inside tmux, zellij, or another supported terminal multiplexer so `pi-interactive-subagents` can spawn subagents.

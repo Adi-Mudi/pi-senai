@@ -45,12 +45,19 @@ describe("state", () => {
     assert.strictEqual(loaded.currentStage, "planning");
   });
 
-  it("startRun creates a run directory and saves state", () => {
+  it("startRun creates all stage subdirectories and saves state", () => {
     const state = startRun(tmpDir, "Build a thing");
     assert.strictEqual(state.mission, "Build a thing");
     assert.strictEqual(state.currentStage, "none");
     assert.ok(state.runId.length > 0);
-    assert.ok(fs.existsSync(path.join(tmpDir, ".pi/orchestra/runs", state.runId)));
+
+    const runDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId);
+    assert.ok(fs.existsSync(runDir));
+    assert.ok(fs.existsSync(path.join(runDir, "plan/scouts")));
+    assert.ok(fs.existsSync(path.join(runDir, "plan/reviews")));
+    assert.ok(fs.existsSync(path.join(runDir, "implement")));
+    assert.ok(fs.existsSync(path.join(runDir, "document")));
+    assert.ok(fs.existsSync(path.join(runDir, "deliver")));
 
     const loaded = loadState(tmpDir);
     assert.strictEqual(loaded.mission, "Build a thing");
@@ -86,7 +93,7 @@ describe("state", () => {
   });
 
   it("loadState migrates old state versions", () => {
-    const statePath = path.join(tmpDir, ".pi/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
