@@ -52,9 +52,11 @@ What happens:
    - `scout-2` — target-area deep dive
    - `scout-3` — risk / dependency audit
 5. After the scouts finish, a discussion agent reads their reports and drafts clarifying questions.
-6. You answer the questions.
-7. The planner writes `plan.md` under `.pi/orchestra/runs/<run-id>/`.
-8. Three reviewers (correctness, security, tests) review the plan in parallel.
+6. The main agent asks you those questions live using the **AskUserQuestion** tool.
+7. You answer the questions.
+8. The main agent writes your answers into `discussion-notes.md`.
+9. The planner writes `plan.md` under `.pi/orchestra/runs/<run-id>/`.
+10. Three reviewers (correctness, security, tests) review the plan in parallel.
 
 ### Approve the plan
 

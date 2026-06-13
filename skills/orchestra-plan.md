@@ -13,11 +13,9 @@ Turn the mission into an approved implementation plan stored at the `plan.md` pa
 
 ## Sequence
 
-Run these steps in order. Use the `subagent` tool for each agent. Wait for each agent to finish before moving to the next step that depends on it.
-
 ```
 scout-1 ──┐
-scout-2 ──┼──▶ discussion ──▶ planner ──▶ reviewers ──▶ (approval gate)
+scout-2 ──┼──▶ discussion ──▶ AskUserQuestion ──▶ planner ──▶ reviewers ──▶ (approval gate)
 scout-3 ──┘
 ```
 
@@ -53,11 +51,49 @@ subagent({
 });
 ```
 
-After the discussion agent finishes, ask the user those questions. Wait for answers.
+### 3. Live user interview with AskUserQuestion
 
-### 3. Planner
+After the discussion agent finishes, read the drafted questions from `<discussionNotes>` and ask the user using the **AskUserQuestion** tool.
 
-Spawn the planner with the mission, scout context, discussion notes, and user answers.
+The AskUserQuestion tool is already installed (`npm:@mazli/pi-ask-user-question`). Use it to present the questions with clear options.
+
+Example:
+
+```typescript
+AskUserQuestion({
+  questions: [
+    {
+      question: "What should the CLI output format be?",
+      header: "Format",
+      multiSelect: false,
+      options: [
+        { label: "Plain text", description: "Just the greeting string" },
+        { label: "JSON", description: '{ "message": "Hello, World!" }' },
+      ],
+    },
+    {
+      question: "Should the command accept a name argument?",
+      header: "Name arg",
+      multiSelect: false,
+      options: [
+        { label: "Yes (Required)", description: "User must pass a name" },
+        { label: "Yes (Optional)", description: "Default to World" },
+        { label: "No", description: "Always print Hello, World!" },
+      ],
+    },
+  ],
+});
+```
+
+Wait for the user to answer. Do not proceed until you have the answers.
+
+### 4. Write discussion-notes.md with answers
+
+Update `<discussionNotes>` to include both the drafted questions and the user's answers. Keep it concise.
+
+### 5. Planner
+
+Spawn the planner with the mission, scout context, and finalized discussion notes.
 
 ```typescript
 subagent({
@@ -67,7 +103,7 @@ subagent({
 });
 ```
 
-### 4. Parallel reviewers (3 agents)
+### 6. Parallel reviewers (3 agents)
 
 Spawn three reviewers in parallel:
 
@@ -77,16 +113,17 @@ Spawn three reviewers in parallel:
 
 Each writes to the assigned review artifact path.
 
-### 5. Approval gate
+### 7. Approval gate
 
 Present the plan and the three reviews to the user. Ask:
 
 > The plan is ready at `<plan>`. Reviews: correctness `<reviewCorrectness>`, security `<reviewSecurity>`, tests `<reviewTests>`. Approve to move to Implement, or request changes?
 
-Do NOT advance to Implement until the user explicitly approves. Once approved, update state to `planned` by telling the user to run `/orchestra-implement`.
+Do NOT advance to Implement until the user explicitly approves. Once approved, tell the user to run `/orchestra-approve`.
 
 ## Constraints
 
 - No source code edits in the Plan stage.
 - Every scout and reviewer must write to its assigned artifact path.
+- Use the AskUserQuestion tool for the live interview step.
 - The plan stage is not complete until the user approves the plan.
