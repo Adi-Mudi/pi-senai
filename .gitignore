@@ -4,3 +4,4 @@ dist/
 .DS_Store
 .IDE_Plans/
 .pi/orchestra
+.pi/tasks
