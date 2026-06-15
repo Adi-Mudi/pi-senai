@@ -148,7 +148,7 @@ describe("commands", () => {
     assert.ok(notifications[0].message.includes("Plan artifact not found"));
   });
 
-  it("orchestra-implement can be run directly after plan exists", async () => {
+  it("orchestra-implement can be run directly from planned stage", async () => {
     registerCommands(makeApi());
     await commandHandlers["orchestra-plan"]("Mission", makeCtx());
     await commandHandlers["orchestra-approve"]("", makeCtx()); // advances to implementing
@@ -200,5 +200,70 @@ describe("commands", () => {
 
     const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
     assert.strictEqual(result.ok, true);
+  });
+
+  it("orchestra-document blocks when implement artifacts are missing", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    // Manually set state to implemented without creating implement artifacts.
+    let state = loadState(tmpDir);
+    state.currentStage = "implemented";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-document"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Implement artifacts not found"));
+    assert.strictEqual(loadState(tmpDir).currentStage, "implemented");
+  });
+
+  it("orchestra-deliver blocks when document artifacts are missing", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    // Manually set state to documented without creating document artifacts.
+    let state = loadState(tmpDir);
+    state.currentStage = "documented";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-deliver"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Document artifacts not found"));
+    assert.strictEqual(loadState(tmpDir).currentStage, "documented");
+  });
+
+  it("orchestra-document rejects running from planned stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    // Manually reset stage back to planned.
+    let state = loadState(tmpDir);
+    state.currentStage = "planned";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    // Create plan and implement artifacts so only the stage restriction is tested.
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    fs.writeFileSync(planPath, "# Plan\n");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "implement", "notes.md");
+    fs.mkdirSync(path.dirname(implementPath), { recursive: true });
+    fs.writeFileSync(implementPath, "# Implement notes\n");
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-document"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("can only run from 'implemented'"));
+    assert.strictEqual(loadState(tmpDir).currentStage, "planned");
   });
 });

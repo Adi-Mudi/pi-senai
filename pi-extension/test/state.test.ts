@@ -83,6 +83,22 @@ describe("state", () => {
     assert.ok((result as { ok: false; reason: string }).reason.includes("Cannot move"));
   });
 
+  it("advanceStage returns a new state object and does not mutate the input", () => {
+    const state = startRun(tmpDir, "Mission");
+    const planning = advanceStage(tmpDir, state, "planning");
+    assert.strictEqual(planning.ok, true);
+    assert.notStrictEqual(
+      (planning as { ok: true; state: ReturnType<typeof loadState> }).state,
+      state,
+    );
+    assert.strictEqual(state.currentStage, "none");
+    assert.strictEqual(
+      (planning as { ok: true; state: ReturnType<typeof loadState> }).state
+        .currentStage,
+      "planning",
+    );
+  });
+
   it("resetState removes the state file", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
