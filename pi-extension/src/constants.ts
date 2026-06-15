@@ -133,13 +133,18 @@ export function getDefaultArtifactPaths(): StageArtifactPaths {
 }
 
 export function makeRunId(mission: string): string {
-  const date = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
   const slug = mission
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 40);
-  return `${date}-${slug || "run"}`;
+  return `${year}-${month}-${day}-${hours}-${minutes}-${slug || "run"}`;
 }
 
 export function formatStageStatus(state: {

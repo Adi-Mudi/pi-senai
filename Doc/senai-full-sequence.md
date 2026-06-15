@@ -84,23 +84,23 @@ Auto-starts Implement
 
 | Step | Agent | System | Context | Output |
 |------|-------|--------|---------|--------|
-| 1 | coordinator | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-coordinator.md` |
-| 2 | scout-1 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-angle_1.md` |
-| 2 | scout-2 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-angle_2.md` |
-| 2 | scout-3 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-angle_3.md` |
+| 1 | coordinator | pi-subagents | fresh | (no artifact) |
+| 2 | scout-1 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_1.md` |
+| 2 | scout-2 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_2.md` |
+| 2 | scout-3 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_3.md` |
 | 3 | discussion | pi-subagents | fork | Drafts interview questions for the user |
 | 4 | parent + user | main session | — | User answers via `AskUserQuestion` |
-| 5 | planner | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan.md` |
-| 6 | reviewer-correctness | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/review-correctness.md` |
-| 6 | reviewer-security | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/review-security.md` |
-| 6 | reviewer-tests | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/review-tests.md` |
+| 5 | planner | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` |
+| 6 | reviewer-correctness | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-correctness.md` |
+| 6 | reviewer-security | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-security.md` |
+| 6 | reviewer-tests | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-tests.md` |
 
 ### Interview Step
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
 - It sends the questions to the parent session via intercom (`reason: "need_decision"`).
 - The parent asks the user via `AskUserQuestion`.
 - The parent sends the user's answers back to the discussion agent via intercom.
-- The discussion agent writes `.IDE_Plans/orchestra/runs/<run-id>/discussion-notes.md` with clarified scope, decisions, and open questions.
+- The discussion agent writes `.IDE_Plans/orchestra/runs/<run-id>/plan/discussion-notes.md` with clarified scope, decisions, and open questions.
 
 ### Approval Gate
 - If all reviews PASS → run `/orchestra-approve`. This marks the plan approved and automatically starts the Implement stage.

@@ -79,12 +79,12 @@ describe("constants", () => {
 
   it("makeRunId creates a slug from mission and date", () => {
     const runId = makeRunId("Build a hello world CLI");
-    assert.match(runId, /^\d{4}-\d{2}-\d{2}-build-a-hello-world-cli$/);
+    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-build-a-hello-world-cli$/);
   });
 
   it("makeRunId falls back to run when mission is empty", () => {
     const runId = makeRunId("");
-    assert.match(runId, /^\d{4}-\d{2}-\d{2}-run$/);
+    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-run$/);
   });
 
   it("STAGE_TRANSITIONS defines a linear workflow", () => {

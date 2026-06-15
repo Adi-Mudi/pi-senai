@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Run IDs now include the local hour and minute: `YYYY-MM-DD-HH-MM-<mission-slug>`.
 - `/orchestra-approve` now automatically advances through the completed stage and immediately starts the next working stage (Implement, Document, or Deliver).
 - `/orchestra-status` now shows the next command for every stage.
 - Stage commands emit completion remarks that tell the user to run `/orchestra-approve` next.
