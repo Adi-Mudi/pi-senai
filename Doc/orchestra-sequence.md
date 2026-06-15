@@ -2,15 +2,15 @@
 
 ## Subagent Orchestration — Plan → Implement → Document → Deliver
 
-**Version:** 1.0  
-**Date:** 2026-06-12  
+**Version:** 1.1  
+**Date:** 2026-06-13  
 **Status:** Current
 
 ---
 
 ## 1. Overview
 
-is a stage-gated agent orchestration system. Each stage is a sequence of specialized subagents. Every stage ends with a parent approval gate before the next stage can begin.
+Pi Orchestra is a stage-gated agent orchestration extension for Pi. Each stage is a sequence of specialized subagents. Every stage ends with a parent approval gate before the next stage can begin.
 
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
@@ -25,16 +25,46 @@ is a stage-gated agent orchestration system. Each stage is a sequence of special
 
 ## 2. Stage Flow
 
-| Stage     | Purpose                                                                            |
-| --------- | ---------------------------------------------------------------------------------- |
-| Plan      | Research the codebase, clarify scope, create an implementation plan, and review it |
-| Implement | Build and test the approved plan                                                   |
-| Document  | Write all project documentation                                                    |
-| Deliver   | Run a final security audit and package the result                                  |
+| Stage     | Command                  | Purpose                                                                            |
+| --------- | ------------------------ | ---------------------------------------------------------------------------------- |
+| Plan      | `/orchestra-plan <mission>` | Research the codebase, clarify scope, create an implementation plan, and review it |
+| Implement | `/orchestra-implement`   | Build and test the approved plan                                                   |
+| Document  | `/orchestra-document`    | Write all project documentation                                                    |
+| Deliver   | `/orchestra-deliver`     | Run a final security audit and package the result                                  |
+
+Use `/orchestra-approve` to advance through each approval gate.
 
 ---
 
-## 3. Stage 1 — Plan
+## 3. Artifact Layout
+
+All runtime artifacts are stored under `.IDE_Plans/orchestra/`:
+
+```text
+.IDE_Plans/orchestra/
+├── state.json
+└── runs/<run-id>/
+    ├── plan/
+    │   ├── plan.md
+    │   ├── discussion-notes.md
+    │   ├── scouts/
+    │   │   ├── scout-angle_1.md
+    │   │   ├── scout-angle_2.md
+    │   │   └── scout-angle_3.md
+    │   └── reviews/
+    │       ├── review-correctness.md
+    │       ├── review-security.md
+    │       └── review-tests.md
+    ├── implement/
+    ├── document/
+    └── deliver/
+        ├── security-report.md
+        └── deliver-summary.md
+```
+
+---
+
+## 4. Stage 1 — Plan
 
 ### Purpose
 
@@ -52,7 +82,7 @@ scouts × 3 (parallel, visible panes)
 discussion
     │
     ▼
-parent interview with user
+AskUserQuestion interview with user
     │
     ▼
 discussion writes discussion-notes.md
@@ -64,29 +94,28 @@ planner
 reviewers × 3 (parallel)
     │
     ▼
-Parent approval gate
+/orchestra-approve
 ```
 
 ### Interview Step
 
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
-- It sends the questions to the parent session via intercom.
-- The parent asks the user via an interview step.
-- The parent sends the user's answers back to the discussion agent via intercom.
-- The discussion agent writes `discussion-notes.md` with clarified scope, decisions, and open questions.
+- The main agent asks the questions via the `AskUserQuestion` tool.
+- The user answers in the terminal dialog.
+- The main agent writes `discussion-notes.md` with clarified scope, decisions, and open questions.
 
 ### Approval Gate
 
-- If all reviewers PASS → move to Implement.
-- If any reviewer NEEDS_FIX → fix and re-run review before moving on.
+- If all reviewers PASS → run `/orchestra-approve` to move to Implement.
+- If any reviewer NEEDS_FIX → fix the plan and re-run review before moving on.
 
 ---
 
-## 4. Stage 2 — Implement
+## 5. Stage 2 — Implement
 
 ### Purpose
 
-Build the approved plan and validate it through tests and review.
+Build and test the approved plan.
 
 ### Sequence
 
@@ -94,7 +123,7 @@ Build the approved plan and validate it through tests and review.
 test-skeleton
     │
     ▼
-implementer
+implementer / worker
     │
     ▼
 linter
@@ -109,7 +138,7 @@ code-review
 full-test
     │
     ▼
-Parent approval gate
+/orchestra-approve
 ```
 
 ### Hard Rules
@@ -120,12 +149,12 @@ Parent approval gate
 
 ### Approval Gate
 
-- If all checks pass → move to Document.
+- If all checks pass → run `/orchestra-approve` to move to Document.
 - If any check fails → fix and re-run the stage.
 
 ---
 
-## 5. Stage 3 — Document
+## 6. Stage 3 — Document
 
 ### Purpose
 
@@ -140,7 +169,7 @@ api-docs-writer    ──┼──▶ All complete
 other-docs-writer  ──┘
          │
          ▼
-  Parent approval gate
+  /orchestra-approve
 ```
 
 ### Notes
@@ -151,12 +180,12 @@ other-docs-writer  ──┘
 
 ### Approval Gate
 
-- If docs are acceptable → move to Deliver.
+- If docs are acceptable → run `/orchestra-approve` to move to Deliver.
 - If changes are needed → fix and re-run.
 
 ---
 
-## 6. Stage 4 — Deliver
+## 7. Stage 4 — Deliver
 
 ### Purpose
 
@@ -171,12 +200,50 @@ security-gate
 archive
     │
     ▼
-Parent approval gate
+/orchestra-approve
 ```
 
 ### Approval Gate
 
-- If security gate passes → ship.
+- If security gate passes → run `/orchestra-approve` to finish.
 - If issues are found → fix and re-run.
 
 ---
+
+## 8. Runtime Artifacts
+
+All auto-generated files go into `.IDE_Plans/orchestra/`:
+
+```text
+.IDE_Plans/orchestra/
+├── state.json
+└── runs/<run-id>/
+    ├── plan/
+    │   ├── plan.md
+    │   ├── discussion-notes.md
+    │   ├── scouts/
+    │   │   ├── scout-angle_1.md
+    │   │   ├── scout-angle_2.md
+    │   │   └── scout-angle_3.md
+    │   └── reviews/
+    │       ├── review-correctness.md
+    │       ├── review-security.md
+    │       └── review-tests.md
+    ├── implement/
+    ├── document/
+    └── deliver/
+        ├── security-report.md
+        └── deliver-summary.md
+```
+
+---
+
+## 9. Cross-Cutting Rules
+
+1. **Plan before implement.** Always run `/orchestra-plan` before `/orchestra-implement` for non-trivial work.
+2. **Never skip review.** Every producing stage ends with a reviewer or approval gate.
+3. **Parent owns decisions.** Subagents advise. The parent Pi session approves or rejects.
+4. **Async by default.** All subagents launch in parallel where dependencies allow.
+5. **One writer at a time.** Never run two worker agents in parallel on the same worktree.
+6. **Escalate, don't guess.** If a subagent needs an unapproved decision, it asks via the main agent.
+7. **Read-only plan stage.** No plan-stage agent edits project source files.

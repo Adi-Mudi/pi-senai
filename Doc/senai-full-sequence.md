@@ -1,8 +1,10 @@
 # Senai Full Sequence
 ## Stage-Gated Agent Orchestration — Plan → Implement → Document → Deliver
 
-**Version:** 1.0  
-**Date:** 2026-06-12  
+> **Implementation note:** This specification is implemented by the `pi-orchestra` extension in this repository. The commands below reference the `pi-orchestra` slash-command names (`/orchestra-*`). For the original Senai extension spec, see the commit history.
+
+**Version:** 1.1  
+**Date:** 2026-06-13  
 **Status:** Current
 
 ---
@@ -26,16 +28,18 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
 
 | Stage | Command | Purpose | Output |
 |-------|---------|---------|--------|
-| 1. Plan | `/senai-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/.senai/plan.md` |
-| 2. Implement | `/senai-implement` | Build and test the approved plan | Working, tested code |
-| 3. Document | `/senai-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
-| 4. Deliver | `/senai-deliver` | Security audit and package | Security report + archive artifact |
+| 1. Plan | `/orchestra-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` |
+| 2. Implement | `/orchestra-implement` | Build and test the approved plan | Working, tested code |
+| 3. Document | `/orchestra-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
+| 4. Deliver | `/orchestra-deliver` | Security audit and package | Security report + archive artifact |
+
+Use `/orchestra-approve` to advance through each stage approval gate.
 
 ---
 
 ## 3. Stage 1 — Plan
 
-**Command:** `/senai-plan "<mission>"`
+**Command:** `/orchestra-plan "<mission>"`
 
 ### Purpose
 Research the codebase, interview the user to clarify scope, write a concrete implementation plan, and review it.
@@ -71,33 +75,33 @@ Parent approval gate
 
 | Step | Agent | System | Context | Output |
 |------|-------|--------|---------|--------|
-| 1 | coordinator | pi-subagents | fresh | `.IDE_Plans/.senai/scout-coordinator.md` |
-| 2 | scout-1 | pi-teams | fresh | `.IDE_Plans/.senai/scout-angle_1.md` |
-| 2 | scout-2 | pi-teams | fresh | `.IDE_Plans/.senai/scout-angle_2.md` |
-| 2 | scout-3 | pi-teams | fresh | `.IDE_Plans/.senai/scout-angle_3.md` |
+| 1 | coordinator | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-coordinator.md` |
+| 2 | scout-1 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-angle_1.md` |
+| 2 | scout-2 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-angle_2.md` |
+| 2 | scout-3 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/scout-angle_3.md` |
 | 3 | discussion | pi-subagents | fork | Drafts interview questions for the user |
 | 4 | parent + user | main session | — | User answers via `AskUserQuestion` |
-| 5 | planner | pi-subagents | fork | `.IDE_Plans/.senai/plan.md` |
-| 6 | reviewer-correctness | pi-subagents | fresh | `.IDE_Plans/.senai/review-correctness.md` |
-| 6 | reviewer-security | pi-subagents | fresh | `.IDE_Plans/.senai/review-security.md` |
-| 6 | reviewer-tests | pi-subagents | fresh | `.IDE_Plans/.senai/review-tests.md` |
+| 5 | planner | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan.md` |
+| 6 | reviewer-correctness | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/review-correctness.md` |
+| 6 | reviewer-security | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/review-security.md` |
+| 6 | reviewer-tests | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/review-tests.md` |
 
 ### Interview Step
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
 - It sends the questions to the parent session via intercom (`reason: "need_decision"`).
 - The parent asks the user via `AskUserQuestion`.
 - The parent sends the user's answers back to the discussion agent via intercom.
-- The discussion agent writes `.IDE_Plans/.senai/discussion-notes.md` with clarified scope, decisions, and open questions.
+- The discussion agent writes `.IDE_Plans/orchestra/runs/<run-id>/discussion-notes.md` with clarified scope, decisions, and open questions.
 
 ### Approval Gate
-- If all reviews PASS → approve plan, then run `/senai-implement`.
+- If all reviews PASS → approve plan, then run `/orchestra-implement`.
 - If any review NEEDS_FIX → fix the plan, re-run review, then approve.
 
 ---
 
 ## 4. Stage 2 — Implement
 
-**Command:** `/senai-implement`
+**Command:** `/orchestra-implement`
 
 ### Purpose
 Build the approved plan and validate with tests and code review.
@@ -140,17 +144,17 @@ Parent approval gate
 ### Hard Rules
 - Only the implementer edits source files.
 - One writer at a time.
-- Stop if `plan.md` is missing and prompt user to run `/senai-plan` first.
+- Stop if `plan.md` is missing and prompt user to run `/orchestra-plan` first.
 
 ### Approval Gate
-- If all checks pass → approve, then run `/senai-document`.
+- If all checks pass → approve, then run `/orchestra-document`.
 - If any check fails → fix and re-run the stage.
 
 ---
 
 ## 5. Stage 3 — Document
 
-**Command:** `/senai-document`
+**Command:** `/orchestra-document`
 
 ### Purpose
 Write and update all project documentation.
@@ -181,14 +185,14 @@ other-docs-writer  ──┘
 - No source code edits in this stage.
 
 ### Approval Gate
-- If docs look good → approve, then run `/senai-deliver`.
+- If docs look good → approve, then run `/orchestra-deliver`.
 - If changes needed → fix and re-run.
 
 ---
 
 ## 6. Stage 4 — Deliver
 
-**Command:** `/senai-deliver`
+**Command:** `/orchestra-deliver`
 
 ### Purpose
 Final security check and packaging.
@@ -209,8 +213,8 @@ Parent approval gate
 
 | Step | Agent | System | Context | Output |
 |------|-------|--------|---------|--------|
-| 1 | security-gate | pi-subagents | fresh | `.IDE_Plans/.senai/security-report.md` |
-| 2 | archive | pi-subagents | fork | `.IDE_Plans/.senai/deliver-summary.md` + archive artifact |
+| 1 | security-gate | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/security-report.md` |
+| 2 | archive | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/deliver-summary.md` + archive artifact |
 
 ### Approval Gate
 - If security gate passes → approve and ship.
@@ -224,43 +228,48 @@ Most stage commands accept inline overrides to change the default agent for a sl
 
 ### Plan overrides
 ```
-/senai-plan "<mission>" --coordinator=worker --scout-count=5 --discussion=oracle --planner=planner --reviewer-correctness=reviewer --reviewer-security=reviewer --reviewer-tests=reviewer
+/orchestra-plan "<mission>" --coordinator=worker --scout-count=5 --discussion=oracle --planner=planner --reviewer-correctness=reviewer --reviewer-security=reviewer --reviewer-tests=reviewer
 ```
 
 ### Implement overrides
 ```
-/senai-implement --test-skeleton=worker --implementer=worker --linter=worker --code-reviewer=reviewer
+/orchestra-implement --test-skeleton=worker --implementer=worker --linter=worker --code-reviewer=reviewer
 ```
 
 ### Document overrides
 ```
-/senai-document --readme=worker --changelog=worker --api-docs=worker --other-docs=worker
+/orchestra-document --readme=worker --changelog=worker --api-docs=worker --other-docs=worker
 ```
 
 ### Deliver overrides
 ```
-/senai-deliver --security-gate=reviewer --archive=worker
+/orchestra-deliver --security-gate=reviewer --archive=worker
 ```
 
 ---
 
 ## 8. Runtime Artifacts
 
-All auto-generated files go into `.IDE_Plans/.senai/`:
+All auto-generated files go into `.IDE_Plans/orchestra/runs/<run-id>/`:
 
 ```
-.IDE_Plans/.senai/
-├── scout-coordinator.md
-├── scout-angle_1.md
-├── scout-angle_2.md
-├── scout-angle_3.md
-├── discussion-notes.md
-├── plan.md
-├── review-correctness.md
-├── review-security.md
-├── review-tests.md
-├── security-report.md
-└── deliver-summary.md
+.IDE_Plans/orchestra/runs/<run-id>/
+├── plan/
+│   ├── plan.md
+│   ├── discussion-notes.md
+│   ├── scouts/
+│   │   ├── scout-angle_1.md
+│   │   ├── scout-angle_2.md
+│   │   └── scout-angle_3.md
+│   └── reviews/
+│       ├── review-correctness.md
+│       ├── review-security.md
+│       └── review-tests.md
+├── implement/
+├── document/
+└── deliver/
+    ├── security-report.md
+    └── deliver-summary.md
 ```
 
 ---
@@ -285,7 +294,7 @@ All auto-generated files go into `.IDE_Plans/.senai/`:
 
 ## 10. Cross-Cutting Rules
 
-1. **Plan before implement.** Always run `/senai-plan` before `/senai-implement` for non-trivial work.
+1. **Plan before implement.** Always run `/orchestra-plan` before `/orchestra-implement` for non-trivial work.
 2. **Never skip review.** Every producing stage ends with a reviewer or approval gate.
 3. **Parent owns decisions.** Subagents advise. The parent session approves or rejects.
 4. **Async by default.** All subagents launch with `async: true` unless the user asks for blocking.
@@ -302,8 +311,8 @@ All auto-generated files go into `.IDE_Plans/.senai/`:
 |-------|------|
 | Product requirements | `docs/PRD.md` |
 | System architecture | `docs/ARCHITECTURE.md` |
-| Plan stage agent specs | `docs/senai-plan-spec.md` |
-| Plan stage config | `docs/senai-plan-config.md` |
-| Scout phase design | `docs/senai-plan-scout-design.md` |
-| Plan phase roadmap | `docs/senai-plan-phases.md` |
-| Agent config | `docs/senai-plan-agents.md` |
+| Plan stage agent specs | `docs/orchestra-plan-spec.md` |
+| Plan stage config | `docs/orchestra-plan-config.md` |
+| Scout phase design | `docs/orchestra-plan-scout-design.md` |
+| Plan phase roadmap | `docs/orchestra-plan-phases.md` |
+| Agent config | `docs/orchestra-plan-agents.md` |
