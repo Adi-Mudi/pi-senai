@@ -103,7 +103,19 @@ subagent({
 });
 ```
 
-### 6. Parallel reviewers (3 agents)
+### 6. Plan overview writer
+
+Spawn a plan-overview writer that reads the finalized plan and writes a user-facing summary.
+
+```typescript
+subagent({
+  name: "plan-overview",
+  agent: "planner",
+  task: `Read the implementation plan at <plan> and the discussion notes at <discussionNotes>. Write a user-friendly overview to <planOverview>. Include: mission summary, why we are doing this, high-level approach, key decisions, expected outcome, and links to <plan>, scout reports, and review reports. Keep it concise and easy to read.`,
+});
+```
+
+### 7. Parallel reviewers (3 agents)
 
 Spawn three reviewers in parallel:
 
@@ -113,11 +125,11 @@ Spawn three reviewers in parallel:
 
 Each writes to the assigned review artifact path.
 
-### 7. Approval gate
+### 8. Approval gate
 
-Present the plan and the three reviews to the user. Ask:
+Present the plan, overview, and the three reviews to the user. Ask:
 
-> The plan is ready at `<plan>`. Reviews: correctness `<reviewCorrectness>`, security `<reviewSecurity>`, tests `<reviewTests>`. Approve to move to Implement, or request changes?
+> The plan is ready at `<plan>`. User overview: `<planOverview>`. Reviews: correctness `<reviewCorrectness>`, security `<reviewSecurity>`, tests `<reviewTests>`. Approve to move to Implement, or request changes?
 
 Do NOT advance to Implement until the user explicitly approves. Once approved, tell the user to run `/orchestra-approve`. Running `/orchestra-approve` will mark the plan approved and automatically start the Implement stage.
 

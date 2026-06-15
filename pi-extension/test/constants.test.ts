@@ -60,6 +60,10 @@ describe("constants", () => {
 
     assert.strictEqual(artifacts.plan, path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan.md"));
     assert.strictEqual(
+      artifacts.planOverview,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan-overview.md"),
+    );
+    assert.strictEqual(
       artifacts.discussionNotes,
       path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/discussion-notes.md"),
     );

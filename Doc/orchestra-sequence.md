@@ -52,6 +52,7 @@ All runtime artifacts are stored under `.IDE_Plans/orchestra/`:
 └── runs/<run-id>/
     ├── plan/
     │   ├── plan.md
+    │   ├── plan-overview.md
     │   ├── discussion-notes.md
     │   ├── scouts/
     │   │   ├── scout-angle_1.md
@@ -226,6 +227,7 @@ All auto-generated files go into `.IDE_Plans/orchestra/`:
 └── runs/<run-id>/
     ├── plan/
     │   ├── plan.md
+    │   ├── plan-overview.md
     │   ├── discussion-notes.md
     │   ├── scouts/
     │   │   ├── scout-angle_1.md

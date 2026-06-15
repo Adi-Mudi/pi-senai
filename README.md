@@ -63,6 +63,7 @@ State is persisted locally under `.IDE_Plans/orchestra/state.json`. Each run pro
 └── runs/<run-id>/
     ├── plan/
     │   ├── plan.md
+    │   ├── plan-overview.md
     │   ├── discussion-notes.md
     │   ├── scouts/
     │   │   ├── scout-angle_1.md

@@ -38,6 +38,11 @@ describe("prompt", () => {
       context.artifacts.plan,
       path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan.md"),
     );
+    assert.strictEqual(
+      context.artifacts.planOverview,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan-overview.md"),
+    );
+    assert.ok(prompt.includes("plan-overview.md"));
 
     assert.ok(prompt.includes('<pi-orchestra stage="plan">'));
     assert.ok(prompt.includes("Mission: Build CLI"));

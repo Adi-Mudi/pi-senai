@@ -49,6 +49,7 @@ export interface StageArtifactPaths {
   documentDir: string;
   deliverDir: string;
   plan: string;
+  planOverview: string;
   discussionNotes: string;
   scoutAngle1: string;
   scoutAngle2: string;
@@ -90,6 +91,7 @@ export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths
     documentDir,
     deliverDir,
     plan: path.join(planDir, "plan.md"),
+    planOverview: path.join(planDir, "plan-overview.md"),
     discussionNotes: path.join(planDir, "discussion-notes.md"),
     scoutAngle1: path.join(planScoutsDir, "scout-angle_1.md"),
     scoutAngle2: path.join(planScoutsDir, "scout-angle_2.md"),
@@ -120,6 +122,7 @@ export function getDefaultArtifactPaths(): StageArtifactPaths {
     documentDir,
     deliverDir,
     plan: path.join(planDir, "plan.md"),
+    planOverview: path.join(planDir, "plan-overview.md"),
     discussionNotes: path.join(planDir, "discussion-notes.md"),
     scoutAngle1: path.join(planScoutsDir, "scout-angle_1.md"),
     scoutAngle2: path.join(planScoutsDir, "scout-angle_2.md"),
