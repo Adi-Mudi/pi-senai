@@ -70,6 +70,7 @@ describe("commands", () => {
     const state = loadState(tmpDir);
     assert.strictEqual(state.mission, "Build a CLI");
     assert.strictEqual(state.currentStage, "planning");
+    assert.ok(notifications[0].message.includes("Plan stage started"));
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Plan Stage"));
     assert.ok(sentMessages[0].includes("Mission: Build a CLI"));
@@ -88,22 +89,46 @@ describe("commands", () => {
     assert.ok(notifications[0].message.includes("No active orchestra run"));
   });
 
-  it("orchestra-status shows active run", async () => {
+  it("orchestra-status shows active run and next step", async () => {
     registerCommands(makeApi());
     await commandHandlers["orchestra-plan"]("Mission", makeCtx());
     notifications.length = 0;
     await commandHandlers["orchestra-status"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Stage: planning"));
     assert.ok(notifications[0].message.includes("Mission: Mission"));
+    assert.ok(notifications[0].message.includes("Next step: run /orchestra-approve"));
   });
 
-  it("orchestra-approve advances stage", async () => {
+  it("orchestra-approve advances stage and auto-runs next stage", async () => {
     registerCommands(makeApi());
     await commandHandlers["orchestra-plan"]("Mission", makeCtx());
     notifications.length = 0;
+    sentMessages.length = 0;
+
     await commandHandlers["orchestra-approve"]("", makeCtx());
-    assert.strictEqual(loadState(tmpDir).currentStage, "planned");
-    assert.ok(notifications[0].message.includes("Advanced to 'planned'"));
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.ok(notifications[0].message.includes("Automatically running the next stage: /orchestra-implement"));
+    assert.strictEqual(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes("Implement Stage"));
+  });
+
+  it("orchestra-approve finishes run after deliver stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+
+    // Approve through all stages.
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // implementing -> implemented -> documenting
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // documenting -> documented -> delivering
+
+    notifications.length = 0;
+    sentMessages.length = 0;
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // delivering -> delivered
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
+    assert.ok(notifications[0].message.includes("All stages are complete"));
+    assert.strictEqual(sentMessages.length, 0);
   });
 
   it("orchestra-reset clears state", async () => {
@@ -123,19 +148,29 @@ describe("commands", () => {
     assert.ok(notifications[0].message.includes("Plan artifact not found"));
   });
 
-  it("orchestra-implement starts after plan is approved and artifact exists", async () => {
+  it("orchestra-implement can be run directly after plan exists", async () => {
     registerCommands(makeApi());
     await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // advances to implementing
 
-    const state = loadState(tmpDir);
+    // Manually reset stage back to planned to test direct implement command.
+    let state = loadState(tmpDir);
+    state.currentStage = "planned";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    // Create the required plan artifact for implement to proceed.
     const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
 
+    notifications.length = 0;
     sentMessages.length = 0;
     await commandHandlers["orchestra-implement"]("", makeCtx());
+
     assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.ok(notifications[0].message.includes("Implement stage started"));
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Implement Stage"));
   });
