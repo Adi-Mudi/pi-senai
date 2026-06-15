@@ -69,13 +69,17 @@ If you approve, run:
 /orchestra-approve
 ```
 
-The stage advances from `planning` to `planned`.
+The stage advances from `planning` to `planned`, then the extension automatically starts the Implement stage (`implementing`).
 
 ---
 
 ## Stage 2 — Implement
 
-### Start implementation
+### How it starts
+
+The Implement stage starts automatically after you approve the plan.
+
+If you ever need to start it manually, run:
 
 ```text
 /orchestra-implement
@@ -84,7 +88,7 @@ The stage advances from `planning` to `planned`.
 What happens:
 
 1. The extension checks that `plan.md` exists.
-2. It checks that the current stage is `planned`.
+2. It accepts stages `planned` or `implementing`.
 3. It sets the stage to `implementing`.
 4. It sends the Implement stage skill prompt.
 5. The main agent runs:
@@ -103,13 +107,17 @@ When the main agent reports that tests and review pass, run:
 /orchestra-approve
 ```
 
-Stage advances from `implementing` to `implemented`.
+Stage advances from `implementing` to `implemented`, then the extension automatically starts the Document stage (`documenting`).
 
 ---
 
 ## Stage 3 — Document
 
-### Start documentation
+### How it starts
+
+The Document stage starts automatically after you approve implementation.
+
+If you ever need to start it manually, run:
 
 ```text
 /orchestra-document
@@ -117,7 +125,7 @@ Stage advances from `implementing` to `implemented`.
 
 What happens:
 
-1. The extension checks that the current stage is `implemented`.
+1. The extension checks that the current stage is `implemented` or `documenting`.
 2. It sets the stage to `documenting`.
 3. It sends the Document stage skill prompt.
 4. The main agent runs four writers in parallel:
@@ -134,13 +142,17 @@ When the docs are ready, run:
 /orchestra-approve
 ```
 
-Stage advances from `documenting` to `documented`.
+Stage advances from `documenting` to `documented`, then the extension automatically starts the Deliver stage (`delivering`).
 
 ---
 
 ## Stage 4 — Deliver
 
-### Start delivery
+### How it starts
+
+The Deliver stage starts automatically after you approve documentation.
+
+If you ever need to start it manually, run:
 
 ```text
 /orchestra-deliver
@@ -148,7 +160,7 @@ Stage advances from `documenting` to `documented`.
 
 What happens:
 
-1. The extension checks that the current stage is `documented`.
+1. The extension checks that the current stage is `documented` or `delivering`.
 2. It sets the stage to `delivering`.
 3. It sends the Deliver stage skill prompt.
 4. The main agent runs:
@@ -163,7 +175,7 @@ When the security report and deliver summary are ready, run:
 /orchestra-approve
 ```
 
-Stage advances from `delivering` to `delivered`.
+Stage advances from `delivering` to `delivered`. The run is complete.
 
 ---
 
@@ -179,6 +191,7 @@ Shows:
 - mission
 - run ID
 - artifact paths
+- next command to run
 
 ---
 
@@ -196,26 +209,28 @@ This deletes `.IDE_Plans/orchestra/state.json`. Artifacts under `.IDE_Plans/orch
 
 ## Typical full session
 
+With auto-advance, the full session is just five commands:
+
 ```text
 /orchestra-plan "add a /hello CLI command"
 # ... wait for plan and reviews ...
-/orchestra-approve
-/orchestra-implement
+/orchestra-approve           # auto-starts Implement
 # ... wait for implementation and tests ...
-/orchestra-approve
-/orchestra-document
+/orchestra-approve           # auto-starts Document
 # ... wait for docs ...
-/orchestra-approve
-/orchestra-deliver
+/orchestra-approve           # auto-starts Deliver
 # ... wait for security and archive ...
-/orchestra-approve
+/orchestra-approve           # run delivered
 ```
+
+If you prefer to control each stage manually, you can still run `/orchestra-implement`, `/orchestra-document`, and `/orchestra-deliver` directly.
 
 ---
 
 ## Tips
 
-- **Do not skip `/orchestra-approve`**. Stage commands check the current stage and will block if the previous stage is not approved.
-- **Each stage is user-driven**. The main agent pauses at each approval gate and waits for you.
-- **Artifacts are local**. Everything lives inside `.IDE_Plans/orchestra/` in this project directory.
-- **Subagents need a multiplexer**. Make sure you run Pi inside tmux, zellij, or another supported terminal multiplexer so `pi-interactive-subagents` can spawn subagents.
+- **Use `/orchestra-approve` to move forward.** It approves the current stage and automatically runs the next one.
+- **Manual stage commands still work.** `/orchestra-implement`, `/orchestra-document`, and `/orchestra-deliver` are available as overrides.
+- **Each stage is user-driven.** The main agent pauses at each approval gate and waits for you.
+- **Artifacts are local.** Everything lives inside `.IDE_Plans/orchestra/` in this project directory.
+- **Subagents need a multiplexer.** Make sure you run Pi inside tmux, zellij, or another supported terminal multiplexer so `pi-interactive-subagents` can spawn subagents.

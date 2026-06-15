@@ -3,7 +3,7 @@
 
 > **Implementation note:** This specification is implemented by the `pi-orchestra` extension in this repository. The commands below reference the `pi-orchestra` slash-command names (`/orchestra-*`). For the original Senai extension spec, see the commit history.
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-06-13  
 **Status:** Current
 
@@ -11,7 +11,7 @@
 
 ## 1. Overview
 
-Senai runs software work as a sequence of gated stages. Each stage is one slash command. Each command launches a chain of specialized subagents. The parent Pi session owns every decision — no stage advances without approval.
+Senai runs software work as a sequence of gated stages. Each stage is one slash command. Each command launches a chain of specialized subagents. The parent Pi session owns every decision — no stage advances without approval. Once a stage is approved with `/orchestra-approve`, the next stage starts automatically.
 
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
@@ -20,6 +20,12 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
      │                 │                   │                   │
      ▼                 ▼                   ▼                   ▼
  Parent approval   Parent approval    Parent approval     Parent approval
+ (/orchestra-    (/orchestra-       (/orchestra-        (/orchestra-
+  approve)         approve)           approve)            approve)
+   │                 │                   │                   │
+   ▼                 ▼                   ▼                   ▼
+ Auto-starts      Auto-starts         Auto-starts        Marks run
+ Implement        Document            Deliver            delivered
 ```
 
 ---
@@ -33,7 +39,7 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
 | 3. Document | `/orchestra-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
 | 4. Deliver | `/orchestra-deliver` | Security audit and package | Security report + archive artifact |
 
-Use `/orchestra-approve` to advance through each stage approval gate.
+Use `/orchestra-approve` to approve a finished stage and automatically run the next stage. You can also start any later stage manually with `/orchestra-implement`, `/orchestra-document`, or `/orchestra-deliver` if you prefer.
 
 ---
 
@@ -68,7 +74,10 @@ planner (pi-subagents)
 reviewers × 3 (pi-subagents — parallel)
     │
     ▼
-Parent approval gate
+Parent approval gate (/orchestra-approve)
+    │
+    ▼
+Auto-starts Implement
 ```
 
 ### Agents
@@ -94,7 +103,7 @@ Parent approval gate
 - The discussion agent writes `.IDE_Plans/orchestra/runs/<run-id>/discussion-notes.md` with clarified scope, decisions, and open questions.
 
 ### Approval Gate
-- If all reviews PASS → approve plan, then run `/orchestra-implement`.
+- If all reviews PASS → run `/orchestra-approve`. This marks the plan approved and automatically starts the Implement stage.
 - If any review NEEDS_FIX → fix the plan, re-run review, then approve.
 
 ---
@@ -127,7 +136,10 @@ code-review (pi-subagents)
 full-test (pi-subagents)
     │
     ▼
-Parent approval gate
+Parent approval gate (/orchestra-approve)
+    │
+    ▼
+Auto-starts Document
 ```
 
 ### Agents
@@ -147,7 +159,7 @@ Parent approval gate
 - Stop if `plan.md` is missing and prompt user to run `/orchestra-plan` first.
 
 ### Approval Gate
-- If all checks pass → approve, then run `/orchestra-document`.
+- If all checks pass → run `/orchestra-approve`. This marks implementation complete and automatically starts the Document stage.
 - If any check fails → fix and re-run the stage.
 
 ---
@@ -168,7 +180,10 @@ api-docs-writer    ──┼──▶ All complete
 other-docs-writer  ──┘
          │
          ▼
-  Parent approval gate
+  Parent approval gate (/orchestra-approve)
+         │
+         ▼
+  Auto-starts Deliver
 ```
 
 ### Agents
@@ -185,7 +200,7 @@ other-docs-writer  ──┘
 - No source code edits in this stage.
 
 ### Approval Gate
-- If docs look good → approve, then run `/orchestra-deliver`.
+- If docs look good → run `/orchestra-approve`. This marks documentation complete and automatically starts the Deliver stage.
 - If changes needed → fix and re-run.
 
 ---
@@ -206,7 +221,10 @@ security-gate (pi-subagents)
 archive (pi-subagents)
     │
     ▼
-Parent approval gate
+Parent approval gate (/orchestra-approve)
+    │
+    ▼
+Run marked delivered
 ```
 
 ### Agents
@@ -217,7 +235,7 @@ Parent approval gate
 | 2 | archive | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/deliver-summary.md` + archive artifact |
 
 ### Approval Gate
-- If security gate passes → approve and ship.
+- If security gate passes → run `/orchestra-approve` to finish the run.
 - If security issues found → fix and re-run.
 
 ---
@@ -302,6 +320,7 @@ All auto-generated files go into `.IDE_Plans/orchestra/runs/<run-id>/`:
 6. **Escalate, don't guess.** If a subagent needs an unapproved decision, it asks via intercom.
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
 8. **No direct subagent calls from the extension.** The extension injects prompts; the LLM invokes the `subagent` tool.
+9. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command to move forward; manual stage commands are still available as overrides.
 
 ---
 

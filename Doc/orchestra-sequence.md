@@ -2,7 +2,7 @@
 
 ## Subagent Orchestration — Plan → Implement → Document → Deliver
 
-**Version:** 1.1  
+**Version:** 1.2  
 **Date:** 2026-06-13  
 **Status:** Current
 
@@ -10,7 +10,7 @@
 
 ## 1. Overview
 
-Pi Orchestra is a stage-gated agent orchestration extension for Pi. Each stage is a sequence of specialized subagents. Every stage ends with a parent approval gate before the next stage can begin.
+Pi Orchestra is a stage-gated agent orchestration extension for Pi. Each stage is a sequence of specialized subagents. Every stage ends with a parent approval gate. Running `/orchestra-approve` advances the run through the completed stage **and** automatically starts the next stage.
 
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
@@ -19,6 +19,12 @@ Pi Orchestra is a stage-gated agent orchestration extension for Pi. Each stage i
      │                 │                   │                   │
      ▼                 ▼                   ▼                   ▼
  Parent approval   Parent approval    Parent approval     Parent approval
+ (/orchestra-    (/orchestra-       (/orchestra-        (/orchestra-
+  approve)         approve)           approve)            approve)
+   │                 │                   │                   │
+   ▼                 ▼                   ▼                   ▼
+ Auto-starts      Auto-starts         Auto-starts        Marks run
+ Implement        Document            Deliver            delivered
 ```
 
 ---
@@ -32,7 +38,7 @@ Pi Orchestra is a stage-gated agent orchestration extension for Pi. Each stage i
 | Document  | `/orchestra-document`    | Write all project documentation                                                    |
 | Deliver   | `/orchestra-deliver`     | Run a final security audit and package the result                                  |
 
-Use `/orchestra-approve` to advance through each approval gate.
+Use `/orchestra-approve` to approve a finished stage and automatically run the next stage. You can also start any later stage manually with `/orchestra-implement`, `/orchestra-document`, or `/orchestra-deliver` if you prefer.
 
 ---
 
@@ -94,7 +100,7 @@ planner
 reviewers × 3 (parallel)
     │
     ▼
-/orchestra-approve
+/orchestra-approve ──▶ auto-starts Implement
 ```
 
 ### Interview Step
@@ -106,7 +112,7 @@ reviewers × 3 (parallel)
 
 ### Approval Gate
 
-- If all reviewers PASS → run `/orchestra-approve` to move to Implement.
+- If all reviewers PASS → run `/orchestra-approve` to approve the plan and automatically start the Implement stage.
 - If any reviewer NEEDS_FIX → fix the plan and re-run review before moving on.
 
 ---
@@ -138,7 +144,7 @@ code-review
 full-test
     │
     ▼
-/orchestra-approve
+/orchestra-approve ──▶ auto-starts Document
 ```
 
 ### Hard Rules
@@ -149,7 +155,7 @@ full-test
 
 ### Approval Gate
 
-- If all checks pass → run `/orchestra-approve` to move to Document.
+- If all checks pass → run `/orchestra-approve` to approve implementation and automatically start the Document stage.
 - If any check fails → fix and re-run the stage.
 
 ---
@@ -169,7 +175,7 @@ api-docs-writer    ──┼──▶ All complete
 other-docs-writer  ──┘
          │
          ▼
-  /orchestra-approve
+  /orchestra-approve ──▶ auto-starts Deliver
 ```
 
 ### Notes
@@ -180,7 +186,7 @@ other-docs-writer  ──┘
 
 ### Approval Gate
 
-- If docs are acceptable → run `/orchestra-approve` to move to Deliver.
+- If docs are acceptable → run `/orchestra-approve` to approve documentation and automatically start the Deliver stage.
 - If changes are needed → fix and re-run.
 
 ---
@@ -200,12 +206,12 @@ security-gate
 archive
     │
     ▼
-/orchestra-approve
+/orchestra-approve ──▶ run marked delivered
 ```
 
 ### Approval Gate
 
-- If security gate passes → run `/orchestra-approve` to finish.
+- If security gate passes → run `/orchestra-approve` to finish the run.
 - If issues are found → fix and re-run.
 
 ---
@@ -247,3 +253,4 @@ All auto-generated files go into `.IDE_Plans/orchestra/`:
 5. **One writer at a time.** Never run two worker agents in parallel on the same worktree.
 6. **Escalate, don't guess.** If a subagent needs an unapproved decision, it asks via the main agent.
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
+8. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command that moves the run forward; manual stage commands are still available as overrides.

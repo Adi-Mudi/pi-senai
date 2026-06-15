@@ -35,19 +35,21 @@ Then restart Pi or run `/reload`.
 | Command | Purpose |
 |---|---|
 | `/orchestra-plan <mission>` | Start the Plan stage |
-| `/orchestra-approve` | Approve the current stage and advance to the next gate |
-| `/orchestra-implement` | Start the Implement stage (requires approved plan) |
-| `/orchestra-document` | Start the Document stage (requires implemented code) |
-| `/orchestra-deliver` | Start the Deliver stage (requires docs) |
-| `/orchestra-status` | Show current stage and artifact paths |
+| `/orchestra-approve` | Approve the current stage and automatically run the next stage |
+| `/orchestra-implement` | Start the Implement stage manually (requires approved plan) |
+| `/orchestra-document` | Start the Document stage manually (requires implemented code) |
+| `/orchestra-deliver` | Start the Deliver stage manually (requires docs) |
+| `/orchestra-status` | Show current stage, next command, and artifact paths |
 | `/orchestra-reset` | Clear the current run state |
 
 ## Workflow
 
-1. **Plan** — scouts explore the codebase, a discussion agent drafts questions, the planner writes `plan.md`, and reviewers verify it. Run `/orchestra-approve` to advance to `planned`.
-2. **Implement** — test skeleton, implementer, linter, tests, code review, full tests. Run `/orchestra-approve` to advance to `implemented`.
-3. **Document** — README, CHANGELOG, API docs, and other docs updated in parallel. Run `/orchestra-approve` to advance to `documented`.
-4. **Deliver** — security audit and final packaging. Run `/orchestra-approve` to advance to `delivered`.
+1. **Plan** — scouts explore the codebase, a discussion agent drafts questions, the planner writes `plan.md`, and reviewers verify it. Run `/orchestra-approve` to approve the plan and automatically start the Implement stage.
+2. **Implement** — test skeleton, implementer, linter, tests, code review, full tests. Run `/orchestra-approve` to approve implementation and automatically start the Document stage.
+3. **Document** — README, CHANGELOG, API docs, and other docs updated in parallel. Run `/orchestra-approve` to approve docs and automatically start the Deliver stage.
+4. **Deliver** — security audit and final packaging. Run `/orchestra-approve` to finish the run.
+
+You can also run `/orchestra-implement`, `/orchestra-document`, or `/orchestra-deliver` directly if you prefer to start a stage manually. Each stage command will tell you when to run `/orchestra-approve` next.
 
 See [`Doc/step-by-step-guide.md`](Doc/step-by-step-guide.md) for a detailed walkthrough.
 
@@ -95,6 +97,7 @@ npm test
 - **No duplicate subagent engine** — spawning is delegated to `pi-interactive-subagents`.
 - **Local-only** — all code and state live inside this project directory.
 - **Soft approval gates** — the extension enforces artifact existence; the user approves advancement between stages.
+- **Approve auto-runs the next stage** — `/orchestra-approve` advances the state and immediately sends the next stage prompt, while manual stage commands remain available.
 
 ## Project structure
 

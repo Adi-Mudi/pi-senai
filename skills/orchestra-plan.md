@@ -119,7 +119,7 @@ Present the plan and the three reviews to the user. Ask:
 
 > The plan is ready at `<plan>`. Reviews: correctness `<reviewCorrectness>`, security `<reviewSecurity>`, tests `<reviewTests>`. Approve to move to Implement, or request changes?
 
-Do NOT advance to Implement until the user explicitly approves. Once approved, tell the user to run `/orchestra-approve`.
+Do NOT advance to Implement until the user explicitly approves. Once approved, tell the user to run `/orchestra-approve`. Running `/orchestra-approve` will mark the plan approved and automatically start the Implement stage.
 
 ## Constraints
 

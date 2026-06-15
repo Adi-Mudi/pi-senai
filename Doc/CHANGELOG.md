@@ -9,14 +9,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `/orchestra-approve` now automatically advances through the completed stage and immediately starts the next working stage (Implement, Document, or Deliver).
+- `/orchestra-status` now shows the next command for every stage.
+- Stage commands emit completion remarks that tell the user to run `/orchestra-approve` next.
+- Manual `/orchestra-XXX` commands remain available as an alternative to auto-advance.
 - Moved artifact directory from `.pi/orchestra/` to `.IDE_Plans/orchestra/` to align with the Senai spec.
 - Reorganized run artifacts into stage subfolders:
   - `plan/` with nested `scouts/` and `reviews/`
   - `implement/`
   - `document/`
   - `deliver/`
-- Updated all documentation (README, step-by-step guide) to reflect the new paths.
-- Updated unit tests to assert the new directory layout.
+- Updated all documentation to reflect the new auto-advance behavior and artifact paths.
+- Updated unit tests to assert the new directory layout and auto-advance behavior.
 
 ## [0.1.0] - 2026-06-12
 

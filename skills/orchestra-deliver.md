@@ -55,7 +55,7 @@ Present the security report and deliver summary to the user:
 
 > Deliver stage complete. Security report: `<securityReport>`. Deliver summary: `<deliverSummary>`. Ship it?
 
-Wait for final approval.
+Wait for final approval. Once approved, tell the user to run `/orchestra-approve` to finish the run and mark it `delivered`.
 
 ## Constraints
 
