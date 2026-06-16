@@ -6,3 +6,4 @@ dist/
 .pi/orchestra
 .pi/tasks
 EOF
+.vscode
