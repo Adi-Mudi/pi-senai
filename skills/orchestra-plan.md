@@ -41,6 +41,8 @@ subagent({
 
 Wait for all three scouts to report results.
 
+**Checkpoint before continuing:** Confirm that three separate `subagent` tool calls were made and that `scout-angle_1.md`, `scout-angle_2.md`, and `scout-angle_3.md` were written by the scouts in the current run folder. If any report is missing or was copied from a previous run, spawn the missing scout again before proceeding.
+
 ### 2. Discussion
 
 Spawn a discussion agent that reads all three scout reports and drafts 2-5 focused clarifying questions for the user.
