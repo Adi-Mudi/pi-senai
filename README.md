@@ -1,131 +1,100 @@
 # Pi Orchestra
 
-A local Pi extension for stage-gated agent orchestration:
+Stage-gated agent orchestration extension for Pi — **Plan → Implement → Document → Deliver**.
 
-```
-Plan → Implement → Document → Deliver
-```
+## What it does
 
-Pi Orchestra adds slash commands that guide a Pi session through the Senai-style workflow. It reuses the existing [`pi-interactive-subagents`](https://github.com/HazAT/pi-interactive-subagents) extension for spawning subagents, and only adds sequence logic, state management, and stage prompts on top.
+Pi Orchestra splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/orchestra/runs/<run-id>/`, and requires user approval before the next stage starts.
+
+- **Plan** — Spawn scout agents, interview the user, write an approved `plan.md`.
+- **Implement** — Build and test the feature according to the plan.
+- **Document** — Update README, CHANGELOG, API docs, and other project docs.
+- **Deliver** — Run a final security audit and package the deliverable.
 
 ## Install
 
-This extension is scoped to the current project directory only.
+The extension is loaded automatically by Pi when the project is opened because it is listed in `package.json` under the `pi.extensions` field.
 
 ```bash
-# Inside the project directory
-pi install path:.
+npm install
+npm test
 ```
 
-Or symlink for development:
+## Usage
 
-```bash
-ln -sf /mnt/Just_Do_It/02_Devp_Soft/pi-senai/Pi-Orchestra_v4 ~/.pi/agent/extensions/pi-orchestra
+Start a new run:
+
+```
+/orchestra-plan <mission>
 ```
 
-Then restart Pi or run `/reload`.
+The agent will run the Plan stage. When the plan is ready, approve it:
 
-## Requirements
+```
+/orchestra-approve
+```
 
-- Pi CLI >= 0.78.0
-- [`pi-interactive-subagents`](https://github.com/HazAT/pi-interactive-subagents) extension installed
+`/orchestra-approve` marks the current stage complete and automatically starts the next stage. You can also run stages manually when the previous stage is already approved:
 
-## Commands
+```
+/orchestra-implement
+/orchestra-document
+/orchestra-deliver
+```
 
-| Command | Purpose |
-|---|---|
-| `/orchestra-plan <mission>` | Start the Plan stage |
-| `/orchestra-approve` | Approve the current stage and automatically run the next stage |
-| `/orchestra-implement` | Start the Implement stage manually (requires approved plan) |
-| `/orchestra-document` | Start the Document stage manually (requires implemented code) |
-| `/orchestra-deliver` | Start the Deliver stage manually (requires docs) |
-| `/orchestra-status` | Show current stage, next command, and artifact paths |
-| `/orchestra-reset` | Clear the current run state |
+Check status at any time:
 
-## Workflow
+```
+/orchestra-status
+```
 
-1. **Plan** — scouts explore the codebase, a discussion agent drafts questions, the planner writes `plan.md`, and reviewers verify it. Run `/orchestra-approve` to approve the plan and automatically start the Implement stage.
-2. **Implement** — test skeleton, implementer, linter, tests, code review, full tests. Run `/orchestra-approve` to approve implementation and automatically start the Document stage.
-3. **Document** — README, CHANGELOG, API docs, and other docs updated in parallel. Run `/orchestra-approve` to approve docs and automatically start the Deliver stage.
-4. **Deliver** — security audit and final packaging. Run `/orchestra-approve` to finish the run.
+Reset the current run:
 
-You can also run `/orchestra-implement`, `/orchestra-document`, or `/orchestra-deliver` directly if you prefer to start a stage manually. Each stage command will tell you when to run `/orchestra-approve` next.
+```
+/orchestra-reset
+```
 
-See [`Doc/step-by-step-guide.md`](Doc/step-by-step-guide.md) for a detailed walkthrough.
+## Artifact layout
 
-## State & artifacts
-
-State is persisted locally under `.IDE_Plans/orchestra/state.json`. Each run produces artifacts under `.IDE_Plans/orchestra/runs/<run-id>/`:
-
-```text
+```
 .IDE_Plans/orchestra/
-├── state.json
-└── runs/<run-id>/
-    ├── plan/
-    │   ├── plan.md
-    │   ├── plan-overview.md
-    │   ├── discussion-notes.md
-    │   ├── scouts/
-    │   │   ├── scout-angle_1.md
-    │   │   ├── scout-angle_2.md
-    │   │   └── scout-angle_3.md
-    │   └── reviews/
-    │       ├── review-correctness.md
-    │       ├── review-security.md
-    │       └── review-tests.md
-    ├── implement/
-    ├── document/
-    └── deliver/
-        ├── security-report.md
-        └── deliver-summary.md
+  state.json
+  runs/
+    YYYY-MM-DD-HH-MM-<mission-slug>/
+      plan/
+        plan.md
+        plan-overview.md
+        discussion-notes.md
+        scouts/
+          scout-angle_1.md
+          scout-angle_2.md
+          scout-angle_3.md
+        reviews/
+          review-correctness.md
+          review-security.md
+          review-tests.md
+      implement/
+      document/
+      deliver/
+        security-report.md
+        deliver-summary.md
 ```
 
 ## Development
 
+Build:
+
 ```bash
-# Install dev dependencies
-npm install
-
-# Build TypeScript
 npm run build
+```
 
-# Run tests
+Run tests:
+
+```bash
 npm test
 ```
 
-## Design
-
-- **No duplicate subagent engine** — spawning is delegated to `pi-interactive-subagents`.
-- **Local-only** — all code and state live inside this project directory.
-- **Soft approval gates** — the extension enforces artifact existence; the user approves advancement between stages.
-- **Approve auto-runs the next stage** — `/orchestra-approve` advances the state and immediately sends the next stage prompt, while manual stage commands remain available.
-
-## Project structure
-
-```text
-.
-├── package.json
-├── tsconfig.json
-├── README.md
-├── CHANGELOG.md
-├── .gitignore
-├── pi-extension/src/
-│   ├── index.ts          # extension entry: commands, hooks
-│   ├── commands.ts       # slash command handlers
-│   ├── state.ts          # read/write .IDE_Plans/orchestra/state.json
-│   ├── prompt.ts         # build stage prompts / skill loads
-│   └── constants.ts      # paths, stage names, artifact layout
-├── pi-extension/test/    # unit tests
-├── skills/
-│   ├── orchestra-plan.md
-│   ├── orchestra-implement.md
-│   ├── orchestra-document.md
-│   └── orchestra-deliver.md
-└── Doc/
-    ├── orchestra-sequence.md
-    ├── senai-full-sequence.md
-    └── step-by-step-guide.md
-```
+Tests are in `pi-extension/test/` and use Node's built-in test runner.
 
 ## License
 

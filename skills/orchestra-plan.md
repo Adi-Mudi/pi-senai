@@ -5,141 +5,61 @@ description: Pi Orchestra Plan stage — research, interview, plan, review
 
 # Plan Stage
 
-You are the orchestrator running the **Plan** stage of Pi Orchestra.
-
-## Goal
-
-Turn the mission into an approved implementation plan stored at the `plan.md` path shown above.
+Turn the mission into an approved implementation plan at `<plan>`.
 
 ## Sequence
 
 ```
-scout-1 ──┐
-scout-2 ──┼──▶ discussion ──▶ AskUserQuestion ──▶ planner ──▶ reviewers ──▶ (approval gate)
-scout-3 ──┘
+scout-1, scout-2, scout-3 (parallel) → discussion → AskUserQuestion → planner → plan-overview → reviewer-correctness, reviewer-security, reviewer-tests (parallel) → approval gate
 ```
 
-**Important rule for every run:** Each run is independent. Always spawn three fresh scout subagents below. Do NOT reuse, copy, or read scout reports from any previous run folder. Each scout must write its own fresh report to the assigned artifact path.
+**Critical rules:**
+- Spawn fresh scouts every run. Do NOT reuse or read scout reports from any previous run folder.
+- Do not edit source files in this stage.
+- Do not wait for user input except at the AskUserQuestion step and the final approval gate.
 
-### 1. Parallel scouts (3 agents)
+## 1. Parallel scouts
 
-Spawn three scouts in parallel with different angles using three separate `subagent` tool calls. Each scout must write its own fresh report to its assigned artifact path. Do not write scout reports yourself.
+Spawn three scouts in parallel. Each must write its own report.
 
-- **scout-1**: Architecture / big-picture reconnaissance. What exists, tech stack, conventions.
-- **scout-2**: Target area deep-dive. Find the exact files and patterns the mission will touch.
-- **scout-3**: Risk / dependency audit. What could break, what integrations matter.
+- **scout-1** (agent `scout`): Architecture / big-picture reconnaissance for mission `"<mission>"`. Write to `<scoutAngle1>`.
+- **scout-2** (agent `scout`): Target-area deep-dive. Write to `<scoutAngle2>`.
+- **scout-3** (agent `scout`): Risk / dependency audit. Write to `<scoutAngle3>`.
 
-Example tool call:
+Wait for all three to finish, then read the reports. If any report is missing, respawn that scout.
 
-```typescript
-subagent({
-  name: "scout-1",
-  agent: "scout",
-  task: `You are scout-1 for mission: "<mission>". Do architecture reconnaissance. Write findings to <scoutAngle1>. Do not edit source files.`,
-});
-```
+## 2. Discussion agent
 
-Wait for all three scouts to report results.
+Spawn one discussion agent (agent `planner`) that reads the three scout reports and drafts 2-5 clarifying questions for the user about `"<mission>"`. Write questions and a brief analysis to `<discussionNotes>`.
 
-**Checkpoint before continuing:** Confirm that three separate `subagent` tool calls were made and that `scout-angle_1.md`, `scout-angle_2.md`, and `scout-angle_3.md` were written by the scouts in the current run folder. If any report is missing or was copied from a previous run, spawn the missing scout again before proceeding.
+## 3. AskUserQuestion
 
-### 2. Discussion
+Read `<discussionNotes>` and ask the drafted questions using the **AskUserQuestion** tool. Wait for the answers. Do not proceed until the user answers.
 
-Spawn a discussion agent that reads all three scout reports and drafts 2-5 focused clarifying questions for the user.
+## 4. Update discussion notes
 
-```typescript
-subagent({
-  name: "discussion",
-  agent: "planner",
-  task: `Read <scoutAngle1>, <scoutAngle2>, and <scoutAngle3>. Draft 2-5 focused clarifying questions for the user about mission: "<mission>". Write the questions and your own brief analysis to <discussionNotes>. Do not edit source files.`,
-});
-```
+Append the user's answers to `<discussionNotes>`.
 
-### 3. Live user interview with AskUserQuestion
+## 5. Planner
 
-After the discussion agent finishes, read the drafted questions from `<discussionNotes>` and ask the user using the **AskUserQuestion** tool.
+Spawn the planner (agent `planner`) with the mission, scout reports, and `<discussionNotes>`. Write the implementation plan to `<plan>`. The plan must contain concrete, executable tasks.
 
-The AskUserQuestion tool is already installed (`npm:@mazli/pi-ask-user-question`). Use it to present the questions with clear options.
+## 6. Plan overview writer
 
-Example:
+Spawn the plan-overview writer (agent `planner`) to read `<plan>` and `<discussionNotes>` and write a user-friendly summary to `<planOverview>`.
 
-```typescript
-AskUserQuestion({
-  questions: [
-    {
-      question: "What should the CLI output format be?",
-      header: "Format",
-      multiSelect: false,
-      options: [
-        { label: "Plain text", description: "Just the greeting string" },
-        { label: "JSON", description: '{ "message": "Hello, World!" }' },
-      ],
-    },
-    {
-      question: "Should the command accept a name argument?",
-      header: "Name arg",
-      multiSelect: false,
-      options: [
-        { label: "Yes (Required)", description: "User must pass a name" },
-        { label: "Yes (Optional)", description: "Default to World" },
-        { label: "No", description: "Always print Hello, World!" },
-      ],
-    },
-  ],
-});
-```
+## 7. Parallel reviewers
 
-Wait for the user to answer. Do not proceed until you have the answers.
+Spawn three reviewers in parallel. Each writes to its assigned path.
 
-### 4. Write discussion-notes.md with answers
+- **reviewer-correctness** → `<reviewCorrectness>`: Is the plan technically correct and complete?
+- **reviewer-security** → `<reviewSecurity>`: Security and privacy concerns?
+- **reviewer-tests** → `<reviewTests>`: Is the test strategy adequate?
 
-Update `<discussionNotes>` to include both the drafted questions and the user's answers. Keep it concise.
+## 8. Approval gate
 
-### 5. Planner
+Present the plan, overview, and reviews to the user:
 
-Spawn the planner with the mission, scout context, and finalized discussion notes.
+> Plan: `<plan>`. Overview: `<planOverview>`. Reviews: correctness `<reviewCorrectness>`, security `<reviewSecurity>`, tests `<reviewTests>`. Approve to move to Implement?
 
-```typescript
-subagent({
-  name: "planner",
-  agent: "planner",
-  task: `Create an implementation plan for mission: "<mission>". Read the scout reports at <scoutAngle1>, <scoutAngle2>, <scoutAngle3> and the discussion notes at <discussionNotes>. Write the approved plan to <plan>. The plan must include concrete tasks a worker can execute.`,
-});
-```
-
-### 6. Plan overview writer
-
-Spawn a plan-overview writer that reads the finalized plan and writes a user-facing summary.
-
-```typescript
-subagent({
-  name: "plan-overview",
-  agent: "planner",
-  task: `Read the implementation plan at <plan> and the discussion notes at <discussionNotes>. Write a user-friendly overview to <planOverview>. Include: mission summary, why we are doing this, high-level approach, key decisions, expected outcome, and links to <plan>, scout reports, and review reports. Keep it concise and easy to read.`,
-});
-```
-
-### 7. Parallel reviewers (3 agents)
-
-Spawn three reviewers in parallel:
-
-- **reviewer-correctness**: Is the plan technically correct and complete?
-- **reviewer-security**: Are there security or privacy concerns?
-- **reviewer-tests**: Is the test strategy adequate?
-
-Each writes to the assigned review artifact path.
-
-### 8. Approval gate
-
-Present the plan, overview, and the three reviews to the user. Ask:
-
-> The plan is ready at `<plan>`. User overview: `<planOverview>`. Reviews: correctness `<reviewCorrectness>`, security `<reviewSecurity>`, tests `<reviewTests>`. Approve to move to Implement, or request changes?
-
-Do NOT advance to Implement until the user explicitly approves. Once approved, tell the user to run `/orchestra-approve`. Running `/orchestra-approve` will mark the plan approved and automatically start the Implement stage.
-
-## Constraints
-
-- No source code edits in the Plan stage.
-- Every scout and reviewer must write to its assigned artifact path.
-- Use the AskUserQuestion tool for the live interview step.
-- The plan stage is not complete until the user approves the plan.
+Do NOT start Implement until the user approves. Once approved, tell the user to run `/orchestra-approve`, which will mark the plan approved and automatically start the Implement stage.
