@@ -90,7 +90,7 @@ Auto-starts Implement
 | 2 | scout-3 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_3.md` |
 | 3 | discussion | pi-subagents | fork | Drafts interview questions for the user |
 | 4 | parent + user | main session | — | User answers via `AskUserQuestion` |
-| 5 | planner | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` |
+| 5 | planner | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` + `.IDE_Plans/orchestra/runs/<run-id>/plan/plan-overview.md` |
 | 6 | reviewer-correctness | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-correctness.md` |
 | 6 | reviewer-security | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-security.md` |
 | 6 | reviewer-tests | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-tests.md` |

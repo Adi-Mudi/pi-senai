@@ -60,6 +60,7 @@ export function buildStagePrompt(
     `  Run directory: ${artifacts.runDir}`,
     `  Plan directory: ${artifacts.planDir}`,
     `    plan.md: ${artifacts.plan}`,
+    `    plan-overview.md: ${artifacts.planOverview}`,
     `    discussion-notes.md: ${artifacts.discussionNotes}`,
     `  Plan scouts directory: ${artifacts.planScoutsDir}`,
     `    scout-angle_1.md: ${artifacts.scoutAngle1}`,

@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Unit tests verifying that `advanceStage` returns a new state object and does not mutate the input.
+- Unit tests verifying that `/orchestra-document` and `/orchestra-deliver` reject manual starts when the preceding stage's artifacts are missing.
+- Unit test verifying that `/orchestra-document` rejects running from the `planned` stage.
+
+### Changed
+
+- `advanceStage` now clones the state object before updating `currentStage` and `updatedAt`, aligning with the project convention to avoid in-place mutation.
+- `ensureStage` no longer silently advances through intermediate stages. Manual `/orchestra-implement`, `/orchestra-document`, and `/orchestra-deliver` commands now require the exact preceding completed stage.
+- `checkStageArtifact` now supports checking artifacts for `implement`, `document`, and `deliver` stages in addition to `plan`.
+- `/orchestra-document` now verifies that the `implement/` directory contains artifacts before starting.
+- `/orchestra-deliver` now verifies that the `document/` directory contains artifacts before starting.
+
+### Added
+
+- New `plan-overview.md` artifact under `plan/`. The Plan stage now writes both:
+  - `plan.md` — concrete, actionable implementation plan for agents.
+  - `plan-overview.md` — user-friendly summary with mission, approach, key decisions, and expected outcome.
+
 ### Changed
 
 - Run IDs now include the local hour and minute: `YYYY-MM-DD-HH-MM-<mission-slug>`.

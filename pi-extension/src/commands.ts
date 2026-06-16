@@ -33,6 +33,12 @@ const STAGE_SKILL: Record<string, string> = {
   delivering: "deliver",
 };
 
+const STAGE_COMMAND_NAME: Record<"planned" | "implemented" | "documented", string> = {
+  planned: "implement",
+  implemented: "document",
+  documented: "deliver",
+};
+
 export function registerCommands(pi: ExtensionAPI) {
   pi.registerCommand("orchestra-plan", {
     description: "Start the Plan stage: /orchestra-plan <mission>",
@@ -95,7 +101,7 @@ export function registerCommands(pi: ExtensionAPI) {
     description: "Start the Document stage (requires implemented code)",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
-      const check = checkStageArtifact(state, "plan", ctx);
+      const check = checkStageArtifact(state, "implement", ctx);
       if (!check.ok) return;
 
       const ensured = ensureStage(ctx.cwd, state, "implemented");
@@ -125,7 +131,7 @@ export function registerCommands(pi: ExtensionAPI) {
     description: "Start the Deliver stage (requires documentation)",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
-      const check = checkStageArtifact(state, "plan", ctx);
+      const check = checkStageArtifact(state, "document", ctx);
       if (!check.ok) return;
 
       const ensured = ensureStage(ctx.cwd, state, "documented");
@@ -278,43 +284,39 @@ export function registerCommands(pi: ExtensionAPI) {
   });
 }
 
+const REQUIRED_STAGE_FOR_MANUAL_COMMAND: Record<
+  "planned" | "implemented" | "documented",
+  Stage
+> = {
+  planned: "planned",
+  implemented: "implemented",
+  documented: "documented",
+};
+
 function ensureStage(
-  cwd: string,
+  _cwd: string,
   state: OrchestraState,
   targetStage: "planned" | "implemented" | "documented",
 ): { ok: true; state: OrchestraState } | { ok: false; reason: string } {
-  const order: Stage[] = ["none", "planning", "planned", "implementing", "implemented", "documenting", "documented", "delivering", "delivered"];
-  const currentIndex = order.indexOf(state.currentStage);
-  const targetIndex = order.indexOf(targetStage);
-
-  if (currentIndex >= targetIndex) {
+  const required = REQUIRED_STAGE_FOR_MANUAL_COMMAND[targetStage];
+  if (state.currentStage === required) {
     return { ok: true, state };
   }
-
-  // Try to advance step by step until we reach the target stage.
-  let current = state.currentStage;
-  while (order.indexOf(current) < targetIndex) {
-    const nextStage = STAGE_TRANSITIONS[current][0];
-    if (!nextStage) {
-      return {
-        ok: false,
-        reason: `Cannot reach '${targetStage}' from '${state.currentStage}'. Run /orchestra-approve first.`,
-      };
-    }
-    const advance = advanceStage(cwd, state, nextStage);
-    if (!advance.ok) {
-      return { ok: false, reason: advance.reason };
-    }
-    state = advance.state;
-    current = nextStage;
+  if (state.currentStage === "none") {
+    return {
+      ok: false,
+      reason: "No active run. Start with /orchestra-plan <mission>.",
+    };
   }
-
-  return { ok: true, state };
+  return {
+    ok: false,
+    reason: `Manual '/orchestra-${STAGE_COMMAND_NAME[targetStage]}' can only run from '${required}'. Current stage is '${state.currentStage}'. Run /orchestra-status to see the next step.`,
+  };
 }
 
 export function checkStageArtifact(
   state: OrchestraState,
-  stage: "plan",
+  stage: "plan" | "implement" | "document" | "deliver",
   ctx: ExtensionContext,
 ): { ok: true } | { ok: false } {
   if (state.currentStage === "none") {
@@ -322,15 +324,54 @@ export function checkStageArtifact(
     return { ok: false };
   }
 
+  if (!state.runId) {
+    ctx.ui.notify("Run ID is missing. Start a new run with /orchestra-plan.", "error");
+    return { ok: false };
+  }
+
+  const artifacts = getArtifactPaths(ctx.cwd, state.runId);
+
   if (stage === "plan") {
-    if (!state.runId) {
-      ctx.ui.notify("Run ID is missing. Start a new run with /orchestra-plan.", "error");
+    if (!fs.existsSync(artifacts.plan)) {
+      ctx.ui.notify(
+        `Plan artifact not found: ${artifacts.plan}. Complete the Plan stage first.`,
+        "warning",
+      );
       return { ok: false };
     }
-    const planPath = getArtifactPaths(ctx.cwd, state.runId).plan;
-    if (!fs.existsSync(planPath)) {
+  }
+
+  if (stage === "implement") {
+    if (!dirHasFiles(artifacts.implementDir)) {
       ctx.ui.notify(
-        `Plan artifact not found: ${planPath}. Complete the Plan stage first.`,
+        `Implement artifacts not found in ${artifacts.implementDir}. Complete the Implement stage first.`,
+        "warning",
+      );
+      return { ok: false };
+    }
+  }
+
+  if (stage === "document") {
+    if (!dirHasFiles(artifacts.documentDir)) {
+      ctx.ui.notify(
+        `Document artifacts not found in ${artifacts.documentDir}. Complete the Document stage first.`,
+        "warning",
+      );
+      return { ok: false };
+    }
+  }
+
+  if (stage === "deliver") {
+    const missing: string[] = [];
+    if (!fs.existsSync(artifacts.securityReport)) {
+      missing.push(artifacts.securityReport);
+    }
+    if (!fs.existsSync(artifacts.deliverSummary)) {
+      missing.push(artifacts.deliverSummary);
+    }
+    if (missing.length > 0) {
+      ctx.ui.notify(
+        `Deliver artifacts not found: ${missing.join(", ")}. Complete the Deliver stage first.`,
         "warning",
       );
       return { ok: false };
@@ -338,4 +379,13 @@ export function checkStageArtifact(
   }
 
   return { ok: true };
+}
+
+function dirHasFiles(dir: string): boolean {
+  try {
+    const entries = fs.readdirSync(dir);
+    return entries.length > 0;
+  } catch {
+    return false;
+  }
 }

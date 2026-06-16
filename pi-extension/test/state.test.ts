@@ -83,6 +83,22 @@ describe("state", () => {
     assert.ok((result as { ok: false; reason: string }).reason.includes("Cannot move"));
   });
 
+  it("advanceStage returns a new state object and does not mutate the input", () => {
+    const state = startRun(tmpDir, "Mission");
+    const planning = advanceStage(tmpDir, state, "planning");
+    assert.strictEqual(planning.ok, true);
+    assert.notStrictEqual(
+      (planning as { ok: true; state: ReturnType<typeof loadState> }).state,
+      state,
+    );
+    assert.strictEqual(state.currentStage, "none");
+    assert.strictEqual(
+      (planning as { ok: true; state: ReturnType<typeof loadState> }).state
+        .currentStage,
+      "planning",
+    );
+  });
+
   it("resetState removes the state file", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
@@ -111,6 +127,25 @@ describe("state", () => {
     const loaded = loadState(tmpDir);
     assert.strictEqual(loaded.mission, "legacy");
     assert.strictEqual(loaded.currentStage, "planned");
+    assert.strictEqual(loaded.version, 1);
+  });
+
+  it("loadState throws on corrupted JSON", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, "{ not valid json");
+
+    assert.throws(() => loadState(tmpDir), /Unexpected token|Expected property name/);
+  });
+
+  it("loadState migrates partial legacy state safely", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({ version: 0, mission: "partial" }));
+
+    const loaded = loadState(tmpDir);
+    assert.strictEqual(loaded.mission, "partial");
+    assert.strictEqual(loaded.currentStage, "none");
     assert.strictEqual(loaded.version, 1);
   });
 });

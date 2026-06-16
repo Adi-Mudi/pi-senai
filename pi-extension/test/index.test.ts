@@ -89,6 +89,56 @@ describe("index", () => {
     assert.strictEqual(result.systemPrompt, "base prompt");
   });
 
+  it("injects Plan stage scout rule during planning", async () => {
+    const api = makeApi();
+    piOrchestraExtension(api);
+
+    const state = {
+      version: 1,
+      mission: "Test",
+      runId: "run-1",
+      currentStage: "planning",
+      startedAt: "2026-06-12T00:00:00Z",
+      updatedAt: "2026-06-12T00:00:00Z",
+      stageResults: {},
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/orchestra"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/orchestra/state.json"), JSON.stringify(state));
+
+    const result = await eventHandlers["before_agent_start"](
+      { systemPrompt: "base prompt" },
+      makeCtx(),
+    );
+
+    assert.ok(result.systemPrompt.includes("Plan stage rule"));
+    assert.ok(result.systemPrompt.includes("spawn three fresh scout subagents"));
+  });
+
+  it("does not inject Plan stage scout rule outside planning", async () => {
+    const api = makeApi();
+    piOrchestraExtension(api);
+
+    const state = {
+      version: 1,
+      mission: "Test",
+      runId: "run-1",
+      currentStage: "implementing",
+      startedAt: "2026-06-12T00:00:00Z",
+      updatedAt: "2026-06-12T00:00:00Z",
+      stageResults: {},
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/orchestra"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/orchestra/state.json"), JSON.stringify(state));
+
+    const result = await eventHandlers["before_agent_start"](
+      { systemPrompt: "base prompt" },
+      makeCtx(),
+    );
+
+    assert.ok(result.systemPrompt.includes("Active stage: implementing"));
+    assert.ok(!result.systemPrompt.includes("Plan stage rule"));
+  });
+
   it("does not load inside subagent processes", () => {
     process.env.PI_SUBAGENT_NAME = "worker";
     piOrchestraExtension(makeApi());

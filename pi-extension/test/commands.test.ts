@@ -5,6 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { checkStageArtifact, registerCommands } from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
+import type { OrchestraState } from "../src/state.js";
+import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
 describe("commands", () => {
@@ -32,6 +34,12 @@ describe("commands", () => {
         select: async () => "",
       },
     } as unknown as ExtensionContext;
+  }
+
+  function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
+    const result = advanceStage(cwd, state, stage);
+    if (!result.ok) throw new Error(result.reason);
+    return result.state;
   }
 
   function makeApi(): ExtensionAPI {
@@ -148,7 +156,7 @@ describe("commands", () => {
     assert.ok(notifications[0].message.includes("Plan artifact not found"));
   });
 
-  it("orchestra-implement can be run directly after plan exists", async () => {
+  it("orchestra-implement can be run directly from planned stage", async () => {
     registerCommands(makeApi());
     await commandHandlers["orchestra-plan"]("Mission", makeCtx());
     await commandHandlers["orchestra-approve"]("", makeCtx()); // advances to implementing
@@ -200,5 +208,279 @@ describe("commands", () => {
 
     const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
     assert.strictEqual(result.ok, true);
+  });
+
+  it("orchestra-document blocks when implement artifacts are missing", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    // Manually set state to implemented without creating implement artifacts.
+    let state = loadState(tmpDir);
+    state.currentStage = "implemented";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-document"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Implement artifacts not found"));
+    assert.strictEqual(loadState(tmpDir).currentStage, "implemented");
+  });
+
+  it("orchestra-deliver blocks when document artifacts are missing", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    // Manually set state to documented without creating document artifacts.
+    let state = loadState(tmpDir);
+    state.currentStage = "documented";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-deliver"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Document artifacts not found"));
+    assert.strictEqual(loadState(tmpDir).currentStage, "documented");
+  });
+
+  it("orchestra-document rejects running from planned stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    // Manually reset stage back to planned.
+    let state = loadState(tmpDir);
+    state.currentStage = "planned";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    // Create plan and implement artifacts so only the stage restriction is tested.
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    fs.writeFileSync(planPath, "# Plan\n");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "implement", "notes.md");
+    fs.mkdirSync(path.dirname(implementPath), { recursive: true });
+    fs.writeFileSync(implementPath, "# Implement notes\n");
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-document"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("can only run from 'implemented'"));
+    assert.strictEqual(loadState(tmpDir).currentStage, "planned");
+  });
+
+  it("orchestra-implement succeeds from planned with plan artifact", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+
+    // Reset back to planned so the manual command can be tested.
+    let state = loadState(tmpDir);
+    state.currentStage = "planned";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    fs.writeFileSync(planPath, "# Plan\n");
+
+    notifications.length = 0;
+    sentMessages.length = 0;
+    await commandHandlers["orchestra-implement"]("", makeCtx());
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.ok(notifications[0].message.includes("Implement stage started"));
+    assert.strictEqual(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes("Implement Stage"));
+  });
+
+  it("orchestra-document succeeds from implemented with artifacts", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+
+    let state = loadState(tmpDir);
+    state.currentStage = "implemented";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    fs.writeFileSync(planPath, "# Plan\n");
+
+    const implementPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "implement", "notes.md");
+    fs.mkdirSync(path.dirname(implementPath), { recursive: true });
+    fs.writeFileSync(implementPath, "# Implement notes\n");
+
+    notifications.length = 0;
+    sentMessages.length = 0;
+    await commandHandlers["orchestra-document"]("", makeCtx());
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "documenting");
+    assert.ok(notifications[0].message.includes("Document stage started"));
+    assert.strictEqual(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes("Document Stage"));
+  });
+
+  it("orchestra-deliver succeeds from documented with artifacts", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+
+    let state = loadState(tmpDir);
+    state.currentStage = "documented";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    const documentPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "document", "README.md");
+    fs.mkdirSync(path.dirname(documentPath), { recursive: true });
+    fs.writeFileSync(documentPath, "# Docs\n");
+
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    fs.mkdirSync(deliverDir, { recursive: true });
+    fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
+    fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
+
+    notifications.length = 0;
+    sentMessages.length = 0;
+    await commandHandlers["orchestra-deliver"]("", makeCtx());
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivering");
+    assert.ok(notifications[0].message.includes("Deliver stage started"));
+    assert.strictEqual(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes("Deliver Stage"));
+  });
+
+  it("checkStageArtifact fails when deliver security report is missing", () => {
+    let state = startRun(tmpDir, "Mission");
+    state = advanceTo(tmpDir, state, "planning");
+    state = advanceTo(tmpDir, state, "planned");
+    state = advanceTo(tmpDir, state, "implementing");
+    state = advanceTo(tmpDir, state, "implemented");
+    state = advanceTo(tmpDir, state, "documenting");
+    state = advanceTo(tmpDir, state, "documented");
+    state = advanceTo(tmpDir, state, "delivering");
+
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    fs.mkdirSync(deliverDir, { recursive: true });
+    fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
+
+    notifications.length = 0;
+    const result = checkStageArtifact(loadState(tmpDir), "deliver", makeCtx());
+
+    assert.strictEqual(result.ok, false);
+    assert.ok(notifications[0].message.includes("Deliver artifacts not found"));
+    assert.ok(notifications[0].message.includes("security-report.md"));
+  });
+
+  it("checkStageArtifact fails when deliver summary is missing", () => {
+    let state = startRun(tmpDir, "Mission");
+    state = advanceTo(tmpDir, state, "planning");
+    state = advanceTo(tmpDir, state, "planned");
+    state = advanceTo(tmpDir, state, "implementing");
+    state = advanceTo(tmpDir, state, "implemented");
+    state = advanceTo(tmpDir, state, "documenting");
+    state = advanceTo(tmpDir, state, "documented");
+    state = advanceTo(tmpDir, state, "delivering");
+
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    fs.mkdirSync(deliverDir, { recursive: true });
+    fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
+
+    notifications.length = 0;
+    const result = checkStageArtifact(loadState(tmpDir), "deliver", makeCtx());
+
+    assert.strictEqual(result.ok, false);
+    assert.ok(notifications[0].message.includes("Deliver artifacts not found"));
+    assert.ok(notifications[0].message.includes("deliver-summary.md"));
+  });
+
+  it("checkStageArtifact passes when implement artifacts exist", () => {
+    let state = startRun(tmpDir, "Mission");
+    state = advanceTo(tmpDir, state, "planning");
+    state = advanceTo(tmpDir, state, "planned");
+    state = advanceTo(tmpDir, state, "implementing");
+
+    const implementPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "implement", "notes.md");
+    fs.mkdirSync(path.dirname(implementPath), { recursive: true });
+    fs.writeFileSync(implementPath, "# Notes\n");
+
+    const result = checkStageArtifact(loadState(tmpDir), "implement", makeCtx());
+    assert.strictEqual(result.ok, true);
+  });
+
+  it("checkStageArtifact passes when document artifacts exist", () => {
+    let state = startRun(tmpDir, "Mission");
+    state = advanceTo(tmpDir, state, "planning");
+    state = advanceTo(tmpDir, state, "planned");
+    state = advanceTo(tmpDir, state, "implementing");
+    state = advanceTo(tmpDir, state, "implemented");
+    state = advanceTo(tmpDir, state, "documenting");
+
+    const documentPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "document", "README.md");
+    fs.mkdirSync(path.dirname(documentPath), { recursive: true });
+    fs.writeFileSync(documentPath, "# Docs\n");
+
+    const result = checkStageArtifact(loadState(tmpDir), "document", makeCtx());
+    assert.strictEqual(result.ok, true);
+  });
+
+  it("checkStageArtifact passes when deliver artifacts exist", () => {
+    let state = startRun(tmpDir, "Mission");
+    state = advanceTo(tmpDir, state, "planning");
+    state = advanceTo(tmpDir, state, "planned");
+    state = advanceTo(tmpDir, state, "implementing");
+    state = advanceTo(tmpDir, state, "implemented");
+    state = advanceTo(tmpDir, state, "documenting");
+    state = advanceTo(tmpDir, state, "documented");
+    state = advanceTo(tmpDir, state, "delivering");
+
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    fs.mkdirSync(deliverDir, { recursive: true });
+    fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
+    fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
+
+    const result = checkStageArtifact(loadState(tmpDir), "deliver", makeCtx());
+    assert.strictEqual(result.ok, true);
+  });
+
+  it("orchestra-status reports delivered run", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-status"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Stage: delivered"));
+    assert.ok(notifications[0].message.includes("Next step: run /orchestra-status"));
+  });
+
+  it("orchestra-approve rejects when no run is active", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-approve"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("No active orchestra run"));
+  });
+
+  it("orchestra-implement rejects from planning stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+
+    notifications.length = 0;
+    await commandHandlers["orchestra-implement"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Plan artifact not found"));
   });
 });

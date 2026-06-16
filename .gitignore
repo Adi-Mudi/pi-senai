@@ -5,3 +5,5 @@ dist/
 .IDE_Plans/
 .pi/orchestra
 .pi/tasks
+EOF
+.vscode

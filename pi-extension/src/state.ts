@@ -91,10 +91,13 @@ export function advanceStage(
       reason: `Cannot move from '${state.currentStage}' to '${nextStage}'. Valid next stages: ${allowed.join(", ") || "(none)"}.`,
     };
   }
-  state.currentStage = nextStage;
-  state.updatedAt = new Date().toISOString();
-  saveState(cwd, state);
-  return { ok: true, state };
+  const nextState: OrchestraState = {
+    ...state,
+    currentStage: nextStage,
+    updatedAt: new Date().toISOString(),
+  };
+  saveState(cwd, nextState);
+  return { ok: true, state: nextState };
 }
 
 export function resetState(cwd: string): void {

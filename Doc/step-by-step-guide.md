@@ -56,8 +56,9 @@ What happens:
 7. You answer the questions.
 8. The main agent writes your answers into `discussion-notes.md`.
 9. The planner writes `plan.md` under `.IDE_Plans/orchestra/runs/<run-id>/plan/`.
-10. Scout reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/`.
-11. Review reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/`.
+10. The planner also writes `plan-overview.md` under `.IDE_Plans/orchestra/runs/<run-id>/plan/` for user-friendly reading.
+11. Scout reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/`.
+12. Review reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/`.
 
 ### Approve the plan
 

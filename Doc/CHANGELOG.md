@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- New `plan-overview.md` artifact under `plan/`. The Plan stage now writes both:
+  - `plan.md` — concrete, actionable implementation plan for agents.
+  - `plan-overview.md` — user-friendly summary with mission, approach, key decisions, and expected outcome.
+
 ### Changed
 
 - Run IDs now include the local hour and minute: `YYYY-MM-DD-HH-MM-<mission-slug>`.
