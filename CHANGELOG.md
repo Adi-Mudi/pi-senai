@@ -9,17 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New `README.md` and updated `AGENTS.md` with project conventions, layout, and test commands.
+- Full production-readiness test coverage: 65 unit tests covering every exported function and major edge case.
+- Unit tests for `loadSkill` and `buildStagePrompt` across all four stage skills.
+- Unit tests for `checkStageArtifact` success and failure paths for implement, document, and deliver stages.
+- Unit tests verifying the Plan-stage scout rule is injected during `planning` and not outside it.
 - Unit tests verifying that `advanceStage` returns a new state object and does not mutate the input.
 - Unit tests verifying that `/orchestra-document` and `/orchestra-deliver` reject manual starts when the preceding stage's artifacts are missing.
 - Unit test verifying that `/orchestra-document` rejects running from the `planned` stage.
 
 ### Changed
 
+- `skills/orchestra-plan.md` rewritten to be concise and turn-budget aware, with explicit instructions to continue immediately between internal steps and a stronger fresh-scout rule.
+- `checkStageArtifact` now verifies both `security-report.md` and `deliver-summary.md` when checking Deliver artifacts.
+- Replaced fragile `replace("d", "")` command-name derivation in `ensureStage` with an explicit `STAGE_COMMAND_NAME` map.
 - `advanceStage` now clones the state object before updating `currentStage` and `updatedAt`, aligning with the project convention to avoid in-place mutation.
 - `ensureStage` no longer silently advances through intermediate stages. Manual `/orchestra-implement`, `/orchestra-document`, and `/orchestra-deliver` commands now require the exact preceding completed stage.
 - `checkStageArtifact` now supports checking artifacts for `implement`, `document`, and `deliver` stages in addition to `plan`.
 - `/orchestra-document` now verifies that the `implement/` directory contains artifacts before starting.
 - `/orchestra-deliver` now verifies that the `document/` directory contains artifacts before starting.
+- Updated all documentation to reflect the current artifact paths, command behavior, and stage prerequisites.
 
 ### Added
 

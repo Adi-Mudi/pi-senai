@@ -127,6 +127,13 @@ npm test
     └── step-by-step-guide.md
 ```
 
+## See also
+
+- [`Doc/orchestra-sequence.md`](Doc/orchestra-sequence.md) — high-level stage flow.
+- [`Doc/senai-full-sequence.md`](Doc/senai-full-sequence.md) — full sequence specification.
+- [`Doc/step-by-step-guide.md`](Doc/step-by-step-guide.md) — detailed walkthrough.
+- [`AGENTS.md`](AGENTS.md) — contributor / agent notes.
+
 ## License
 
 MIT

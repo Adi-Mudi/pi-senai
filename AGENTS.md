@@ -160,6 +160,12 @@ After code changes, run `npm run build` and restart Pi or run `/reload`.
 
 When changing behavior, update both code-facing docs (`README.md`, `CHANGELOG.md`) and design docs (`Doc/*.md`) plus stage skill files (`skills/*.md`) if the user-facing workflow changes.
 
+### Doc map
+
+- `Doc/orchestra-sequence.md` — high-level stage flow and artifact layout.
+- `Doc/senai-full-sequence.md` — full sequence specification with agents and contexts.
+- `Doc/step-by-step-guide.md` — hands-on walkthrough for running a full cycle.
+
 ## Branches
 
 Active development happens on the `development` branch. Do not run git mutations (commit, push, reset, rebase) unless explicitly asked.

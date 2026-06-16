@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- New `README.md` and updated `AGENTS.md` with project conventions, layout, and test commands.
+- Full production-readiness test coverage: 65 unit tests covering every exported function and major edge case.
+- Unit tests for `loadSkill` and `buildStagePrompt` across all four stage skills.
+- Unit tests for `checkStageArtifact` success and failure paths for implement, document, and deliver stages.
+- Unit tests verifying the Plan-stage scout rule is injected during `planning` and not outside it.
+
+### Changed
+
+- `skills/orchestra-plan.md` rewritten to be concise and turn-budget aware, with explicit instructions to continue immediately between internal steps and a stronger fresh-scout rule.
+- `checkStageArtifact` now verifies both `security-report.md` and `deliver-summary.md` when checking Deliver artifacts.
+- Replaced fragile `replace("d", "")` command-name derivation in `ensureStage` with an explicit `STAGE_COMMAND_NAME` map.
+- Updated all documentation (`README.md`, `AGENTS.md`, `Doc/orchestra-sequence.md`, `Doc/senai-full-sequence.md`, `Doc/step-by-step-guide.md`) to reflect the current artifact paths, command behavior, and stage prerequisites.
+
+### Added
+
 - New `plan-overview.md` artifact under `plan/`. The Plan stage now writes both:
   - `plan.md` — concrete, actionable implementation plan for agents.
   - `plan-overview.md` — user-friendly summary with mission, approach, key decisions, and expected outcome.

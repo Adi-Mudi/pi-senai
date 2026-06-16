@@ -1,10 +1,10 @@
 # Senai Full Sequence
 ## Stage-Gated Agent Orchestration — Plan → Implement → Document → Deliver
 
-> **Implementation note:** This specification is implemented by the `pi-orchestra` extension in this repository. The commands below reference the `pi-orchestra` slash-command names (`/orchestra-*`). For the original Senai extension spec, see the commit history.
+> **Implementation note:** This specification is implemented by the `pi-orchestra` extension in this repository. The commands below reference the `pi-orchestra` slash-command names (`/orchestra-*`).
 
-**Version:** 1.2  
-**Date:** 2026-06-13  
+**Version:** 1.3  
+**Date:** 2026-06-12  
 **Status:** Current
 
 ---
@@ -34,12 +34,17 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
 
 | Stage | Command | Purpose | Output |
 |-------|---------|---------|--------|
-| 1. Plan | `/orchestra-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` |
+| 1. Plan | `/orchestra-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` + user-facing `plan-overview.md` |
 | 2. Implement | `/orchestra-implement` | Build and test the approved plan | Working, tested code |
 | 3. Document | `/orchestra-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
-| 4. Deliver | `/orchestra-deliver` | Security audit and package | Security report + archive artifact |
+| 4. Deliver | `/orchestra-deliver` | Security audit and package | `security-report.md` + `deliver-summary.md` |
 
-Use `/orchestra-approve` to approve a finished stage and automatically run the next stage. You can also start any later stage manually with `/orchestra-implement`, `/orchestra-document`, or `/orchestra-deliver` if you prefer.
+Use `/orchestra-approve` to approve a finished stage and automatically run the next stage. Manual stage commands are available as overrides, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
+
+Other commands:
+
+- `/orchestra-status` — show current stage, mission, run ID, artifacts, and next command.
+- `/orchestra-reset` — clear the active run state (artifacts are preserved).
 
 ---
 
@@ -53,25 +58,28 @@ Research the codebase, interview the user to clarify scope, write a concrete imp
 ### Sequence
 
 ```
-coordinator (pi-subagents)
+main agent
     │
     ▼
-scouts × 3 (pi-teams — visible Zellij panes)
+scouts × 3 (parallel)
     │
     ▼
-discussion (pi-subagents)
+discussion
     │
     ▼
-parent interview with user
+parent interview with user (AskUserQuestion)
     │
     ▼
-discussion writes discussion-notes.md
+main agent updates discussion-notes.md
     │
     ▼
-planner (pi-subagents)
+planner writes plan.md
     │
     ▼
-reviewers × 3 (pi-subagents — parallel)
+plan-overview writer writes plan-overview.md
+    │
+    ▼
+reviewers × 3 (parallel)
     │
     ▼
 Parent approval gate (/orchestra-approve)
@@ -82,29 +90,27 @@ Auto-starts Implement
 
 ### Agents
 
-| Step | Agent | System | Context | Output |
-|------|-------|--------|---------|--------|
-| 1 | coordinator | pi-subagents | fresh | (no artifact) |
-| 2 | scout-1 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_1.md` |
-| 2 | scout-2 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_2.md` |
-| 2 | scout-3 | pi-teams | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_3.md` |
-| 3 | discussion | pi-subagents | fork | Drafts interview questions for the user |
-| 4 | parent + user | main session | — | User answers via `AskUserQuestion` |
-| 5 | planner | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` + `.IDE_Plans/orchestra/runs/<run-id>/plan/plan-overview.md` |
-| 6 | reviewer-correctness | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-correctness.md` |
-| 6 | reviewer-security | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-security.md` |
-| 6 | reviewer-tests | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-tests.md` |
+| Step | Agent | Context | Output |
+|------|-------|---------|--------|
+| 1 | scout-1 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_1.md` |
+| 1 | scout-2 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_2.md` |
+| 1 | scout-3 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_3.md` |
+| 2 | discussion | fork | Drafts interview questions for the user |
+| 3 | parent + user | main session | User answers via `AskUserQuestion` |
+| 4 | planner | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` |
+| 5 | plan-overview | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan-overview.md` |
+| 6 | reviewer-correctness | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-correctness.md` |
+| 6 | reviewer-security | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-security.md` |
+| 6 | reviewer-tests | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-tests.md` |
 
 ### Interview Step
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
-- It sends the questions to the parent session via intercom (`reason: "need_decision"`).
-- The parent asks the user via `AskUserQuestion`.
-- The parent sends the user's answers back to the discussion agent via intercom.
-- The discussion agent writes `.IDE_Plans/orchestra/runs/<run-id>/plan/discussion-notes.md` with clarified scope, decisions, and open questions.
+- The main agent asks the user via the `AskUserQuestion` tool.
+- The main agent appends the user's answers to `discussion-notes.md`.
 
 ### Approval Gate
-- If all reviews PASS → run `/orchestra-approve`. This marks the plan approved and automatically starts the Implement stage.
-- If any review NEEDS_FIX → fix the plan, re-run review, then approve.
+- If the plan and reviews look good → run `/orchestra-approve`. This marks the plan approved and automatically starts the Implement stage.
+- If changes are needed → ask the main agent to update the plan and reviews, then approve.
 
 ---
 
@@ -118,22 +124,22 @@ Build the approved plan and validate with tests and code review.
 ### Sequence
 
 ```
-test-skeleton (pi-subagents)
+test-skeleton
     │
     ▼
-implementer / worker (pi-subagents)
+implementer / worker
     │
     ▼
-lint (pi-subagents)
+linter
     │
     ▼
-test (pi-subagents)
+test
     │
     ▼
-code-review (pi-subagents)
+code-review
     │
     ▼
-full-test (pi-subagents)
+full-test
     │
     ▼
 Parent approval gate (/orchestra-approve)
@@ -144,19 +150,19 @@ Auto-starts Document
 
 ### Agents
 
-| Step | Agent | System | Context | Purpose |
-|------|-------|--------|---------|---------|
-| 1 | test-skeleton | pi-subagents | fork | Write test stubs and scaffolding first |
-| 2 | implementer | pi-subagents | fork | Implement the approved plan |
-| 3 | linter | pi-subagents | fresh | Run linter and report style issues |
-| 4 | test | pi-subagents | fresh | Run unit tests |
-| 5 | code-review | pi-subagents | fresh | Review the diff for correctness and regressions |
-| 6 | full-test | pi-subagents | fresh | Run integration / e2e tests |
+| Step | Agent | Context | Purpose |
+|------|-------|---------|---------|
+| 1 | test-skeleton | fork | Write test stubs and scaffolding first |
+| 2 | implementer | fork | Implement the approved plan |
+| 3 | linter | fresh | Run linter and report style issues |
+| 4 | test | fresh | Run unit tests |
+| 5 | code-review | fresh | Review the diff for correctness and regressions |
+| 6 | full-test | fresh | Run integration / e2e tests |
 
 ### Hard Rules
 - Only the implementer edits source files.
 - One writer at a time.
-- Stop if `plan.md` is missing and prompt user to run `/orchestra-plan` first.
+- The stage must not start until `plan.md` exists.
 
 ### Approval Gate
 - If all checks pass → run `/orchestra-approve`. This marks implementation complete and automatically starts the Document stage.
@@ -188,12 +194,12 @@ other-docs-writer  ──┘
 
 ### Agents
 
-| Step | Agent | System | Context | Output |
-|------|-------|--------|---------|--------|
-| 1 | readme | pi-subagents | fresh | `README.md` |
-| 1 | changelog | pi-subagents | fresh | `CHANGELOG.md` |
-| 1 | api-docs | pi-subagents | fresh | `docs/api/` |
-| 1 | other-docs | pi-subagents | fresh | `CONTRIBUTING.md`, `LICENSE`, etc. |
+| Step | Agent | Context | Output |
+|------|-------|---------|--------|
+| 1 | readme-writer | fresh | `README.md` |
+| 1 | changelog-writer | fresh | `CHANGELOG.md` |
+| 1 | api-docs-writer | fresh | `docs/api/` |
+| 1 | other-docs-writer | fresh | `CONTRIBUTING.md`, `LICENSE`, etc. |
 
 ### Notes
 - All four writers run in parallel because they write to different files.
@@ -215,10 +221,10 @@ Final security check and packaging.
 ### Sequence
 
 ```
-security-gate (pi-subagents)
+security-gate
     │
     ▼
-archive (pi-subagents)
+archive
     │
     ▼
 Parent approval gate (/orchestra-approve)
@@ -229,10 +235,10 @@ Run marked delivered
 
 ### Agents
 
-| Step | Agent | System | Context | Output |
-|------|-------|--------|---------|--------|
-| 1 | security-gate | pi-subagents | fresh | `.IDE_Plans/orchestra/runs/<run-id>/security-report.md` |
-| 2 | archive | pi-subagents | fork | `.IDE_Plans/orchestra/runs/<run-id>/deliver-summary.md` + archive artifact |
+| Step | Agent | Context | Output |
+|------|-------|---------|--------|
+| 1 | security-gate | fresh | `.IDE_Plans/orchestra/runs/<run-id>/deliver/security-report.md` |
+| 2 | archive | fork | `.IDE_Plans/orchestra/runs/<run-id>/deliver/deliver-summary.md` + archive artifact |
 
 ### Approval Gate
 - If security gate passes → run `/orchestra-approve` to finish the run.
@@ -240,66 +246,45 @@ Run marked delivered
 
 ---
 
-## 7. Inline Overrides
-
-Most stage commands accept inline overrides to change the default agent for a slot.
-
-### Plan overrides
-```
-/orchestra-plan "<mission>" --coordinator=worker --scout-count=5 --discussion=oracle --planner=planner --reviewer-correctness=reviewer --reviewer-security=reviewer --reviewer-tests=reviewer
-```
-
-### Implement overrides
-```
-/orchestra-implement --test-skeleton=worker --implementer=worker --linter=worker --code-reviewer=reviewer
-```
-
-### Document overrides
-```
-/orchestra-document --readme=worker --changelog=worker --api-docs=worker --other-docs=worker
-```
-
-### Deliver overrides
-```
-/orchestra-deliver --security-gate=reviewer --archive=worker
-```
-
----
-
-## 8. Runtime Artifacts
+## 7. Runtime Artifacts
 
 All auto-generated files go into `.IDE_Plans/orchestra/runs/<run-id>/`:
 
+```text
+.IDE_Plans/orchestra/
+├── state.json
+└── runs/<run-id>/
+    ├── plan/
+    │   ├── plan.md
+    │   ├── plan-overview.md
+    │   ├── discussion-notes.md
+    │   ├── scouts/
+    │   │   ├── scout-angle_1.md
+    │   │   ├── scout-angle_2.md
+    │   │   └── scout-angle_3.md
+    │   └── reviews/
+    │       ├── review-correctness.md
+    │       ├── review-security.md
+    │       └── review-tests.md
+    ├── implement/
+    ├── document/
+    └── deliver/
+        ├── security-report.md
+        └── deliver-summary.md
 ```
-.IDE_Plans/orchestra/runs/<run-id>/
-├── plan/
-│   ├── plan.md
-│   ├── discussion-notes.md
-│   ├── scouts/
-│   │   ├── scout-angle_1.md
-│   │   ├── scout-angle_2.md
-│   │   └── scout-angle_3.md
-│   └── reviews/
-│       ├── review-correctness.md
-│       ├── review-security.md
-│       └── review-tests.md
-├── implement/
-├── document/
-└── deliver/
-    ├── security-report.md
-    └── deliver-summary.md
-```
+
+Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 
 ---
 
-## 9. Context Modes
+## 8. Context Modes
 
 | Stage | Agent | Context | Why |
 |-------|-------|---------|-----|
-| Plan | coordinator | fresh | No parent bias when assessing project |
 | Plan | scouts | fresh | Adversarial eyes on codebase |
-| Plan | discussion | fork | Needs parent context for decisions |
-| Plan | planner | fork | Needs parent context for planning |
+| Plan | discussion | fork | Needs scout context for decisions |
+| Plan | planner | fork | Needs scout and discussion context |
+| Plan | plan-overview | fork | Needs the approved plan |
 | Plan | reviewers | fresh | Adversarial review of plan |
 | Implement | test-skeleton | fork | Needs plan context |
 | Implement | implementer | fork | Needs plan context |
@@ -310,28 +295,28 @@ All auto-generated files go into `.IDE_Plans/orchestra/runs/<run-id>/`:
 
 ---
 
-## 10. Cross-Cutting Rules
+## 9. Cross-Cutting Rules
 
 1. **Plan before implement.** Always run `/orchestra-plan` before `/orchestra-implement` for non-trivial work.
 2. **Never skip review.** Every producing stage ends with a reviewer or approval gate.
 3. **Parent owns decisions.** Subagents advise. The parent session approves or rejects.
-4. **Async by default.** All subagents launch with `async: true` unless the user asks for blocking.
+4. **Async by default.** All subagents launch in parallel where dependencies allow.
 5. **One writer at a time.** Never run two worker agents in parallel on the same worktree.
-6. **Escalate, don't guess.** If a subagent needs an unapproved decision, it asks via intercom.
+6. **Escalate, don't guess.** If a subagent needs an unapproved decision, it asks via the main agent.
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
 8. **No direct subagent calls from the extension.** The extension injects prompts; the LLM invokes the `subagent` tool.
 9. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command to move forward; manual stage commands are still available as overrides.
+10. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
 
 ---
 
-## 11. Document Map
+## 10. Document Map
 
 | Topic | File |
 |-------|------|
-| Product requirements | `docs/PRD.md` |
-| System architecture | `docs/ARCHITECTURE.md` |
-| Plan stage agent specs | `docs/orchestra-plan-spec.md` |
-| Plan stage config | `docs/orchestra-plan-config.md` |
-| Scout phase design | `docs/orchestra-plan-scout-design.md` |
-| Plan phase roadmap | `docs/orchestra-plan-phases.md` |
-| Agent config | `docs/orchestra-plan-agents.md` |
+| High-level sequence | `Doc/orchestra-sequence.md` |
+| Step-by-step user guide | `Doc/step-by-step-guide.md` |
+| This full sequence spec | `Doc/senai-full-sequence.md` |
+| Changelog | `CHANGELOG.md` |
+| Agent / contributor notes | `AGENTS.md` |
+| Quick start | `README.md` |

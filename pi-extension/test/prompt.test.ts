@@ -7,10 +7,40 @@ import type { OrchestraState } from "../src/state.js";
 describe("prompt", () => {
   const cwd = "/fake/project";
 
+  function makeState(stage: string, runId: string): OrchestraState {
+    return {
+      version: 1,
+      mission: "Build CLI",
+      runId,
+      currentStage: stage as OrchestraState["currentStage"],
+      startedAt: "2026-06-12T00:00:00Z",
+      updatedAt: "2026-06-12T00:00:00Z",
+      stageResults: {},
+    };
+  }
+
   it("loadSkill reads the plan skill file", () => {
     const skill = loadSkill("plan");
     assert.ok(skill.includes("Plan Stage"));
     assert.ok(skill.includes("scout-1"));
+  });
+
+  it("loadSkill reads the implement skill file", () => {
+    const skill = loadSkill("implement");
+    assert.ok(skill.includes("Implement Stage"));
+    assert.ok(skill.includes("implementer"));
+  });
+
+  it("loadSkill reads the document skill file", () => {
+    const skill = loadSkill("document");
+    assert.ok(skill.includes("Document Stage"));
+    assert.ok(skill.includes("readme-writer"));
+  });
+
+  it("loadSkill reads the deliver skill file", () => {
+    const skill = loadSkill("deliver");
+    assert.ok(skill.includes("Deliver Stage"));
+    assert.ok(skill.includes("security-gate"));
   });
 
   it("loadSkill returns fallback when skill file is missing", () => {
@@ -18,16 +48,14 @@ describe("prompt", () => {
     assert.ok(skill.includes("No detailed skill file found"));
   });
 
+  it("loadSkill strips YAML frontmatter", () => {
+    const skill = loadSkill("plan");
+    assert.ok(!skill.startsWith("---"));
+    assert.ok(skill.includes("# Plan Stage"));
+  });
+
   it("buildStagePrompt includes mission and artifact paths", () => {
-    const state: OrchestraState = {
-      version: 1,
-      mission: "Build CLI",
-      runId: "run-1",
-      currentStage: "planning",
-      startedAt: "2026-06-12T00:00:00Z",
-      updatedAt: "2026-06-12T00:00:00Z",
-      stageResults: {},
-    };
+    const state = makeState("planning", "run-1");
 
     const { prompt, context } = buildStagePrompt(cwd, state, "plan");
 
@@ -61,7 +89,20 @@ describe("prompt", () => {
       stageResults: {},
     };
 
-    const { context } = buildStagePrompt(cwd, state, "implement");
+    const { context, prompt } = buildStagePrompt(cwd, state, "implement");
     assert.ok(context.artifacts.plan.includes("<run-id>"));
+    assert.ok(prompt.includes("Mission: (none)"));
+    assert.ok(prompt.includes("Run ID: (none)"));
+  });
+
+  it("buildStagePrompt constructs prompts for every stage", () => {
+    const stages = ["plan", "implement", "document", "deliver"];
+    for (const stage of stages) {
+      const state = makeState("planning", `run-${stage}`);
+      const { prompt, context } = buildStagePrompt(cwd, state, stage);
+      assert.ok(prompt.includes(`<pi-orchestra stage="${stage}">`));
+      assert.strictEqual(context.stage, stage);
+      assert.ok(context.artifacts.runDir.includes(`.IDE_Plans/orchestra/runs/run-${stage}`));
+    }
   });
 });

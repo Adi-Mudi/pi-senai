@@ -6,6 +6,7 @@ import {
   getStatePath,
   getRunDir,
   getArtifactPaths,
+  getDefaultArtifactPaths,
   makeRunId,
   STAGE_TRANSITIONS,
   formatStageStatus,
@@ -81,6 +82,12 @@ describe("constants", () => {
     );
   });
 
+  it("getDefaultArtifactPaths returns placeholder paths", () => {
+    const artifacts = getDefaultArtifactPaths();
+    assert.ok(artifacts.runDir.includes("<run-id>"));
+    assert.ok(artifacts.plan.includes("<run-id>/plan/plan.md"));
+  });
+
   it("makeRunId creates a slug from mission and date", () => {
     const runId = makeRunId("Build a hello world CLI");
     assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-build-a-hello-world-cli$/);
@@ -89,6 +96,17 @@ describe("constants", () => {
   it("makeRunId falls back to run when mission is empty", () => {
     const runId = makeRunId("");
     assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-run$/);
+  });
+
+  it("makeRunId strips special characters", () => {
+    const runId = makeRunId("Feature @ #1: API & Auth!!!");
+    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-feature-1-api-auth$/);
+  });
+
+  it("makeRunId truncates very long missions", () => {
+    const runId = makeRunId("a".repeat(200));
+    const slug = runId.split("-").slice(5).join("-");
+    assert.strictEqual(slug.length, 40);
   });
 
   it("STAGE_TRANSITIONS defines a linear workflow", () => {
@@ -113,5 +131,12 @@ describe("constants", () => {
     assert.ok(status.includes("Mission: test mission"));
     assert.ok(status.includes("Run ID: run-1"));
     assert.ok(status.includes("/orchestra-plan"));
+  });
+
+  it("formatStageStatus omits missing mission and runId", () => {
+    const status = formatStageStatus({ currentStage: "none" });
+    assert.ok(status.includes("Active stage: none"));
+    assert.ok(!status.includes("Mission:"));
+    assert.ok(!status.includes("Run ID:"));
   });
 });

@@ -89,7 +89,7 @@ If you ever need to start it manually, run:
 What happens:
 
 1. The extension checks that `plan.md` exists.
-2. It accepts stages `planned` or `implementing`.
+2. It requires the current stage to be exactly `planned`.
 3. It sets the stage to `implementing`.
 4. It sends the Implement stage skill prompt.
 5. The main agent runs:
@@ -126,10 +126,11 @@ If you ever need to start it manually, run:
 
 What happens:
 
-1. The extension checks that the current stage is `implemented` or `documenting`.
-2. It sets the stage to `documenting`.
-3. It sends the Document stage skill prompt.
-4. The main agent runs four writers in parallel:
+1. The extension checks that the `implement/` directory contains artifacts.
+2. It requires the current stage to be exactly `implemented`.
+3. It sets the stage to `documenting`.
+4. It sends the Document stage skill prompt.
+5. The main agent runs four writers in parallel:
    - `readme-writer`
    - `changelog-writer`
    - `api-docs-writer`
@@ -161,10 +162,11 @@ If you ever need to start it manually, run:
 
 What happens:
 
-1. The extension checks that the current stage is `documented` or `delivering`.
-2. It sets the stage to `delivering`.
-3. It sends the Deliver stage skill prompt.
-4. The main agent runs:
+1. The extension checks that the `document/` directory contains artifacts.
+2. It requires the current stage to be exactly `documented`.
+3. It sets the stage to `delivering`.
+4. It sends the Deliver stage skill prompt.
+5. The main agent runs:
    - `security-gate` agent
    - `archive` agent
 

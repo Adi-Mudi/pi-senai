@@ -33,6 +33,12 @@ const STAGE_SKILL: Record<string, string> = {
   delivering: "deliver",
 };
 
+const STAGE_COMMAND_NAME: Record<"planned" | "implemented" | "documented", string> = {
+  planned: "implement",
+  implemented: "document",
+  documented: "deliver",
+};
+
 export function registerCommands(pi: ExtensionAPI) {
   pi.registerCommand("orchestra-plan", {
     description: "Start the Plan stage: /orchestra-plan <mission>",
@@ -304,7 +310,7 @@ function ensureStage(
   }
   return {
     ok: false,
-    reason: `Manual '/orchestra-${targetStage.replace("d", "")}' can only run from '${required}'. Current stage is '${state.currentStage}'. Run /orchestra-status to see the next step.`,
+    reason: `Manual '/orchestra-${STAGE_COMMAND_NAME[targetStage]}' can only run from '${required}'. Current stage is '${state.currentStage}'. Run /orchestra-status to see the next step.`,
   };
 }
 
@@ -356,9 +362,16 @@ export function checkStageArtifact(
   }
 
   if (stage === "deliver") {
+    const missing: string[] = [];
     if (!fs.existsSync(artifacts.securityReport)) {
+      missing.push(artifacts.securityReport);
+    }
+    if (!fs.existsSync(artifacts.deliverSummary)) {
+      missing.push(artifacts.deliverSummary);
+    }
+    if (missing.length > 0) {
       ctx.ui.notify(
-        `Security report not found: ${artifacts.securityReport}. Complete the Deliver stage first.`,
+        `Deliver artifacts not found: ${missing.join(", ")}. Complete the Deliver stage first.`,
         "warning",
       );
       return { ok: false };
