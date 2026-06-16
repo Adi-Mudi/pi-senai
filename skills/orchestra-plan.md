@@ -19,9 +19,11 @@ scout-2 ──┼──▶ discussion ──▶ AskUserQuestion ──▶ planne
 scout-3 ──┘
 ```
 
+**Important rule for every run:** Each run is independent. Always spawn three fresh scout subagents below. Do NOT reuse, copy, or read scout reports from any previous run folder. Each scout must write its own fresh report to the assigned artifact path.
+
 ### 1. Parallel scouts (3 agents)
 
-Spawn three scouts in parallel with different angles. Each scout writes to its assigned artifact path.
+Spawn three scouts in parallel with different angles using three separate `subagent` tool calls. Each scout must write its own fresh report to its assigned artifact path. Do not write scout reports yourself.
 
 - **scout-1**: Architecture / big-picture reconnaissance. What exists, tech stack, conventions.
 - **scout-2**: Target area deep-dive. Find the exact files and patterns the mission will touch.
