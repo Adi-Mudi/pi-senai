@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
-import { getArtifactPaths, STAGE_TRANSITIONS } from "./constants.js";
+import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
 import { buildStagePrompt } from "./prompt.js";
 import {
   advanceStage,
@@ -11,10 +11,32 @@ import {
 } from "./state.js";
 
 const NEXT_COMMAND: Record<string, string> = {
+  planning: "/orchestra-approve",
   planned: "/orchestra-implement",
+  implementing: "/orchestra-approve",
   implemented: "/orchestra-document",
+  documenting: "/orchestra-approve",
   documented: "/orchestra-deliver",
+  delivering: "/orchestra-approve",
   delivered: "/orchestra-status",
+};
+
+const STAGE_COMMANDS: Record<string, Stage> = {
+  planned: "implementing",
+  implemented: "documenting",
+  documented: "delivering",
+};
+
+const STAGE_SKILL: Record<string, string> = {
+  implementing: "implement",
+  documenting: "document",
+  delivering: "deliver",
+};
+
+const STAGE_COMMAND_NAME: Record<"planned" | "implemented" | "documented", string> = {
+  planned: "implement",
+  implemented: "document",
+  documented: "deliver",
 };
 
 export function registerCommands(pi: ExtensionAPI) {
@@ -34,6 +56,12 @@ export function registerCommands(pi: ExtensionAPI) {
         return;
       }
 
+      ctx.ui.notify(
+        `Plan stage started for: ${mission}\n` +
+          `When the plan is ready and you approve it, run /orchestra-approve to continue.`,
+        "info",
+      );
+
       const { prompt } = buildStagePrompt(ctx.cwd, advance.state, "plan");
       pi.sendUserMessage(prompt);
     },
@@ -45,19 +73,24 @@ export function registerCommands(pi: ExtensionAPI) {
       const state = loadState(ctx.cwd);
       const check = checkStageArtifact(state, "plan", ctx);
       if (!check.ok) return;
-      if (state.currentStage !== "planned" && state.currentStage !== "implementing") {
-        ctx.ui.notify(
-          `Plan must be approved first. Current stage: ${state.currentStage}. Run /orchestra-approve.`,
-          "warning",
-        );
+
+      const ensured = ensureStage(ctx.cwd, state, "planned");
+      if (!ensured.ok) {
+        ctx.ui.notify(ensured.reason, "warning");
         return;
       }
 
-      const advance = advanceStage(ctx.cwd, state, "implementing");
+      const advance = advanceStage(ctx.cwd, ensured.state, "implementing");
       if (!advance.ok) {
         ctx.ui.notify(advance.reason, "error");
         return;
       }
+
+      ctx.ui.notify(
+        `Implement stage started.\n` +
+          `When implementation and tests are complete and you approve, run /orchestra-approve to continue.`,
+        "info",
+      );
 
       const { prompt } = buildStagePrompt(ctx.cwd, advance.state, "implement");
       pi.sendUserMessage(prompt);
@@ -68,21 +101,26 @@ export function registerCommands(pi: ExtensionAPI) {
     description: "Start the Document stage (requires implemented code)",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
-      const check = checkStageArtifact(state, "plan", ctx);
+      const check = checkStageArtifact(state, "implement", ctx);
       if (!check.ok) return;
-      if (state.currentStage !== "implemented" && state.currentStage !== "documenting") {
-        ctx.ui.notify(
-          `Implement stage must be completed first. Current stage: ${state.currentStage}`,
-          "warning",
-        );
+
+      const ensured = ensureStage(ctx.cwd, state, "implemented");
+      if (!ensured.ok) {
+        ctx.ui.notify(ensured.reason, "warning");
         return;
       }
 
-      const advance = advanceStage(ctx.cwd, state, "documenting");
+      const advance = advanceStage(ctx.cwd, ensured.state, "documenting");
       if (!advance.ok) {
         ctx.ui.notify(advance.reason, "error");
         return;
       }
+
+      ctx.ui.notify(
+        `Document stage started.\n` +
+          `When documentation is complete and you approve, run /orchestra-approve to continue.`,
+        "info",
+      );
 
       const { prompt } = buildStagePrompt(ctx.cwd, advance.state, "document");
       pi.sendUserMessage(prompt);
@@ -93,21 +131,26 @@ export function registerCommands(pi: ExtensionAPI) {
     description: "Start the Deliver stage (requires documentation)",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
-      const check = checkStageArtifact(state, "plan", ctx);
+      const check = checkStageArtifact(state, "document", ctx);
       if (!check.ok) return;
-      if (state.currentStage !== "documented" && state.currentStage !== "delivering") {
-        ctx.ui.notify(
-          `Document stage must be completed first. Current stage: ${state.currentStage}`,
-          "warning",
-        );
+
+      const ensured = ensureStage(ctx.cwd, state, "documented");
+      if (!ensured.ok) {
+        ctx.ui.notify(ensured.reason, "warning");
         return;
       }
 
-      const advance = advanceStage(ctx.cwd, state, "delivering");
+      const advance = advanceStage(ctx.cwd, ensured.state, "delivering");
       if (!advance.ok) {
         ctx.ui.notify(advance.reason, "error");
         return;
       }
+
+      ctx.ui.notify(
+        `Deliver stage started.\n` +
+          `When security audit and packaging are complete and you approve, run /orchestra-approve to finish.`,
+        "info",
+      );
 
       const { prompt } = buildStagePrompt(ctx.cwd, advance.state, "deliver");
       pi.sendUserMessage(prompt);
@@ -126,6 +169,8 @@ export function registerCommands(pi: ExtensionAPI) {
       const artifacts = state.runId
         ? getArtifactPaths(ctx.cwd, state.runId)
         : null;
+
+      const nextCommand = NEXT_COMMAND[state.currentStage];
 
       const lines = [
         `Stage: ${state.currentStage}`,
@@ -146,12 +191,18 @@ export function registerCommands(pi: ExtensionAPI) {
           `  deliver-summary.md: ${artifacts.deliverSummary}`,
         );
       }
+      if (nextCommand) {
+        lines.push(
+          ``,
+          `Next step: run ${nextCommand}`,
+        );
+      }
       ctx.ui.notify(lines.join("\n"), "info");
     },
   });
 
   pi.registerCommand("orchestra-approve", {
-    description: "Approve the current stage and advance to the next gate",
+    description: "Approve the current stage and run the next stage automatically",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
       if (state.currentStage === "none") {
@@ -171,20 +222,46 @@ export function registerCommands(pi: ExtensionAPI) {
 
       const confirmed = await ctx.ui.confirm(
         "Approve stage",
-        `Advance from '${state.currentStage}' to '${nextStage}'?`,
+        `Approve '${state.currentStage}' and run the next stage?`,
       );
       if (!confirmed) return;
 
-      const advance = advanceStage(ctx.cwd, state, nextStage);
-      if (!advance.ok) {
-        ctx.ui.notify(advance.reason, "error");
+      // Advance from current working stage to completed stage.
+      const firstAdvance = advanceStage(ctx.cwd, state, nextStage);
+      if (!firstAdvance.ok) {
+        ctx.ui.notify(firstAdvance.reason, "error");
         return;
       }
-      const nextCommand = NEXT_COMMAND[nextStage];
+
+      const completedStage = nextStage;
+      const nextCommand = NEXT_COMMAND[completedStage];
+      const nextWorkingStage = STAGE_COMMANDS[completedStage];
+
+      if (!nextWorkingStage) {
+        // Final stage completed.
+        ctx.ui.notify(
+          `Stage '${state.currentStage}' approved. Advanced to '${completedStage}'.\n` +
+            `All stages are complete.`,
+          "info",
+        );
+        return;
+      }
+
+      // Auto-advance to the next working stage and run it.
+      const secondAdvance = advanceStage(ctx.cwd, firstAdvance.state, nextWorkingStage);
+      if (!secondAdvance.ok) {
+        ctx.ui.notify(secondAdvance.reason, "error");
+        return;
+      }
+
       ctx.ui.notify(
-        `Advanced to '${nextStage}'.${nextCommand ? ` Run ${nextCommand} to continue.` : ""}`,
+        `Stage '${state.currentStage}' approved. Advanced to '${completedStage}'.\n` +
+          `Automatically running the next stage: ${nextCommand}`,
         "info",
       );
+
+      const { prompt } = buildStagePrompt(ctx.cwd, secondAdvance.state, STAGE_SKILL[nextWorkingStage]);
+      pi.sendUserMessage(prompt);
     },
   });
 
@@ -207,9 +284,39 @@ export function registerCommands(pi: ExtensionAPI) {
   });
 }
 
+const REQUIRED_STAGE_FOR_MANUAL_COMMAND: Record<
+  "planned" | "implemented" | "documented",
+  Stage
+> = {
+  planned: "planned",
+  implemented: "implemented",
+  documented: "documented",
+};
+
+function ensureStage(
+  _cwd: string,
+  state: OrchestraState,
+  targetStage: "planned" | "implemented" | "documented",
+): { ok: true; state: OrchestraState } | { ok: false; reason: string } {
+  const required = REQUIRED_STAGE_FOR_MANUAL_COMMAND[targetStage];
+  if (state.currentStage === required) {
+    return { ok: true, state };
+  }
+  if (state.currentStage === "none") {
+    return {
+      ok: false,
+      reason: "No active run. Start with /orchestra-plan <mission>.",
+    };
+  }
+  return {
+    ok: false,
+    reason: `Manual '/orchestra-${STAGE_COMMAND_NAME[targetStage]}' can only run from '${required}'. Current stage is '${state.currentStage}'. Run /orchestra-status to see the next step.`,
+  };
+}
+
 export function checkStageArtifact(
   state: OrchestraState,
-  stage: "plan",
+  stage: "plan" | "implement" | "document" | "deliver",
   ctx: ExtensionContext,
 ): { ok: true } | { ok: false } {
   if (state.currentStage === "none") {
@@ -217,15 +324,54 @@ export function checkStageArtifact(
     return { ok: false };
   }
 
+  if (!state.runId) {
+    ctx.ui.notify("Run ID is missing. Start a new run with /orchestra-plan.", "error");
+    return { ok: false };
+  }
+
+  const artifacts = getArtifactPaths(ctx.cwd, state.runId);
+
   if (stage === "plan") {
-    if (!state.runId) {
-      ctx.ui.notify("Run ID is missing. Start a new run with /orchestra-plan.", "error");
+    if (!fs.existsSync(artifacts.plan)) {
+      ctx.ui.notify(
+        `Plan artifact not found: ${artifacts.plan}. Complete the Plan stage first.`,
+        "warning",
+      );
       return { ok: false };
     }
-    const planPath = getArtifactPaths(ctx.cwd, state.runId).plan;
-    if (!fs.existsSync(planPath)) {
+  }
+
+  if (stage === "implement") {
+    if (!dirHasFiles(artifacts.implementDir)) {
       ctx.ui.notify(
-        `Plan artifact not found: ${planPath}. Complete the Plan stage first.`,
+        `Implement artifacts not found in ${artifacts.implementDir}. Complete the Implement stage first.`,
+        "warning",
+      );
+      return { ok: false };
+    }
+  }
+
+  if (stage === "document") {
+    if (!dirHasFiles(artifacts.documentDir)) {
+      ctx.ui.notify(
+        `Document artifacts not found in ${artifacts.documentDir}. Complete the Document stage first.`,
+        "warning",
+      );
+      return { ok: false };
+    }
+  }
+
+  if (stage === "deliver") {
+    const missing: string[] = [];
+    if (!fs.existsSync(artifacts.securityReport)) {
+      missing.push(artifacts.securityReport);
+    }
+    if (!fs.existsSync(artifacts.deliverSummary)) {
+      missing.push(artifacts.deliverSummary);
+    }
+    if (missing.length > 0) {
+      ctx.ui.notify(
+        `Deliver artifacts not found: ${missing.join(", ")}. Complete the Deliver stage first.`,
         "warning",
       );
       return { ok: false };
@@ -233,4 +379,13 @@ export function checkStageArtifact(
   }
 
   return { ok: true };
+}
+
+function dirHasFiles(dir: string): boolean {
+  try {
+    const entries = fs.readdirSync(dir);
+    return entries.length > 0;
+  } catch {
+    return false;
+  }
 }

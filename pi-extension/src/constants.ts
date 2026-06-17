@@ -1,6 +1,6 @@
 import * as path from "node:path";
 
-export const ORCHESTRA_DIR = ".pi/orchestra";
+export const ORCHESTRA_DIR = ".IDE_Plans/orchestra";
 export const STATE_FILE = "state.json";
 export const RUNS_DIR = "runs";
 
@@ -41,8 +41,15 @@ export const STAGE_TRANSITIONS: Record<Stage, Stage[]> = {
 };
 
 export interface StageArtifactPaths {
+  runDir: string;
   planDir: string;
+  planScoutsDir: string;
+  planReviewsDir: string;
+  implementDir: string;
+  documentDir: string;
+  deliverDir: string;
   plan: string;
+  planOverview: string;
   discussionNotes: string;
   scoutAngle1: string;
   scoutAngle2: string;
@@ -67,46 +74,80 @@ export function getRunDir(cwd: string, runId: string): string {
 }
 
 export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths {
-  const planDir = getRunDir(cwd, runId);
+  const runDir = getRunDir(cwd, runId);
+  const planDir = path.join(runDir, "plan");
+  const planScoutsDir = path.join(planDir, "scouts");
+  const planReviewsDir = path.join(planDir, "reviews");
+  const implementDir = path.join(runDir, "implement");
+  const documentDir = path.join(runDir, "document");
+  const deliverDir = path.join(runDir, "deliver");
+
   return {
+    runDir,
     planDir,
+    planScoutsDir,
+    planReviewsDir,
+    implementDir,
+    documentDir,
+    deliverDir,
     plan: path.join(planDir, "plan.md"),
+    planOverview: path.join(planDir, "plan-overview.md"),
     discussionNotes: path.join(planDir, "discussion-notes.md"),
-    scoutAngle1: path.join(planDir, "scout-angle_1.md"),
-    scoutAngle2: path.join(planDir, "scout-angle_2.md"),
-    scoutAngle3: path.join(planDir, "scout-angle_3.md"),
-    reviewCorrectness: path.join(planDir, "review-correctness.md"),
-    reviewSecurity: path.join(planDir, "review-security.md"),
-    reviewTests: path.join(planDir, "review-tests.md"),
-    securityReport: path.join(planDir, "security-report.md"),
-    deliverSummary: path.join(planDir, "deliver-summary.md"),
+    scoutAngle1: path.join(planScoutsDir, "scout-angle_1.md"),
+    scoutAngle2: path.join(planScoutsDir, "scout-angle_2.md"),
+    scoutAngle3: path.join(planScoutsDir, "scout-angle_3.md"),
+    reviewCorrectness: path.join(planReviewsDir, "review-correctness.md"),
+    reviewSecurity: path.join(planReviewsDir, "review-security.md"),
+    reviewTests: path.join(planReviewsDir, "review-tests.md"),
+    securityReport: path.join(deliverDir, "security-report.md"),
+    deliverSummary: path.join(deliverDir, "deliver-summary.md"),
   };
 }
 
 export function getDefaultArtifactPaths(): StageArtifactPaths {
+  const runDir = ".IDE_Plans/orchestra/runs/<run-id>";
+  const planDir = path.join(runDir, "plan");
+  const planScoutsDir = path.join(planDir, "scouts");
+  const planReviewsDir = path.join(planDir, "reviews");
+  const implementDir = path.join(runDir, "implement");
+  const documentDir = path.join(runDir, "document");
+  const deliverDir = path.join(runDir, "deliver");
+
   return {
-    planDir: ".pi/orchestra/runs/<run-id>",
-    plan: ".pi/orchestra/runs/<run-id>/plan.md",
-    discussionNotes: ".pi/orchestra/runs/<run-id>/discussion-notes.md",
-    scoutAngle1: ".pi/orchestra/runs/<run-id>/scout-angle_1.md",
-    scoutAngle2: ".pi/orchestra/runs/<run-id>/scout-angle_2.md",
-    scoutAngle3: ".pi/orchestra/runs/<run-id>/scout-angle_3.md",
-    reviewCorrectness: ".pi/orchestra/runs/<run-id>/review-correctness.md",
-    reviewSecurity: ".pi/orchestra/runs/<run-id>/review-security.md",
-    reviewTests: ".pi/orchestra/runs/<run-id>/review-tests.md",
-    securityReport: ".pi/orchestra/runs/<run-id>/security-report.md",
-    deliverSummary: ".pi/orchestra/runs/<run-id>/deliver-summary.md",
+    runDir,
+    planDir,
+    planScoutsDir,
+    planReviewsDir,
+    implementDir,
+    documentDir,
+    deliverDir,
+    plan: path.join(planDir, "plan.md"),
+    planOverview: path.join(planDir, "plan-overview.md"),
+    discussionNotes: path.join(planDir, "discussion-notes.md"),
+    scoutAngle1: path.join(planScoutsDir, "scout-angle_1.md"),
+    scoutAngle2: path.join(planScoutsDir, "scout-angle_2.md"),
+    scoutAngle3: path.join(planScoutsDir, "scout-angle_3.md"),
+    reviewCorrectness: path.join(planReviewsDir, "review-correctness.md"),
+    reviewSecurity: path.join(planReviewsDir, "review-security.md"),
+    reviewTests: path.join(planReviewsDir, "review-tests.md"),
+    securityReport: path.join(deliverDir, "security-report.md"),
+    deliverSummary: path.join(deliverDir, "deliver-summary.md"),
   };
 }
 
 export function makeRunId(mission: string): string {
-  const date = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const day = String(now.getDate()).padStart(2, "0");
+  const hours = String(now.getHours()).padStart(2, "0");
+  const minutes = String(now.getMinutes()).padStart(2, "0");
   const slug = mission
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 40);
-  return `${date}-${slug || "run"}`;
+  return `${year}-${month}-${day}-${hours}-${minutes}-${slug || "run"}`;
 }
 
 export function formatStageStatus(state: {

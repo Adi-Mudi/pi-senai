@@ -76,7 +76,7 @@ After all checks pass, present a summary to the user:
 
 > Implement stage complete. Tests: [pass/fail]. Code review: [path]. Ready to move to Document?
 
-Wait for user approval. Once approved, tell the user to run `/orchestra-document`.
+Wait for user approval. Once approved, tell the user to run `/orchestra-approve`. Running `/orchestra-approve` will mark implementation complete and automatically start the Document stage.
 
 ## Constraints
 

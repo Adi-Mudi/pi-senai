@@ -3,3 +3,7 @@ dist/
 *.log
 .DS_Store
 .IDE_Plans/
+.pi/orchestra
+.pi/tasks
+EOF
+.vscode

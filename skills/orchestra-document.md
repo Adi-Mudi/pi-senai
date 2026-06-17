@@ -49,7 +49,7 @@ Present the updated docs to the user and ask:
 
 > Document stage complete. Updated README, CHANGELOG, API docs, and other docs. Ready to move to Deliver?
 
-Wait for approval. Once approved, tell the user to run `/orchestra-deliver`.
+Wait for approval. Once approved, tell the user to run `/orchestra-approve`. Running `/orchestra-approve` will mark documentation complete and automatically start the Deliver stage.
 
 ## Constraints
 

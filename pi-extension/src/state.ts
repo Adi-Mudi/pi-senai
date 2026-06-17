@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  getArtifactPaths,
   getOrchestraDir,
   getRunDir,
   getStatePath,
@@ -68,7 +69,12 @@ export function startRun(cwd: string, mission: string): OrchestraState {
     updatedAt: now,
     stageResults: {},
   };
-  fs.mkdirSync(getRunDir(cwd, runId), { recursive: true });
+  const artifacts = getArtifactPaths(cwd, runId);
+  fs.mkdirSync(artifacts.planScoutsDir, { recursive: true });
+  fs.mkdirSync(artifacts.planReviewsDir, { recursive: true });
+  fs.mkdirSync(artifacts.implementDir, { recursive: true });
+  fs.mkdirSync(artifacts.documentDir, { recursive: true });
+  fs.mkdirSync(artifacts.deliverDir, { recursive: true });
   saveState(cwd, state);
   return state;
 }
@@ -85,10 +91,13 @@ export function advanceStage(
       reason: `Cannot move from '${state.currentStage}' to '${nextStage}'. Valid next stages: ${allowed.join(", ") || "(none)"}.`,
     };
   }
-  state.currentStage = nextStage;
-  state.updatedAt = new Date().toISOString();
-  saveState(cwd, state);
-  return { ok: true, state };
+  const nextState: OrchestraState = {
+    ...state,
+    currentStage: nextStage,
+    updatedAt: new Date().toISOString(),
+  };
+  saveState(cwd, nextState);
+  return { ok: true, state: nextState };
 }
 
 export function resetState(cwd: string): void {
