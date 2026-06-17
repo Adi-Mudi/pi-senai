@@ -22,12 +22,6 @@ describe("commands", () => {
     commandHandlers = {};
   });
 
-  function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
-    const result = advanceStage(cwd, state, stage);
-    if (!result.ok) throw new Error(result.reason);
-    return result.state;
-  }
-
   function makeCtx(): ExtensionContext {
     return {
       cwd: tmpDir,
