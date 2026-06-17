@@ -10,10 +10,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - New `README.md` and updated `AGENTS.md` with project conventions, layout, and test commands.
-- Full production-readiness test coverage: 65 unit tests covering every exported function and major edge case.
+- Full production-readiness test coverage: 66 unit tests covering every exported function and major edge case.
 - Unit tests for `loadSkill` and `buildStagePrompt` across all four stage skills.
 - Unit tests for `checkStageArtifact` success and failure paths for implement, document, and deliver stages.
 - Unit tests verifying the Plan-stage scout rule is injected during `planning` and not outside it.
+- New end-to-end smoke test (`pi-extension/test/smoke.test.ts`) that simulates the full Plan → Implement → Document → Deliver lifecycle.
 - Unit tests verifying that `advanceStage` returns a new state object and does not mutate the input.
 - Unit tests verifying that `/orchestra-document` and `/orchestra-deliver` reject manual starts when the preceding stage's artifacts are missing.
 - Unit test verifying that `/orchestra-document` rejects running from the `planned` stage.
