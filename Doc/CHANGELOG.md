@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - `skills/orchestra-plan.md` rewritten to be concise and turn-budget aware, with explicit instructions to continue immediately between internal steps and a stronger fresh-scout rule.
+- `skills/orchestra-deliver.md` final approval gate now highlights that the full **Plan → Implement → Document → Deliver** cycle is complete before asking the user to run `/orchestra-approve`.
 - `checkStageArtifact` now verifies both `security-report.md` and `deliver-summary.md` when checking Deliver artifacts.
 - Replaced fragile `replace("d", "")` command-name derivation in `ensureStage` with an explicit `STAGE_COMMAND_NAME` map.
 - Updated all documentation (`README.md`, `AGENTS.md`, `Doc/orchestra-sequence.md`, `Doc/senai-full-sequence.md`, `Doc/step-by-step-guide.md`) to reflect the current artifact paths, command behavior, and stage prerequisites.

@@ -53,9 +53,16 @@ subagent({
 
 Present the security report and deliver summary to the user:
 
-> Deliver stage complete. Security report: `<securityReport>`. Deliver summary: `<deliverSummary>`. Ship it?
+> Deliver stage complete. Security gate: PASS.
+>
+> - Security report: `<securityReport>`
+> - Deliver summary: `<deliverSummary>`
+>
+> The full cycle **Plan → Implement → Document → Deliver** is complete.
+>
+> Run `/orchestra-approve` to finalize and mark the run as `delivered`.
 
-Wait for final approval. Once approved, tell the user to run `/orchestra-approve` to finish the run and mark it `delivered`.
+Wait for final approval. Do not mark the run delivered until the user explicitly approves.
 
 ## Constraints
 
