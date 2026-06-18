@@ -332,9 +332,19 @@ export function checkStageArtifact(
   const artifacts = getArtifactPaths(ctx.cwd, state.runId);
 
   if (stage === "plan") {
-    if (!fs.existsSync(artifacts.plan)) {
+    const missing: string[] = [];
+    if (!fs.existsSync(artifacts.plan)) missing.push(artifacts.plan);
+    for (const scoutPath of [
+      artifacts.scoutAngle1,
+      artifacts.scoutAngle2,
+      artifacts.scoutAngle3,
+      artifacts.scoutAngle4,
+    ]) {
+      if (!fs.existsSync(scoutPath)) missing.push(scoutPath);
+    }
+    if (missing.length > 0) {
       ctx.ui.notify(
-        `Plan artifact not found: ${artifacts.plan}. Complete the Plan stage first.`,
+        `Plan artifacts not found: ${missing.join(", ")}. Complete the Plan stage first.`,
         "warning",
       );
       return { ok: false };

@@ -61,7 +61,7 @@ Research the codebase, interview the user to clarify scope, write a concrete imp
 main agent
     │
     ▼
-scouts × 3 (parallel)
+scouts × 4 (parallel)
     │
     ▼
 discussion
@@ -95,6 +95,7 @@ Auto-starts Implement
 | 1 | scout-1 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_1.md` |
 | 1 | scout-2 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_2.md` |
 | 1 | scout-3 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_3.md` |
+| 1 | scout-4 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_4.md` |
 | 2 | discussion | fork | Drafts interview questions for the user |
 | 3 | parent + user | main session | User answers via `AskUserQuestion` |
 | 4 | planner | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` |
@@ -261,7 +262,8 @@ All auto-generated files go into `.IDE_Plans/orchestra/runs/<run-id>/`:
     │   ├── scouts/
     │   │   ├── scout-angle_1.md
     │   │   ├── scout-angle_2.md
-    │   │   └── scout-angle_3.md
+    │   │   ├── scout-angle_3.md
+    │   │   └── scout-angle_4.md
     │   └── reviews/
     │       ├── review-correctness.md
     │       ├── review-security.md

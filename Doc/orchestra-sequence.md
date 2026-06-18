@@ -62,7 +62,8 @@ All runtime artifacts are stored under `.IDE_Plans/orchestra/`:
     │   ├── scouts/
     │   │   ├── scout-angle_1.md
     │   │   ├── scout-angle_2.md
-    │   │   └── scout-angle_3.md
+    │   │   ├── scout-angle_3.md
+    │   │   └── scout-angle_4.md
     │   └── reviews/
     │       ├── review-correctness.md
     │       ├── review-security.md
@@ -90,7 +91,7 @@ Understand the mission, explore the codebase, interview the user to clarify scop
 main agent
     │
     ▼
-scouts × 3 (parallel)
+scouts × 4 (parallel)
     │
     ▼
 discussion
@@ -242,7 +243,8 @@ All auto-generated files go into `.IDE_Plans/orchestra/`:
     │   ├── scouts/
     │   │   ├── scout-angle_1.md
     │   │   ├── scout-angle_2.md
-    │   │   └── scout-angle_3.md
+    │   │   ├── scout-angle_3.md
+    │   │   └── scout-angle_4.md
     │   └── reviews/
     │       ├── review-correctness.md
     │       ├── review-security.md

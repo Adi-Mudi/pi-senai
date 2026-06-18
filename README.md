@@ -6,7 +6,7 @@ Stage-gated agent orchestration extension for Pi — **Plan → Implement → Do
 
 Pi Orchestra splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/orchestra/runs/<run-id>/`, and requires user approval before the next stage starts.
 
-- **Plan** — Spawn scout agents, interview the user, write an approved `plan.md`.
+- **Plan** — Spawn four scout agents, interview the user, write an approved `plan.md`.
 - **Implement** — Build and test the feature according to the plan.
 - **Document** — Update README, CHANGELOG, API docs, and other project docs.
 - **Deliver** — Run a final security audit and package the deliverable.
@@ -69,6 +69,7 @@ Reset the current run:
           scout-angle_1.md
           scout-angle_2.md
           scout-angle_3.md
+          scout-angle_4.md
         reviews/
           review-correctness.md
           review-security.md

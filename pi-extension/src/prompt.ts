@@ -66,6 +66,7 @@ export function buildStagePrompt(
     `    scout-angle_1.md: ${artifacts.scoutAngle1}`,
     `    scout-angle_2.md: ${artifacts.scoutAngle2}`,
     `    scout-angle_3.md: ${artifacts.scoutAngle3}`,
+    `    scout-angle_4.md: ${artifacts.scoutAngle4}`,
     `  Plan reviews directory: ${artifacts.planReviewsDir}`,
     `    review-correctness.md: ${artifacts.reviewCorrectness}`,
     `    review-security.md: ${artifacts.reviewSecurity}`,

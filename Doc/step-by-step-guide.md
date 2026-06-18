@@ -47,10 +47,11 @@ What happens:
 1. The extension creates `.IDE_Plans/orchestra/state.json` with the mission and a run ID.
 2. It sets the current stage to `planning`.
 3. It sends the Plan stage skill prompt to the main agent.
-4. The main agent spawns three scouts in parallel:
+4. The main agent spawns four scouts in parallel:
    - `scout-1` — architecture / big-picture
    - `scout-2` — target-area deep dive
    - `scout-3` — risk / dependency audit
+   - `scout-4` — requirements / documentation audit
 5. After the scouts finish, a discussion agent reads their reports and drafts clarifying questions.
 6. The main agent asks you those questions live using the **AskUserQuestion** tool.
 7. You answer the questions.

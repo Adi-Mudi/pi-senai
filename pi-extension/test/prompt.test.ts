@@ -23,6 +23,7 @@ describe("prompt", () => {
     const skill = loadSkill("plan");
     assert.ok(skill.includes("Plan Stage"));
     assert.ok(skill.includes("scout-1"));
+    assert.ok(skill.includes("scout-4"));
   });
 
   it("loadSkill reads the implement skill file", () => {
@@ -76,6 +77,7 @@ describe("prompt", () => {
     assert.ok(prompt.includes("Mission: Build CLI"));
     assert.ok(prompt.includes("Run ID: run-1"));
     assert.ok(prompt.includes("Plan Stage"));
+    assert.ok(prompt.includes("scout-angle_4.md"));
   });
 
   it("buildStagePrompt uses default artifact paths when runId is empty", () => {

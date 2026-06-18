@@ -79,6 +79,7 @@ describe("smoke", () => {
     fs.writeFileSync(path.join(runDir, "plan/scouts/scout-angle_1.md"), "# Scout 1\n");
     fs.writeFileSync(path.join(runDir, "plan/scouts/scout-angle_2.md"), "# Scout 2\n");
     fs.writeFileSync(path.join(runDir, "plan/scouts/scout-angle_3.md"), "# Scout 3\n");
+    fs.writeFileSync(path.join(runDir, "plan/scouts/scout-angle_4.md"), "# Scout 4\n");
     fs.writeFileSync(path.join(runDir, "plan/discussion-notes.md"), "# Discussion\n");
     fs.writeFileSync(path.join(runDir, "plan/plan.md"), "# Plan\n");
     fs.writeFileSync(path.join(runDir, "plan/plan-overview.md"), "# Overview\n");
@@ -135,6 +136,7 @@ describe("smoke", () => {
       path.join(runDir, "plan/scouts/scout-angle_1.md"),
       path.join(runDir, "plan/scouts/scout-angle_2.md"),
       path.join(runDir, "plan/scouts/scout-angle_3.md"),
+      path.join(runDir, "plan/scouts/scout-angle_4.md"),
       path.join(runDir, "plan/reviews/review-correctness.md"),
       path.join(runDir, "plan/reviews/review-security.md"),
       path.join(runDir, "plan/reviews/review-tests.md"),

@@ -21,7 +21,7 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
     const rules: string[] = [];
     if (state.currentStage === "planning") {
       rules.push(
-        `Plan stage rule: You MUST spawn three fresh scout subagents using the subagent tool. ` +
+        `Plan stage rule: You MUST spawn four fresh scout subagents using the subagent tool. ` +
           `Do NOT reuse, copy, or read scout reports from any previous run folder. ` +
           `Do not write scout reports yourself.`,
       );

@@ -54,6 +54,7 @@ export interface StageArtifactPaths {
   scoutAngle1: string;
   scoutAngle2: string;
   scoutAngle3: string;
+  scoutAngle4: string;
   reviewCorrectness: string;
   reviewSecurity: string;
   reviewTests: string;
@@ -96,6 +97,7 @@ export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths
     scoutAngle1: path.join(planScoutsDir, "scout-angle_1.md"),
     scoutAngle2: path.join(planScoutsDir, "scout-angle_2.md"),
     scoutAngle3: path.join(planScoutsDir, "scout-angle_3.md"),
+    scoutAngle4: path.join(planScoutsDir, "scout-angle_4.md"),
     reviewCorrectness: path.join(planReviewsDir, "review-correctness.md"),
     reviewSecurity: path.join(planReviewsDir, "review-security.md"),
     reviewTests: path.join(planReviewsDir, "review-tests.md"),
@@ -127,6 +129,7 @@ export function getDefaultArtifactPaths(): StageArtifactPaths {
     scoutAngle1: path.join(planScoutsDir, "scout-angle_1.md"),
     scoutAngle2: path.join(planScoutsDir, "scout-angle_2.md"),
     scoutAngle3: path.join(planScoutsDir, "scout-angle_3.md"),
+    scoutAngle4: path.join(planScoutsDir, "scout-angle_4.md"),
     reviewCorrectness: path.join(planReviewsDir, "review-correctness.md"),
     reviewSecurity: path.join(planReviewsDir, "review-security.md"),
     reviewTests: path.join(planReviewsDir, "review-tests.md"),

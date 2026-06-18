@@ -42,12 +42,6 @@ describe("commands", () => {
     } as unknown as ExtensionContext;
   }
 
-  function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
-    const result = advanceStage(cwd, state, stage);
-    if (!result.ok) throw new Error(result.reason);
-    return result.state;
-  }
-
   function makeApi(): ExtensionAPI {
     return {
       registerCommand: (name: string, cmd: { handler: (args: string, ctx: ExtensionContext) => Promise<void> }) => {
@@ -88,6 +82,7 @@ describe("commands", () => {
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Plan Stage"));
     assert.ok(sentMessages[0].includes("Mission: Build a CLI"));
+    assert.ok(sentMessages[0].includes("scout-angle_4.md"));
   });
 
   it("orchestra-plan warns when mission is empty", async () => {
@@ -159,7 +154,7 @@ describe("commands", () => {
     await commandHandlers["orchestra-plan"]("Mission", makeCtx());
     notifications.length = 0;
     await commandHandlers["orchestra-implement"]("", makeCtx());
-    assert.ok(notifications[0].message.includes("Plan artifact not found"));
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
   });
 
   it("orchestra-implement can be run directly from planned stage", async () => {
@@ -174,10 +169,15 @@ describe("commands", () => {
     const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    // Create the required plan artifact for implement to proceed.
+    // Create the required plan artifacts for implement to proceed.
     const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_4.md"), "# Scout 4\n");
 
     notifications.length = 0;
     sentMessages.length = 0;
@@ -201,7 +201,26 @@ describe("commands", () => {
     advanceStage(tmpDir, state, "planning");
     const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
     assert.strictEqual(result.ok, false);
-    assert.ok(notifications[0].message.includes("Plan artifact not found"));
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
+  });
+
+  it("checkStageArtifact fails when a scout report is missing", () => {
+    const state = startRun(tmpDir, "Mission");
+    advanceStage(tmpDir, state, "planning");
+
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
+    fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    // scout-angle_4.md is intentionally missing.
+
+    const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
+    assert.strictEqual(result.ok, false);
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
+    assert.ok(notifications[0].message.includes("scout-angle_4.md"));
   });
 
   it("checkStageArtifact passes when plan artifact exists", () => {
@@ -209,8 +228,13 @@ describe("commands", () => {
     advanceStage(tmpDir, state, "planning");
 
     const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_4.md"), "# Scout 4\n");
 
     const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
     assert.strictEqual(result.ok, true);
@@ -294,8 +318,13 @@ describe("commands", () => {
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_4.md"), "# Scout 4\n");
 
     notifications.length = 0;
     sentMessages.length = 0;
@@ -487,6 +516,6 @@ describe("commands", () => {
     notifications.length = 0;
     await commandHandlers["orchestra-implement"]("", makeCtx());
 
-    assert.ok(notifications[0].message.includes("Plan artifact not found"));
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
   });
 });

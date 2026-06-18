@@ -87,7 +87,8 @@ Run artifacts:
 │   ├── scouts/
 │   │   ├── scout-angle_1.md
 │   │   ├── scout-angle_2.md
-│   │   └── scout-angle_3.md
+│   │   ├── scout-angle_3.md
+│   │   └── scout-angle_4.md
 │   └── reviews/
 │       ├── review-correctness.md
 │       ├── review-security.md
@@ -165,6 +166,20 @@ When changing behavior, update both code-facing docs (`README.md`, `CHANGELOG.md
 - `Doc/orchestra-sequence.md` — high-level stage flow and artifact layout.
 - `Doc/senai-full-sequence.md` — full sequence specification with agents and contexts.
 - `Doc/step-by-step-guide.md` — hands-on walkthrough for running a full cycle.
+
+## Custom agent definitions (future upgrade)
+
+Pi supports project-specific agent definitions in `.pi/agents/*.md` files with YAML frontmatter. For `pi-orchestra`, this is the planned next upgrade after the current Plan-stage skill is stable.
+
+Planned agents:
+
+| Agent file | Purpose | Frontmatter highlights |
+|---|---|---|
+| `.pi/agents/orchestra-scout.md` | Read-only reconnaissance | `tools: read, grep, find, ls`, `max_turns: 15` |
+| `.pi/agents/orchestra-planner.md` | Writes plans and summaries | `tools: read, grep, find, ls, write`, `max_turns: 25` |
+| `.pi/agents/orchestra-reviewer.md` | Read-only plan/code review | `tools: read, grep, find, ls, bash`, `max_turns: 15` |
+
+Centralizing these settings means the skill prompt can simply call `Agent({ subagent_type: "orchestra-scout", task: "..." })` without repeating `max_turns`, tool lists, or model hints every time.
 
 ## Branches
 
