@@ -10,7 +10,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **scout-4** (requirements / documentation auditor) to the Plan stage. The Plan stage now spawns four parallel scouts, with `scout-angle_4.md` captured in constants, prompts, tests, and documentation.
-- Pi.dev best-practice guidance in `skills/orchestra-plan.md`: context modes (`spawn`/`fork`), explicit output paths, review loops, worktree isolation for parallel writers, and concrete per-agent `max_turns` budgets (scouts/reviewers/overview/discussion `15`, planner `25`).
+- Pi.dev best-practice guidance in `skills/orchestra-plan.md`: context modes (`spawn`/`fork`), explicit output paths, review loops, worktree isolation for parallel writers, autonomous completion (`auto-exit: true`), and per-agent turn budgets (`max_turns` where the active subagent extension supports it).
+- Added synchronization and checkpoint rules to `skills/orchestra-plan.md` so the main agent waits for completion notifications and checks the live subagent widget before respawning or showing the approval gate.
 - New `README.md` and updated `AGENTS.md` with project conventions, layout, and test commands.
 - Full production-readiness test coverage: 66 unit tests covering every exported function and major edge case.
 - Unit tests for `loadSkill` and `buildStagePrompt` across all four stage skills.
