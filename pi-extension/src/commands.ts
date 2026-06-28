@@ -465,16 +465,43 @@ export function registerAgentCommands(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const agents = discoverAgents(ctx.cwd);
       const suggestions = buildSuggestionMap(agents);
+      const existing = loadAgentConfig(ctx.cwd);
       const mapping: Partial<Record<OrchestraRole, string>> = {};
+      let i = 0;
 
-      for (const role of ORCHESTRA_ROLES) {
+      while (i < ORCHESTRA_ROLES.length) {
+        const role = ORCHESTRA_ROLES[i];
+        const existingValue = existing?.agents?.[role];
         const suggested = suggestions[role] ?? DEFAULT_AGENTS[role];
-        const options = [`Accept: ${suggested}`, "Choose different", `Use default: ${DEFAULT_AGENTS[role]}`];
+        const current = mapping[role] ?? existingValue ?? suggested;
+
+        const options: string[] = [];
+        if (existingValue) {
+          options.push(`Keep current: ${existingValue}`);
+        }
+        if (!existingValue || existingValue !== suggested) {
+          options.push(`Accept suggestion: ${suggested}`);
+        }
+        options.push("Choose different");
+        options.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+        if (i > 0) {
+          options.push("← Back");
+        }
+        if (i < ORCHESTRA_ROLES.length - 1) {
+          options.push("Next →");
+        } else {
+          options.push("Finish");
+        }
+
         const choice = await ctx.ui.select(`Configure agent for role "${role}"`, options);
 
-        if (choice === options[0]) {
+        if (choice?.startsWith("Keep current:")) {
+          mapping[role] = existingValue!;
+          i++;
+        } else if (choice?.startsWith("Accept suggestion:")) {
           mapping[role] = suggested;
-        } else if (choice === options[1]) {
+          i++;
+        } else if (choice === "Choose different") {
           const agentOptions = agents.map((a) => `${a.name} (${a.source})`);
           const selected = await ctx.ui.select(`Select agent for "${role}"`, agentOptions);
           if (selected) {
@@ -482,12 +509,28 @@ export function registerAgentCommands(pi: ExtensionAPI) {
           } else {
             mapping[role] = DEFAULT_AGENTS[role];
           }
-        } else {
+          i++;
+        } else if (choice?.startsWith("Use default:")) {
           mapping[role] = DEFAULT_AGENTS[role];
+          i++;
+        } else if (choice === "← Back") {
+          i = Math.max(0, i - 1);
+        } else if (choice === "Next →" || choice === "Finish") {
+          mapping[role] = current;
+          i++;
+        } else {
+          // Unexpected cancellation / empty selection: keep current and advance.
+          mapping[role] = current;
+          i++;
         }
       }
 
-      const config = { version: 1, agents: mapping };
+      const finalMapping: Partial<Record<OrchestraRole, string>> = {};
+      for (const role of ORCHESTRA_ROLES) {
+        finalMapping[role] = mapping[role] ?? existing?.agents?.[role] ?? DEFAULT_AGENTS[role];
+      }
+
+      const config = { version: 1, agents: finalMapping };
       saveAgentConfig(ctx.cwd, config);
       ctx.ui.notify("Agent configuration saved to .pi/orchestra/agents.json", "info");
     },

@@ -163,6 +163,46 @@ describe("commands", () => {
     assert.strictEqual(saved.agents.implementer, "worker");
   });
 
+  it("orchestra-configure-agents reads existing config on re-run", async () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: { planner: "custom-planner" } });
+    registerAgentCommands(makeApi());
+
+    for (const role of Object.keys(DEFAULT_AGENTS) as OrchestraRole[]) {
+      if (role === "planner") {
+        selectChoices.push("Keep current: custom-planner");
+      } else {
+        selectChoices.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+      }
+    }
+
+    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+
+    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.agents.planner, "custom-planner");
+    assert.strictEqual(saved.agents.implementer, "worker");
+  });
+
+  it("orchestra-configure-agents lets the user go back", async () => {
+    registerAgentCommands(makeApi());
+    const roles = Object.keys(DEFAULT_AGENTS) as OrchestraRole[];
+
+    // Role 0: pick default, then role 1: go back, then role 0 again: pick default, then rest defaults.
+    selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[0]]}`);
+    selectChoices.push("← Back");
+    selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[0]]}`);
+    for (let i = 1; i < roles.length; i++) {
+      selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
+    }
+
+    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+
+    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.version, 1);
+    assert.strictEqual(saved.agents[roles[0]], DEFAULT_AGENTS[roles[0]]);
+  });
+
   it("orchestra-status reports no active run", async () => {
     registerCommands(makeApi());
     await commandHandlers["orchestra-status"]("", makeCtx());
