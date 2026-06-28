@@ -4,6 +4,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { registerCommands } from "../src/commands.js";
+import { saveAgentConfig } from "../src/agent-config.js";
+import { DEFAULT_AGENTS } from "../src/agent-suggestions.js";
 import { loadState } from "../src/state.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
@@ -29,6 +31,7 @@ describe("smoke", () => {
     notifications = [];
     sentMessages = [];
     commandHandlers = {};
+    saveAgentConfig(tmpDir, { version: 1, agents: { ...DEFAULT_AGENTS } });
   });
 
   function makeCtx(): ExtensionContext {

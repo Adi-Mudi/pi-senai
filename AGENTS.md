@@ -48,7 +48,11 @@ npm test
 │   ├── commands.ts      # slash command handlers
 │   ├── state.ts         # read/write .IDE_Plans/orchestra/state.json
 │   ├── prompt.ts        # load stage skills and build prompts
-│   └── constants.ts     # paths, stage enum, transitions, helpers
+│   ├── constants.ts     # paths, stage enum, transitions, helpers
+│   ├── agent-discovery.ts   # discover project/user/built-in agents
+│   ├── agent-suggestions.ts # suggest agents per Orchestra role
+│   ├── agent-config.ts      # load/save/validate .pi/orchestra/agents.json
+│   └── agent-registry.ts    # build agent registry prompt block
 ├── pi-extension/test/   # unit tests
 ├── skills/              # stage skill markdown files
 │   ├── orchestra-plan.md
@@ -167,19 +171,58 @@ When changing behavior, update both code-facing docs (`README.md`, `CHANGELOG.md
 - `Doc/senai-full-sequence.md` — full sequence specification with agents and contexts.
 - `Doc/step-by-step-guide.md` — hands-on walkthrough for running a full cycle.
 
-## Custom agent definitions (future upgrade)
+## Agent configuration
 
-Pi supports project-specific agent definitions in `.pi/agents/*.md` files with YAML frontmatter. For `pi-orchestra`, this is the planned next upgrade after the current Plan-stage skill is stable.
+Pi Orchestra supports project-specific and user-specific agent definitions in `.pi/agents/*.md` files with YAML frontmatter. The extension discovers them and maps each Orchestra role to an agent name.
 
-Planned agents:
+### Discovery order
 
-| Agent file | Purpose | Frontmatter highlights |
-|---|---|---|
-| `.pi/agents/orchestra-scout.md` | Read-only reconnaissance | `tools: read, grep, find, ls`, `max_turns: 15` |
-| `.pi/agents/orchestra-planner.md` | Writes plans and summaries | `tools: read, grep, find, ls, write`, `max_turns: 25` |
-| `.pi/agents/orchestra-reviewer.md` | Read-only plan/code review | `tools: read, grep, find, ls, bash`, `max_turns: 15` |
+1. **Project agents** — nearest `.pi/agents/*.md` found by walking up from the current working directory.
+2. **User agents** — files in Pi's user agent directory (`getAgentDir()/agents`).
+3. **Built-in defaults** — `scout`, `planner`, `worker`, `reviewer`, `security-auditor`.
 
-Centralizing these settings means the skill prompt can simply call `Agent({ subagent_type: "orchestra-scout", task: "..." })` without repeating `max_turns`, tool lists, or model hints every time.
+A project agent overrides a user agent with the same name. Built-ins are used only when no project or user agent with that name exists.
+
+### Agent file format
+
+Each `.md` file must include `name` and `description` in its YAML frontmatter:
+
+```markdown
+---
+name: gas-coder
+description: Writes TypeScript implementation and tests
+---
+
+# gas-coder
+
+Use this agent for implementation work...
+```
+
+Files missing `name` or `description` are skipped. Only `.md` files are considered; symlinks are followed.
+
+### Configuration file
+
+The interactive `/orchestra-configure-agents` command writes `.pi/orchestra/agents.json`:
+
+```json
+{
+  "version": 1,
+  "agents": {
+    "planner": "gas-planner",
+    "implementer": "gas-coder",
+    "security-gate": "security-auditor"
+  }
+}
+```
+
+Only roles that differ from the default need to be listed. Stage commands validate the file and warn if a mapped custom agent is missing.
+
+### Modules
+
+- `agent-discovery.ts` — walks the project tree, reads user agents, and appends built-in defaults.
+- `agent-suggestions.ts` — maps role keywords to discovered agent names.
+- `agent-config.ts` — loads, validates, saves, and resolves the JSON config.
+- `agent-registry.ts` — builds the markdown registry block injected into stage prompts.
 
 ## Branches
 

@@ -1,11 +1,19 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach } from "node:test";
 import assert from "node:assert";
+import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { loadSkill, buildStagePrompt } from "../src/prompt.js";
+import { saveAgentConfig } from "../src/agent-config.js";
 import type { OrchestraState } from "../src/state.js";
 
 describe("prompt", () => {
   const cwd = "/fake/project";
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-prompt-test-"));
+  });
 
   function makeState(stage: string, runId: string): OrchestraState {
     return {
@@ -78,6 +86,30 @@ describe("prompt", () => {
     assert.ok(prompt.includes("Run ID: run-1"));
     assert.ok(prompt.includes("Plan Stage"));
     assert.ok(prompt.includes("scout-angle_4.md"));
+  });
+
+  it("buildStagePrompt includes the agent registry block with defaults", () => {
+    const state = makeState("planning", "run-1");
+    const { prompt } = buildStagePrompt(cwd, state, "plan");
+
+    assert.ok(prompt.includes("## Agent Registry"));
+    assert.ok(prompt.includes("For this project, use these agent names when spawning subagents:"));
+    assert.ok(prompt.includes("- planner (default) → planner"));
+    assert.ok(prompt.includes("- implementer (default) → worker"));
+    assert.ok(prompt.includes("If a role is not listed above, use the default agent name."));
+  });
+
+  it("buildStagePrompt uses custom agents from config", () => {
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: { planner: "custom-planner", implementer: "custom-coder" },
+    });
+    const state = makeState("planning", "run-1");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+
+    assert.ok(prompt.includes("- planner → custom-planner"));
+    assert.ok(prompt.includes("- implementer → custom-coder"));
+    assert.ok(prompt.includes("- scout-1 (default) → scout"));
   });
 
   it("buildStagePrompt uses default artifact paths when runId is empty", () => {

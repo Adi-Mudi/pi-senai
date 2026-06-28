@@ -54,6 +54,32 @@ Reset the current run:
 /orchestra-reset
 ```
 
+## Agent configuration
+
+Before running any stage, Pi Orchestra needs to know which subagent names to use for each role. This is stored in `.pi/orchestra/agents.json`.
+
+Create the configuration interactively:
+
+```
+/orchestra-configure-agents
+```
+
+This discovers agents from:
+
+1. The current project's `.pi/agents/*.md` files.
+2. Your user agents directory (via Pi's `getAgentDir()`).
+3. Built-in defaults: `scout`, `planner`, `worker`, `reviewer`, `security-auditor`.
+
+For each Orchestra role you can accept a suggested agent, choose a different one, or fall back to the default.
+
+Check the current mapping and validation status:
+
+```
+/orchestra-agents
+```
+
+Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will warn and stop if the configuration is missing or maps a custom agent that cannot be found.
+
 ## Artifact layout
 
 ```

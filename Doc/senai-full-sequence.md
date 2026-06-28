@@ -41,6 +41,11 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
 
 Use `/orchestra-approve` to approve a finished stage and automatically run the next stage. Manual stage commands are available as overrides, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
 
+Configuration commands:
+
+- `/orchestra-configure-agents` — discover project, user, and built-in agents and interactively map each Orchestra role to a subagent name.
+- `/orchestra-agents` — show the current role-to-agent mapping and report any missing custom agents.
+
 Other commands:
 
 - `/orchestra-status` — show current stage, mission, run ID, artifacts, and next command.
@@ -48,7 +53,42 @@ Other commands:
 
 ---
 
-## 3. Stage 1 — Plan
+## 3. Agent Configuration
+
+Before running any stage, Pi Orchestra loads `.pi/orchestra/agents.json`. This file maps each Orchestra role to the name of a subagent that the main agent should spawn.
+
+A typical config looks like:
+
+```json
+{
+  "version": 1,
+  "agents": {
+    "planner": "gas-planner",
+    "implementer": "gas-coder",
+    "security-gate": "security-auditor"
+  }
+}
+```
+
+Only roles that differ from the default need to be listed. Defaults are:
+
+| Role | Default agent |
+|------|---------------|
+| `scout-1` .. `scout-4` | `scout` |
+| `discussion`, `planner`, `plan-overview` | `planner` |
+| `reviewer-correctness`, `reviewer-security`, `reviewer-tests`, `code-review` | `reviewer` |
+| `test-skeleton`, `implementer`, `linter`, `full-test`, `readme-writer`, `changelog-writer`, `api-docs-writer`, `other-docs-writer`, `archive` | `worker` |
+| `security-gate` | `security-auditor` |
+
+Agents are discovered from:
+
+1. Project `.pi/agents/*.md` files (nearest by walking up directories).
+2. User agents directory (`getAgentDir()/agents`).
+3. Built-in defaults.
+
+Project agents override user agents, and both override built-ins. Agent files must contain `name` and `description` YAML frontmatter fields.
+
+## 4. Stage 1 — Plan
 
 **Command:** `/orchestra-plan "<mission>"`
 
@@ -115,7 +155,7 @@ Auto-starts Implement
 
 ---
 
-## 4. Stage 2 — Implement
+## 5. Stage 2 — Implement
 
 **Command:** `/orchestra-implement`
 
@@ -171,7 +211,7 @@ Auto-starts Document
 
 ---
 
-## 5. Stage 3 — Document
+## 6. Stage 3 — Document
 
 **Command:** `/orchestra-document`
 
@@ -212,7 +252,7 @@ other-docs-writer  ──┘
 
 ---
 
-## 6. Stage 4 — Deliver
+## 7. Stage 4 — Deliver
 
 **Command:** `/orchestra-deliver`
 
@@ -247,7 +287,7 @@ Run marked delivered
 
 ---
 
-## 7. Runtime Artifacts
+## 8. Runtime Artifacts
 
 All auto-generated files go into `.IDE_Plans/orchestra/runs/<run-id>/`:
 
@@ -279,7 +319,7 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 
 ---
 
-## 8. Context Modes
+## 9. Context Modes
 
 | Stage | Agent | Context | Why |
 |-------|-------|---------|-----|
@@ -297,7 +337,7 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 
 ---
 
-## 9. Cross-Cutting Rules
+## 10. Cross-Cutting Rules
 
 1. **Plan before implement.** Always run `/orchestra-plan` before `/orchestra-implement` for non-trivial work.
 2. **Never skip review.** Every producing stage ends with a reviewer or approval gate.
@@ -309,6 +349,7 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 8. **No direct subagent calls from the extension.** The extension injects prompts; the LLM invokes the `subagent` tool.
 9. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command to move forward; manual stage commands are still available as overrides.
 10. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
+11. **Configure agents first.** A valid `.pi/orchestra/agents.json` is required before any stage command will run.
 
 ---
 

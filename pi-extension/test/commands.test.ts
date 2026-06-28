@@ -3,23 +3,30 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { checkStageArtifact, registerCommands } from "../src/commands.js";
+import { checkStageArtifact, registerCommands, registerAgentCommands } from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
 import type { OrchestraState } from "../src/state.js";
 import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { saveAgentConfig } from "../src/agent-config.js";
+import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
   let tmpDir: string;
   let notifications: Array<{ message: string; type: string }>;
   let sentMessages: string[];
   let commandHandlers: Record<string, (args: string, ctx: ExtensionContext) => Promise<void>>;
+  let selectChoices: string[];
+  let selectIndex: number;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-cmd-test-"));
     notifications = [];
     sentMessages = [];
     commandHandlers = {};
+    selectChoices = [];
+    selectIndex = 0;
+    writeDefaultAgentConfig(tmpDir);
   });
 
   function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
@@ -37,7 +44,10 @@ describe("commands", () => {
         },
         confirm: async (_title: string, _message: string) => true,
         input: async () => "",
-        select: async () => "",
+        select: async (_title: string, options: string[]) => {
+          const choice = selectChoices[selectIndex++] ?? options[0];
+          return choice;
+        },
       },
     } as unknown as ExtensionContext;
   }
@@ -57,6 +67,10 @@ describe("commands", () => {
     } as unknown as ExtensionAPI;
   }
 
+  function writeDefaultAgentConfig(cwd: string): void {
+    saveAgentConfig(cwd, { version: 1, agents: { ...DEFAULT_AGENTS } });
+  }
+
   it("registerCommands registers all orchestra commands", () => {
     registerCommands(makeApi());
 
@@ -69,6 +83,14 @@ describe("commands", () => {
       "orchestra-approve",
       "orchestra-reset",
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
+  });
+
+  it("registerAgentCommands registers agent commands", () => {
+    registerAgentCommands(makeApi());
+
+    ["orchestra-agents", "orchestra-configure-agents"].forEach((cmd) =>
+      assert.ok(commandHandlers[cmd], `missing ${cmd}`),
+    );
   });
 
   it("orchestra-plan initializes a run and sends a prompt", async () => {
@@ -90,6 +112,55 @@ describe("commands", () => {
     await commandHandlers["orchestra-plan"]("", makeCtx());
     assert.strictEqual(sentMessages.length, 0);
     assert.ok(notifications[0].message.includes("Usage"));
+  });
+
+  it("orchestra-plan blocks when agent config is missing", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi"), { recursive: true, force: true });
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    assert.strictEqual(sentMessages.length, 0);
+    assert.ok(notifications[0].message.includes("No Pi Orchestra agent configuration found"));
+  });
+
+  it("orchestra-implement blocks when agent config maps a missing custom agent", async () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: { implementer: "missing-agent" } });
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-implement"]("", makeCtx());
+    assert.strictEqual(sentMessages.length, 0);
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("missing-agent"));
+  });
+
+  it("orchestra-agents shows the current registry", async () => {
+    registerAgentCommands(makeApi());
+    await commandHandlers["orchestra-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
+    assert.ok(notifications[0].message.includes("planner → planner"));
+    assert.ok(notifications[0].message.includes("All mapped agents are available"));
+  });
+
+  it("orchestra-agents reports errors for invalid custom agents", async () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: { implementer: "missing-agent" } });
+    registerAgentCommands(makeApi());
+    await commandHandlers["orchestra-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
+    assert.ok(notifications[0].message.includes("missing-agent"));
+    assert.strictEqual(notifications[0].type, "error");
+  });
+
+  it("orchestra-configure-agents saves a config from user choices", async () => {
+    registerAgentCommands(makeApi());
+    // Pre-program choices: for every role choose "Use default: <default>".
+    for (const role of Object.keys(DEFAULT_AGENTS) as OrchestraRole[]) {
+      selectChoices.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+    }
+    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration saved"));
+    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    assert.ok(fs.existsSync(configPath));
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.version, 1);
+    assert.strictEqual(saved.agents.implementer, "worker");
   });
 
   it("orchestra-status reports no active run", async () => {

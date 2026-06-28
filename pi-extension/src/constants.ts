@@ -3,6 +3,8 @@ import * as path from "node:path";
 export const ORCHESTRA_DIR = ".IDE_Plans/orchestra";
 export const STATE_FILE = "state.json";
 export const RUNS_DIR = "runs";
+export const ORCHESTRA_CONFIG_DIR = ".pi/orchestra";
+export const ORCHESTRA_CONFIG_FILE = "agents.json";
 
 export type Stage =
   | "none"

@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
+import { loadAgentConfig } from "./agent-config.js";
+import { buildAgentRegistryBlock } from "./agent-registry.js";
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
 import type { OrchestraState } from "./state.js";
 
@@ -50,6 +52,7 @@ export function buildStagePrompt(
   };
 
   const skill = loadSkill(stage);
+  const registryBlock = buildAgentRegistryBlock(loadAgentConfig(cwd));
 
   const prompt = [
     `<pi-orchestra stage="${stage}">`,
@@ -77,6 +80,8 @@ export function buildStagePrompt(
     `    security-report.md: ${artifacts.securityReport}`,
     `    deliver-summary.md: ${artifacts.deliverSummary}`,
     `</pi-orchestra>`,
+    ``,
+    registryBlock,
     ``,
     skill,
   ].join("\n");
