@@ -65,6 +65,12 @@ describe("commands", () => {
     saveAgentConfig(cwd, { version: 1, agents: { ...DEFAULT_AGENTS } });
   }
 
+  function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
+    const result = advanceStage(cwd, state, stage);
+    if (!result.ok) throw new Error(result.reason);
+    return result.state;
+  }
+
   it("registerCommands registers all orchestra commands", () => {
     registerCommands(makeApi());
 
