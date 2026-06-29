@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Local agent configuration feature.
+  - New source modules: `agent-discovery.ts`, `agent-suggestions.ts`, `agent-config.ts`, `agent-registry.ts`.
+  - New slash commands: `/orchestra-configure-agents` and `/orchestra-agents`.
+  - Interactive per-project mapping of Orchestra roles to subagent names, saved in `.pi/orchestra/agents.json`.
+  - Agent discovery from project `.pi/agents/*.md`, user agent directory, and built-in defaults.
+  - Agent registry block injected into every stage prompt so subagents are spawned by the configured names.
+  - Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) now require a valid agent configuration before running.
+  - Unit tests for all new modules and updated tests for commands and prompt injection.
+
+### Added
+
 - New `README.md` and updated `AGENTS.md` with project conventions, layout, and test commands.
 - Full production-readiness test coverage: 66 unit tests covering every exported function and major edge case.
 - Unit tests for `loadSkill` and `buildStagePrompt` across all four stage skills.

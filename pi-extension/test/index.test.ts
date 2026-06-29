@@ -111,7 +111,7 @@ describe("index", () => {
     );
 
     assert.ok(result.systemPrompt.includes("Plan stage rule"));
-    assert.ok(result.systemPrompt.includes("spawn three fresh scout subagents"));
+    assert.ok(result.systemPrompt.includes("spawn four fresh scout subagents"));
   });
 
   it("does not inject Plan stage scout rule outside planning", async () => {

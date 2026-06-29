@@ -9,18 +9,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **scout-4** (requirements / documentation auditor) to the Plan stage. The Plan stage now spawns four parallel scouts, with `scout-angle_4.md` captured in constants, prompts, tests, and documentation.
+- Pi.dev best-practice guidance in `skills/orchestra-plan.md`: context modes (`spawn`/`fork`), explicit output paths, review loops, worktree isolation for parallel writers, autonomous completion (`auto-exit: true`), and per-agent turn budgets (`max_turns` where the active subagent extension supports it).
+- Added synchronization and checkpoint rules to `skills/orchestra-plan.md` so the main agent waits for completion notifications and checks the live subagent widget before respawning or showing the approval gate.
 - New `README.md` and updated `AGENTS.md` with project conventions, layout, and test commands.
 - Full production-readiness test coverage: 66 unit tests covering every exported function and major edge case.
 - Unit tests for `loadSkill` and `buildStagePrompt` across all four stage skills.
 - Unit tests for `checkStageArtifact` success and failure paths for implement, document, and deliver stages.
 - Unit tests verifying the Plan-stage scout rule is injected during `planning` and not outside it.
 - New end-to-end smoke test (`pi-extension/test/smoke.test.ts`) that simulates the full Plan → Implement → Document → Deliver lifecycle.
+- `AGENTS.md` future-upgrade section describing planned project-specific agent definitions under `.pi/agents/`.
 
 ### Changed
 
-- `skills/orchestra-plan.md` rewritten to be concise and turn-budget aware, with explicit instructions to continue immediately between internal steps and a stronger fresh-scout rule.
+- `skills/orchestra-plan.md` rewritten to be concise and turn-budget aware, with explicit instructions to continue immediately between internal steps and a stronger fresh-scout rule. Now includes scout-4, concrete `max_turns` caps, and a clarified review-loop decision tree.
 - `skills/orchestra-deliver.md` final approval gate now highlights that the full **Plan → Implement → Document → Deliver** cycle is complete before asking the user to run `/orchestra-approve`.
-- `checkStageArtifact` now verifies both `security-report.md` and `deliver-summary.md` when checking Deliver artifacts.
+- `checkStageArtifact` now verifies both `security-report.md` and `deliver-summary.md` when checking Deliver artifacts, and verifies `plan.md` plus all four `scout-angle_*.md` files when checking Plan artifacts.
+- Removed optional model-override hints from `skills/orchestra-plan.md`; Plan-stage agents now rely on Pi’s default model.
 - Replaced fragile `replace("d", "")` command-name derivation in `ensureStage` with an explicit `STAGE_COMMAND_NAME` map.
 - Updated all documentation (`README.md`, `AGENTS.md`, `Doc/orchestra-sequence.md`, `Doc/senai-full-sequence.md`, `Doc/step-by-step-guide.md`) to reflect the current artifact paths, command behavior, and stage prerequisites.
 

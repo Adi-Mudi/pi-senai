@@ -1,5 +1,14 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
+import { getConfigPath, loadAgentConfig, saveAgentConfig, validateMappedAgents } from "./agent-config.js";
+import { discoverAgents } from "./agent-discovery.js";
+import { buildAgentRegistryBlock } from "./agent-registry.js";
+import {
+  DEFAULT_AGENTS,
+  ORCHESTRA_ROLES,
+  type OrchestraRole,
+  buildSuggestionMap,
+} from "./agent-suggestions.js";
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
 import { buildStagePrompt } from "./prompt.js";
 import {
@@ -43,6 +52,7 @@ export function registerCommands(pi: ExtensionAPI) {
   pi.registerCommand("orchestra-plan", {
     description: "Start the Plan stage: /orchestra-plan <mission>",
     handler: async (args, ctx) => {
+      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
       const mission = args.trim();
       if (!mission) {
         ctx.ui.notify("Usage: /orchestra-plan <mission>", "warning");
@@ -70,6 +80,7 @@ export function registerCommands(pi: ExtensionAPI) {
   pi.registerCommand("orchestra-implement", {
     description: "Start the Implement stage (requires approved plan)",
     handler: async (_args, ctx) => {
+      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
       const state = loadState(ctx.cwd);
       const check = checkStageArtifact(state, "plan", ctx);
       if (!check.ok) return;
@@ -100,6 +111,7 @@ export function registerCommands(pi: ExtensionAPI) {
   pi.registerCommand("orchestra-document", {
     description: "Start the Document stage (requires implemented code)",
     handler: async (_args, ctx) => {
+      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
       const state = loadState(ctx.cwd);
       const check = checkStageArtifact(state, "implement", ctx);
       if (!check.ok) return;
@@ -130,6 +142,7 @@ export function registerCommands(pi: ExtensionAPI) {
   pi.registerCommand("orchestra-deliver", {
     description: "Start the Deliver stage (requires documentation)",
     handler: async (_args, ctx) => {
+      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
       const state = loadState(ctx.cwd);
       const check = checkStageArtifact(state, "document", ctx);
       if (!check.ok) return;
@@ -332,9 +345,19 @@ export function checkStageArtifact(
   const artifacts = getArtifactPaths(ctx.cwd, state.runId);
 
   if (stage === "plan") {
-    if (!fs.existsSync(artifacts.plan)) {
+    const missing: string[] = [];
+    if (!fs.existsSync(artifacts.plan)) missing.push(artifacts.plan);
+    for (const scoutPath of [
+      artifacts.scoutAngle1,
+      artifacts.scoutAngle2,
+      artifacts.scoutAngle3,
+      artifacts.scoutAngle4,
+    ]) {
+      if (!fs.existsSync(scoutPath)) missing.push(scoutPath);
+    }
+    if (missing.length > 0) {
       ctx.ui.notify(
-        `Plan artifact not found: ${artifacts.plan}. Complete the Plan stage first.`,
+        `Plan artifacts not found: ${missing.join(", ")}. Complete the Plan stage first.`,
         "warning",
       );
       return { ok: false };
@@ -389,3 +412,128 @@ function dirHasFiles(dir: string): boolean {
     return false;
   }
 }
+
+function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
+  const config = loadAgentConfig(cwd);
+  if (!config) {
+    ctx.ui.notify(
+      "No Pi Orchestra agent configuration found. Please run /orchestra-configure-agents first.",
+      "warning",
+    );
+    return false;
+  }
+  const errors = validateMappedAgents(cwd, config);
+  if (errors.length > 0) {
+    ctx.ui.notify("Agent configuration errors:\n" + errors.join("\n"), "error");
+    return false;
+  }
+  return true;
+}
+
+export function registerAgentCommands(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-agents", {
+    description: "Show current agent mapping and validation status",
+    handler: async (_args, ctx) => {
+      const config = loadAgentConfig(ctx.cwd);
+      if (!config) {
+        ctx.ui.notify(
+          "No agent configuration found. Run /orchestra-configure-agents first.",
+          "warning",
+        );
+        return;
+      }
+
+      const errors = validateMappedAgents(ctx.cwd, config);
+      const lines = ["Pi Orchestra Agent Registry", ""];
+      for (const role of ORCHESTRA_ROLES) {
+        const agentName = config.agents[role] ?? DEFAULT_AGENTS[role];
+        lines.push(`  ${role} → ${agentName}`);
+      }
+
+      if (errors.length > 0) {
+        lines.push("", "Errors:", ...errors.map((e) => `  ❌ ${e}`));
+        ctx.ui.notify(lines.join("\n"), "error");
+      } else {
+        lines.push("", "All mapped agents are available.");
+        ctx.ui.notify(lines.join("\n"), "info");
+      }
+    },
+  });
+
+  pi.registerCommand("orchestra-configure-agents", {
+    description: "Interactively configure subagents for this project",
+    handler: async (_args, ctx) => {
+      const agents = discoverAgents(ctx.cwd);
+      const suggestions = buildSuggestionMap(agents);
+      const existing = loadAgentConfig(ctx.cwd);
+      const mapping: Partial<Record<OrchestraRole, string>> = {};
+      let i = 0;
+
+      while (i < ORCHESTRA_ROLES.length) {
+        const role = ORCHESTRA_ROLES[i];
+        const existingValue = existing?.agents?.[role];
+        const suggested = suggestions[role] ?? DEFAULT_AGENTS[role];
+        const current = mapping[role] ?? existingValue ?? suggested;
+
+        const options: string[] = [];
+        if (existingValue) {
+          options.push(`Keep current: ${existingValue}`);
+        }
+        if (!existingValue || existingValue !== suggested) {
+          options.push(`Accept suggestion: ${suggested}`);
+        }
+        options.push("Choose different");
+        options.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+        if (i > 0) {
+          options.push("← Back");
+        }
+        if (i < ORCHESTRA_ROLES.length - 1) {
+          options.push("Next →");
+        } else {
+          options.push("Finish");
+        }
+
+        const choice = await ctx.ui.select(`Configure agent for role "${role}"`, options);
+
+        if (choice?.startsWith("Keep current:")) {
+          mapping[role] = existingValue!;
+          i++;
+        } else if (choice?.startsWith("Accept suggestion:")) {
+          mapping[role] = suggested;
+          i++;
+        } else if (choice === "Choose different") {
+          const agentOptions = agents.map((a) => `${a.name} (${a.source})`);
+          const selected = await ctx.ui.select(`Select agent for "${role}"`, agentOptions);
+          if (selected) {
+            mapping[role] = selected.split(" ")[0];
+          } else {
+            mapping[role] = DEFAULT_AGENTS[role];
+          }
+          i++;
+        } else if (choice?.startsWith("Use default:")) {
+          mapping[role] = DEFAULT_AGENTS[role];
+          i++;
+        } else if (choice === "← Back") {
+          i = Math.max(0, i - 1);
+        } else if (choice === "Next →" || choice === "Finish") {
+          mapping[role] = current;
+          i++;
+        } else {
+          // Unexpected cancellation / empty selection: keep current and advance.
+          mapping[role] = current;
+          i++;
+        }
+      }
+
+      const finalMapping: Partial<Record<OrchestraRole, string>> = {};
+      for (const role of ORCHESTRA_ROLES) {
+        finalMapping[role] = mapping[role] ?? existing?.agents?.[role] ?? DEFAULT_AGENTS[role];
+      }
+
+      const config = { version: 1, agents: finalMapping };
+      saveAgentConfig(ctx.cwd, config);
+      ctx.ui.notify("Agent configuration saved to .pi/orchestra/agents.json", "info");
+    },
+  });
+}
+

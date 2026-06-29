@@ -40,6 +40,11 @@ Pi Orchestra is a stage-gated agent orchestration extension for Pi. Each stage i
 
 Use `/orchestra-approve` to approve a finished stage and automatically run the next stage. Manual stage commands (`/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) can still be used, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
 
+Configuration commands:
+
+- `/orchestra-configure-agents` — interactively map Orchestra roles to subagent names and save `.pi/orchestra/agents.json`.
+- `/orchestra-agents` — show the current mapping and validate that every mapped agent exists.
+
 Other commands:
 
 - `/orchestra-status` — show current stage, mission, run ID, artifact paths, and next command.
@@ -62,7 +67,8 @@ All runtime artifacts are stored under `.IDE_Plans/orchestra/`:
     │   ├── scouts/
     │   │   ├── scout-angle_1.md
     │   │   ├── scout-angle_2.md
-    │   │   └── scout-angle_3.md
+    │   │   ├── scout-angle_3.md
+    │   │   └── scout-angle_4.md
     │   └── reviews/
     │       ├── review-correctness.md
     │       ├── review-security.md
@@ -90,7 +96,7 @@ Understand the mission, explore the codebase, interview the user to clarify scop
 main agent
     │
     ▼
-scouts × 3 (parallel)
+scouts × 4 (parallel)
     │
     ▼
 discussion
@@ -242,7 +248,8 @@ All auto-generated files go into `.IDE_Plans/orchestra/`:
     │   ├── scouts/
     │   │   ├── scout-angle_1.md
     │   │   ├── scout-angle_2.md
-    │   │   └── scout-angle_3.md
+    │   │   ├── scout-angle_3.md
+    │   │   └── scout-angle_4.md
     │   └── reviews/
     │       ├── review-correctness.md
     │       ├── review-security.md
@@ -267,3 +274,4 @@ All auto-generated files go into `.IDE_Plans/orchestra/`:
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
 8. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command that moves the run forward; manual stage commands are still available as overrides.
 9. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
+10. **Configure agents first.** Stage commands require a valid `.pi/orchestra/agents.json`. Run `/orchestra-configure-agents` before the first stage.

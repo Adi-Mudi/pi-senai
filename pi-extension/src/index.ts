@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { formatStageStatus } from "./constants.js";
-import { registerCommands } from "./commands.js";
+import { registerAgentCommands, registerCommands } from "./commands.js";
 import { loadState } from "./state.js";
 
 export default function piOrchestraExtension(pi: ExtensionAPI) {
@@ -10,6 +10,7 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
   }
 
   registerCommands(pi);
+  registerAgentCommands(pi);
 
   // Inject orchestra status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {
@@ -21,7 +22,7 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
     const rules: string[] = [];
     if (state.currentStage === "planning") {
       rules.push(
-        `Plan stage rule: You MUST spawn three fresh scout subagents using the subagent tool. ` +
+        `Plan stage rule: You MUST spawn four fresh scout subagents using the subagent tool. ` +
           `Do NOT reuse, copy, or read scout reports from any previous run folder. ` +
           `Do not write scout reports yourself.`,
       );

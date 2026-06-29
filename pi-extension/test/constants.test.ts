@@ -73,6 +73,10 @@ describe("constants", () => {
       path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/scouts/scout-angle_1.md"),
     );
     assert.strictEqual(
+      artifacts.scoutAngle4,
+      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/scouts/scout-angle_4.md"),
+    );
+    assert.strictEqual(
       artifacts.reviewCorrectness,
       path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/reviews/review-correctness.md"),
     );

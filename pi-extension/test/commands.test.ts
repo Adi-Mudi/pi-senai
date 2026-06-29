@@ -3,23 +3,30 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { checkStageArtifact, registerCommands } from "../src/commands.js";
+import { checkStageArtifact, registerCommands, registerAgentCommands } from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
 import type { OrchestraState } from "../src/state.js";
 import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
+import { saveAgentConfig } from "../src/agent-config.js";
+import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
   let tmpDir: string;
   let notifications: Array<{ message: string; type: string }>;
   let sentMessages: string[];
   let commandHandlers: Record<string, (args: string, ctx: ExtensionContext) => Promise<void>>;
+  let selectChoices: string[];
+  let selectIndex: number;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-cmd-test-"));
     notifications = [];
     sentMessages = [];
     commandHandlers = {};
+    selectChoices = [];
+    selectIndex = 0;
+    writeDefaultAgentConfig(tmpDir);
   });
 
   function makeCtx(): ExtensionContext {
@@ -31,15 +38,12 @@ describe("commands", () => {
         },
         confirm: async (_title: string, _message: string) => true,
         input: async () => "",
-        select: async () => "",
+        select: async (_title: string, options: string[]) => {
+          const choice = selectChoices[selectIndex++] ?? options[0];
+          return choice;
+        },
       },
     } as unknown as ExtensionContext;
-  }
-
-  function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
-    const result = advanceStage(cwd, state, stage);
-    if (!result.ok) throw new Error(result.reason);
-    return result.state;
   }
 
   function makeApi(): ExtensionAPI {
@@ -57,6 +61,10 @@ describe("commands", () => {
     } as unknown as ExtensionAPI;
   }
 
+  function writeDefaultAgentConfig(cwd: string): void {
+    saveAgentConfig(cwd, { version: 1, agents: { ...DEFAULT_AGENTS } });
+  }
+
   it("registerCommands registers all orchestra commands", () => {
     registerCommands(makeApi());
 
@@ -71,6 +79,14 @@ describe("commands", () => {
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
   });
 
+  it("registerAgentCommands registers agent commands", () => {
+    registerAgentCommands(makeApi());
+
+    ["orchestra-agents", "orchestra-configure-agents"].forEach((cmd) =>
+      assert.ok(commandHandlers[cmd], `missing ${cmd}`),
+    );
+  });
+
   it("orchestra-plan initializes a run and sends a prompt", async () => {
     registerCommands(makeApi());
     await commandHandlers["orchestra-plan"]("Build a CLI", makeCtx());
@@ -82,6 +98,7 @@ describe("commands", () => {
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Plan Stage"));
     assert.ok(sentMessages[0].includes("Mission: Build a CLI"));
+    assert.ok(sentMessages[0].includes("scout-angle_4.md"));
   });
 
   it("orchestra-plan warns when mission is empty", async () => {
@@ -89,6 +106,95 @@ describe("commands", () => {
     await commandHandlers["orchestra-plan"]("", makeCtx());
     assert.strictEqual(sentMessages.length, 0);
     assert.ok(notifications[0].message.includes("Usage"));
+  });
+
+  it("orchestra-plan blocks when agent config is missing", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi"), { recursive: true, force: true });
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    assert.strictEqual(sentMessages.length, 0);
+    assert.ok(notifications[0].message.includes("No Pi Orchestra agent configuration found"));
+  });
+
+  it("orchestra-implement blocks when agent config maps a missing custom agent", async () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: { implementer: "missing-agent" } });
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-implement"]("", makeCtx());
+    assert.strictEqual(sentMessages.length, 0);
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("missing-agent"));
+  });
+
+  it("orchestra-agents shows the current registry", async () => {
+    registerAgentCommands(makeApi());
+    await commandHandlers["orchestra-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
+    assert.ok(notifications[0].message.includes("planner → planner"));
+    assert.ok(notifications[0].message.includes("All mapped agents are available"));
+  });
+
+  it("orchestra-agents reports errors for invalid custom agents", async () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: { implementer: "missing-agent" } });
+    registerAgentCommands(makeApi());
+    await commandHandlers["orchestra-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
+    assert.ok(notifications[0].message.includes("missing-agent"));
+    assert.strictEqual(notifications[0].type, "error");
+  });
+
+  it("orchestra-configure-agents saves a config from user choices", async () => {
+    registerAgentCommands(makeApi());
+    // Pre-program choices: for every role choose "Use default: <default>".
+    for (const role of Object.keys(DEFAULT_AGENTS) as OrchestraRole[]) {
+      selectChoices.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+    }
+    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration saved"));
+    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    assert.ok(fs.existsSync(configPath));
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.version, 1);
+    assert.strictEqual(saved.agents.implementer, "worker");
+  });
+
+  it("orchestra-configure-agents reads existing config on re-run", async () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: { planner: "custom-planner" } });
+    registerAgentCommands(makeApi());
+
+    for (const role of Object.keys(DEFAULT_AGENTS) as OrchestraRole[]) {
+      if (role === "planner") {
+        selectChoices.push("Keep current: custom-planner");
+      } else {
+        selectChoices.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+      }
+    }
+
+    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+
+    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.agents.planner, "custom-planner");
+    assert.strictEqual(saved.agents.implementer, "worker");
+  });
+
+  it("orchestra-configure-agents lets the user go back", async () => {
+    registerAgentCommands(makeApi());
+    const roles = Object.keys(DEFAULT_AGENTS) as OrchestraRole[];
+
+    // Role 0: pick default, then role 1: go back, then role 0 again: pick default, then rest defaults.
+    selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[0]]}`);
+    selectChoices.push("← Back");
+    selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[0]]}`);
+    for (let i = 1; i < roles.length; i++) {
+      selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
+    }
+
+    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+
+    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.version, 1);
+    assert.strictEqual(saved.agents[roles[0]], DEFAULT_AGENTS[roles[0]]);
   });
 
   it("orchestra-status reports no active run", async () => {
@@ -153,7 +259,7 @@ describe("commands", () => {
     await commandHandlers["orchestra-plan"]("Mission", makeCtx());
     notifications.length = 0;
     await commandHandlers["orchestra-implement"]("", makeCtx());
-    assert.ok(notifications[0].message.includes("Plan artifact not found"));
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
   });
 
   it("orchestra-implement can be run directly from planned stage", async () => {
@@ -168,10 +274,15 @@ describe("commands", () => {
     const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    // Create the required plan artifact for implement to proceed.
+    // Create the required plan artifacts for implement to proceed.
     const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_4.md"), "# Scout 4\n");
 
     notifications.length = 0;
     sentMessages.length = 0;
@@ -195,7 +306,26 @@ describe("commands", () => {
     advanceStage(tmpDir, state, "planning");
     const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
     assert.strictEqual(result.ok, false);
-    assert.ok(notifications[0].message.includes("Plan artifact not found"));
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
+  });
+
+  it("checkStageArtifact fails when a scout report is missing", () => {
+    const state = startRun(tmpDir, "Mission");
+    advanceStage(tmpDir, state, "planning");
+
+    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
+    fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    // scout-angle_4.md is intentionally missing.
+
+    const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
+    assert.strictEqual(result.ok, false);
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
+    assert.ok(notifications[0].message.includes("scout-angle_4.md"));
   });
 
   it("checkStageArtifact passes when plan artifact exists", () => {
@@ -203,8 +333,13 @@ describe("commands", () => {
     advanceStage(tmpDir, state, "planning");
 
     const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_4.md"), "# Scout 4\n");
 
     const result = checkStageArtifact(loadState(tmpDir), "plan", makeCtx());
     assert.strictEqual(result.ok, true);
@@ -288,8 +423,13 @@ describe("commands", () => {
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    fs.mkdirSync(path.dirname(planPath), { recursive: true });
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_2.md"), "# Scout 2\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_3.md"), "# Scout 3\n");
+    fs.writeFileSync(path.join(scoutsDir, "scout-angle_4.md"), "# Scout 4\n");
 
     notifications.length = 0;
     sentMessages.length = 0;
@@ -481,6 +621,6 @@ describe("commands", () => {
     notifications.length = 0;
     await commandHandlers["orchestra-implement"]("", makeCtx());
 
-    assert.ok(notifications[0].message.includes("Plan artifact not found"));
+    assert.ok(notifications[0].message.includes("Plan artifacts not found"));
   });
 });
