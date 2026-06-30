@@ -77,4 +77,52 @@ describe("files-discovery", () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  // Edge cases
+  it("returns empty result for empty project", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.deepStrictEqual(result.codeFolders, []);
+    assert.deepStrictEqual(result.codeFiles, []);
+    assert.deepStrictEqual(result.documentFiles, []);
+    assert.deepStrictEqual(result.testFolders, []);
+    assert.deepStrictEqual(result.testFiles, []);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns empty result when all paths are excluded", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "src", "main.ts"), "", "utf8");
+
+    const result = discoverProjectFiles(tmpDir, ["src/"]);
+    assert.deepStrictEqual(result.codeFolders, []);
+    assert.deepStrictEqual(result.codeFiles, []);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("classifies mixed folders by majority content", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    fs.mkdirSync(path.join(tmpDir, "mixed"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "mixed", "a.ts"), "", "utf8");
+    fs.writeFileSync(path.join(tmpDir, "mixed", "b.ts"), "", "utf8");
+    fs.writeFileSync(path.join(tmpDir, "mixed", "c.md"), "", "utf8");
+
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.ok(result.codeFolders.some((f) => f.path === "mixed/"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discovers deeply nested documents", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    fs.mkdirSync(path.join(tmpDir, "docs", "nested"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "nested", "note.md"), "", "utf8");
+
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.ok(result.documentFiles.includes("docs/nested/note.md"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

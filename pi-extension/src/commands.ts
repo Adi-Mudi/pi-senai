@@ -646,6 +646,8 @@ export function registerFilesCommands(pi: ExtensionAPI) {
 
 type CategoryKey = "codePaths" | "inputDocuments" | "testPaths";
 
+const SUGGESTION_PAGE_SIZE = 10;
+
 async function editCategory(
   ctx: ExtensionContext,
   config: FilesConfig,
@@ -655,21 +657,52 @@ async function editCategory(
   const current = config[key];
   const otherPaths = getAllSelectedPaths(config).filter((p) => !current.includes(p));
 
+  let filterQuery = "";
+  let page = 0;
   let editing = true;
+
   while (editing) {
-    const available = suggestions.filter((s) => !isPathConflict(s, current, otherPaths));
-    const options = [
-      ...available.map((s) => `Suggest: ${s}`),
-      "Add custom path",
-      ...current.map((s) => `Remove: ${s}`),
-      "Back",
-    ];
+    const available = suggestions
+      .filter((s) => !isPathConflict(s, current, otherPaths))
+      .filter((s) => matchesFilter(s, filterQuery));
+
+    const pageCount = Math.max(1, Math.ceil(available.length / SUGGESTION_PAGE_SIZE));
+    page = Math.max(0, Math.min(page, pageCount - 1));
+    const pageStart = page * SUGGESTION_PAGE_SIZE;
+    const pageItems = available.slice(pageStart, pageStart + SUGGESTION_PAGE_SIZE);
+
+    const options: string[] = [];
+    if (filterQuery) {
+      options.push(`Filter: ${filterQuery} (clear)`);
+    } else {
+      options.push("Filter suggestions...");
+    }
+    options.push(...pageItems.map((s) => `Suggest: ${s}`));
+    if (pageCount > 1) {
+      if (page > 0) options.push("← Previous page");
+      if (page < pageCount - 1) options.push("Next page →");
+    }
+    options.push("Add custom path");
+    options.push(...current.map((s) => `Remove: ${s}`));
+    options.push("Back");
+
     const choice = await ctx.ui.select(
-      `${key} (${current.length} selected)`,
+      `${key} (${current.length} selected, ${available.length} suggestions)`,
       options,
     );
 
-    if (choice?.startsWith("Suggest: ")) {
+    if (choice === "Filter suggestions...") {
+      const input = await ctx.ui.input("Filter by name (empty clears):");
+      filterQuery = normalizePath(input ?? "").toLowerCase();
+      page = 0;
+    } else if (choice?.startsWith("Filter: ")) {
+      filterQuery = "";
+      page = 0;
+    } else if (choice === "Next page →") {
+      page++;
+    } else if (choice === "← Previous page") {
+      page--;
+    } else if (choice?.startsWith("Suggest: ")) {
       const path = choice.replace("Suggest: ", "");
       if (!isPathConflict(path, current, otherPaths)) {
         current.push(path);
@@ -687,6 +720,11 @@ async function editCategory(
       editing = false;
     }
   }
+}
+
+function matchesFilter(path: string, query: string): boolean {
+  if (!query) return true;
+  return path.toLowerCase().includes(query);
 }
 
 async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Promise<void> {

@@ -77,6 +77,13 @@ export function discoverProjectFiles(
     }
   }
 
+  result.codeFolders.sort((a, b) => a.path.localeCompare(b.path));
+  result.codeFiles.sort((a, b) => a.localeCompare(b));
+  result.documentFolders.sort((a, b) => a.path.localeCompare(b.path));
+  result.documentFiles.sort((a, b) => a.localeCompare(b));
+  result.testFolders.sort((a, b) => a.path.localeCompare(b.path));
+  result.testFiles.sort((a, b) => a.localeCompare(b));
+
   return result;
 }
 
@@ -172,7 +179,7 @@ function collectDocumentFiles(
       const rel = `${prefix}${entry.name}${entry.isDirectory() ? "/" : ""}`;
       if (isExcluded(rel, excludedPaths)) continue;
       if (entry.isDirectory()) {
-        walk(path.join(dir, entry.name), `${rel}/`);
+        walk(path.join(dir, entry.name), rel);
       } else if (DOCUMENT_EXTENSIONS.has(path.extname(entry.name))) {
         result.documentFiles.push(rel);
       }
@@ -189,7 +196,7 @@ function listChildFiles(cwd: string, folder: string, excludedPaths: string[]): s
       const rel = `${prefix}${entry.name}${entry.isDirectory() ? "/" : ""}`;
       if (isExcluded(rel, excludedPaths)) continue;
       if (entry.isDirectory()) {
-        walk(path.join(dir, entry.name), `${rel}/`);
+        walk(path.join(dir, entry.name), rel);
       } else {
         files.push(rel);
       }

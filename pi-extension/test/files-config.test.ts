@@ -110,4 +110,28 @@ describe("files-config", () => {
     assert.ok(v2.inputDocuments.includes("README.md"));
     assert.ok(v2.excludedPaths.length > 0);
   });
+
+  // Edge cases
+  it("migrateFilesConfig handles empty v1 files array", () => {
+    const v1: FilesConfigV1 = { version: 1, files: [] };
+    const v2 = migrateFilesConfig(v1);
+    assert.strictEqual(v2.version, 2);
+    assert.deepStrictEqual(v2.codePaths, []);
+    assert.deepStrictEqual(v2.inputDocuments, []);
+    assert.deepStrictEqual(v2.testPaths, []);
+  });
+
+  it("migrateFilesConfig categorizes test files, not just folders", () => {
+    const v1: FilesConfigV1 = { version: 1, files: ["src/main.test.ts", "plan.md"] };
+    const v2 = migrateFilesConfig(v1);
+    assert.deepStrictEqual(v2.testPaths, ["src/main.test.ts"]);
+    assert.ok(v2.inputDocuments.includes("plan.md"));
+  });
+
+  it("validateFilesConfig rejects missing category arrays", () => {
+    assert.throws(
+      () => validateFilesConfig({ version: 2 } as any),
+      /codePaths/,
+    );
+  });
 });

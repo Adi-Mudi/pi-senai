@@ -725,13 +725,13 @@ describe("commands", () => {
 
   it("orchestra-configure-agents-files saves user choices", async () => {
     registerAgentsFilesCommands(makeApi());
-    const inputs = ["Doc/planner.md", "Doc/plan.md"];
-    let inputIndex = 0;
+    const agentInputs = ["Doc/planner.md", "Doc/plan.md"];
+    let agentInputIndex = 0;
     const ctx = {
       ...makeCtx(),
       ui: {
         ...makeCtx().ui,
-        input: async () => inputs[inputIndex++] ?? "",
+        input: async () => agentInputs[agentInputIndex++] ?? "",
       },
     } as ExtensionContext;
 
@@ -751,5 +751,82 @@ describe("commands", () => {
     const saved = loadAgentsFilesConfig(tmpDir);
     assert.strictEqual(saved?.documents.planner?.primary, "Doc/planner.md");
     assert.deepStrictEqual(saved?.documents.planner?.reads, ["Doc/plan.md"]);
+  });
+
+  // Edge cases
+  it("orchestra-configure-files handles empty suggestions gracefully", async () => {
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "Back",
+      "Finish",
+    );
+    inputs.push("custom/");
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["custom/"]);
+  });
+
+  it("orchestra-configure-files prevents selecting nested folder and ancestor", async () => {
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "Back",
+      "Edit input documents",
+      "Add custom path",
+      "Back",
+      "Finish",
+    );
+    inputs.push("src/", "src/components/Button.ts");
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
+    assert.strictEqual(saved?.inputDocuments.length, 0);
+  });
+
+  it("orchestra-configure-files filters suggestions by name", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    for (const name of ["alpha.md", "beta.md", "gamma.md"]) {
+      fs.writeFileSync(path.join(tmpDir, "docs", name), "", "utf8");
+    }
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit input documents",
+      "Filter suggestions...",
+      "Suggest: docs/beta.md",
+      "Back",
+      "Finish",
+    );
+    inputs.push("beta");
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/beta.md"]);
+  });
+
+  it("orchestra-configure-files paginates long suggestion lists", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    for (let i = 1; i <= 15; i++) {
+      const num = i.toString().padStart(2, "0");
+      fs.writeFileSync(path.join(tmpDir, "docs", `doc${num}.md`), "", "utf8");
+    }
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit input documents",
+      "Next page →",
+      "Suggest: docs/doc12.md",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/doc12.md"]);
   });
 });
