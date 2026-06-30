@@ -821,7 +821,7 @@ describe("commands", () => {
     selectChoices.push(
       "Edit input documents",
       "Filter suggestions...",
-      "Suggest: docs/beta.md",
+      "⬜ Suggest: docs/beta.md",
       "Back",
       "Finish",
     );
@@ -843,7 +843,7 @@ describe("commands", () => {
     selectChoices.push(
       "Edit input documents",
       "Next page →",
-      "Suggest: docs/doc12.md",
+      "⬜ Suggest: docs/doc12.md",
       "Back",
       "Finish",
     );
@@ -861,7 +861,7 @@ describe("commands", () => {
     registerFilesCommands(makeApi());
     selectChoices.push(
       "Edit input documents",
-      "Suggest: docs/",
+      "⬜ Suggest: docs/",
       "Back",
       "Finish",
     );

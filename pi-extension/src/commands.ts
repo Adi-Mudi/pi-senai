@@ -681,13 +681,13 @@ async function editCategory(
     } else {
       options.push("Filter suggestions...");
     }
-    options.push(...pageItems.map((s) => `Suggest: ${s}`));
+    options.push(...pageItems.map((s) => `⬜ Suggest: ${s}`));
     if (pageCount > 1) {
       if (page > 0) options.push("← Previous page");
       if (page < pageCount - 1) options.push("Next page →");
     }
     options.push("Add custom path");
-    options.push(...current.map((s) => `Remove: ${s}`));
+    options.push(...current.map((s) => `✅ Remove: ${s}`));
     options.push("Back");
 
     const choice = await ctx.ui.select(
@@ -706,8 +706,8 @@ async function editCategory(
       page++;
     } else if (choice === "← Previous page") {
       page--;
-    } else if (choice?.startsWith("Suggest: ")) {
-      const path = choice.replace("Suggest: ", "");
+    } else if (choice?.startsWith("⬜ Suggest: ")) {
+      const path = choice.replace("⬜ Suggest: ", "");
       if (!isPathConflict(path, current, otherPaths)) {
         current.push(path);
       }
@@ -717,8 +717,8 @@ async function editCategory(
       if (picked && !isPathConflict(picked, current, otherPaths)) {
         current.push(normalizePath(picked));
       }
-    } else if (choice?.startsWith("Remove: ")) {
-      const path = choice.replace("Remove: ", "");
+    } else if (choice?.startsWith("✅ Remove: ")) {
+      const path = choice.replace("✅ Remove: ", "");
       const idx = current.indexOf(path);
       if (idx >= 0) current.splice(idx, 1);
     } else {
@@ -737,7 +737,7 @@ async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Pr
   while (editing) {
     const options = [
       "Add excluded path",
-      ...config.excludedPaths.map((s) => `Remove: ${s}`),
+      ...config.excludedPaths.map((s) => `✅ Remove: ${s}`),
       "Back",
     ];
     const choice = await ctx.ui.select(
@@ -748,8 +748,8 @@ async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Pr
     if (choice === "Add excluded path") {
       const picked = await browsePath(ctx, ctx.cwd, "both", config.excludedPaths);
       if (picked) config.excludedPaths.push(normalizePath(picked));
-    } else if (choice?.startsWith("Remove: ")) {
-      const path = choice.replace("Remove: ", "");
+    } else if (choice?.startsWith("✅ Remove: ")) {
+      const path = choice.replace("✅ Remove: ", "");
       const idx = config.excludedPaths.indexOf(path);
       if (idx >= 0) config.excludedPaths.splice(idx, 1);
     } else {
