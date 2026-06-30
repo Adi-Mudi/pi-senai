@@ -18,13 +18,24 @@ export function getAgentsFilesConfigPath(cwd: string): string {
   return path.join(cwd, ".pi", "orchestra", AGENTS_FILES_CONFIG_FILE);
 }
 
+export function migrateAgentsFilesConfig(
+  config: AgentsFilesConfig,
+): AgentsFilesConfig {
+  if (config.version >= 2) return config;
+  return { version: 2, documents: config.documents ?? {} };
+}
+
 export function loadAgentsFilesConfig(cwd: string): AgentsFilesConfig | null {
   const configPath = getAgentsFilesConfigPath(cwd);
   try {
     const raw = fs.readFileSync(configPath, "utf8");
     const parsed = JSON.parse(raw) as AgentsFilesConfig;
     validateAgentsFilesConfig(parsed);
-    return parsed;
+    const migrated = migrateAgentsFilesConfig(parsed);
+    if (migrated.version !== 2) {
+      throw new Error(`Unsupported agents_files config version ${migrated.version}`);
+    }
+    return migrated;
   } catch (err: any) {
     if (err.code === "ENOENT") return null;
     throw new Error(`Invalid agents_files config at ${configPath}: ${err.message}`);
@@ -34,12 +45,16 @@ export function loadAgentsFilesConfig(cwd: string): AgentsFilesConfig | null {
 export function saveAgentsFilesConfig(cwd: string, config: AgentsFilesConfig): void {
   const configPath = getAgentsFilesConfigPath(cwd);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({ ...config, version: 2 }, null, 2),
+    "utf8",
+  );
 }
 
 export function validateAgentsFilesConfig(config: AgentsFilesConfig): void {
   if (typeof config.version !== "number") {
-    throw new Error("Missing or invalid 'version' field");
+    throw new Error("Missing or invalid 'version' field; expected 2");
   }
   if (!config.documents || typeof config.documents !== "object") {
     throw new Error("Missing or invalid 'documents' field");

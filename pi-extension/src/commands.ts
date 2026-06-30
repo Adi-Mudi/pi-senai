@@ -23,6 +23,7 @@ import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js"
 import { buildStagePrompt } from "./prompt.js";
 import {
   runListEditor,
+  type ListEditorCustomAction,
   type ListEditorItem,
 } from "./ui/list-editor.js";
 import {
@@ -656,6 +657,22 @@ type CategoryKey = "codePaths" | "inputDocuments" | "testPaths";
 
 const SUGGESTION_PAGE_SIZE = 10;
 
+function buildDocumentCandidates(
+  cwd: string,
+  filesConfig: FilesConfig | null,
+): string[] {
+  const excludedPaths = filesConfig?.excludedPaths ?? [
+    ".git/", "node_modules/", "__pycache__/", ".venv/", "venv/",
+    "dist/", "build/", "target/", ".pi/", ".idea/", ".vscode/",
+  ];
+  const discovered = discoverProjectFiles(cwd, excludedPaths);
+  const candidates = new Set<string>();
+  for (const p of filesConfig?.inputDocuments ?? []) candidates.add(p);
+  for (const folder of discovered.documentFolders) candidates.add(folder.path);
+  for (const file of discovered.documentFiles) candidates.add(file);
+  return Array.from(candidates).sort((a, b) => a.localeCompare(b));
+}
+
 function buildCategoryItems(
   suggestions: string[],
   current: string[],
@@ -886,14 +903,18 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       const lines = ["Pi Orchestra Agent Document Assignments", ""];
       for (const role of ORCHESTRA_ROLES) {
         const docs = config.documents[role];
-        if (!docs) continue;
+        if (!docs) {
+          lines.push(`  ${role}: (not set)`);
+          continue;
+        }
         const parts: string[] = [];
         if (docs.primary) parts.push(`truth=${docs.primary}`);
         if (docs.reads?.length) parts.push(`reads=[${docs.reads.join(", ")}]`);
-        if (parts.length > 0) lines.push(`  ${role}: ${parts.join(" ")}`);
-      }
-      if (lines.length === 2) {
-        lines.push("  No assignments found.");
+        if (parts.length > 0) {
+          lines.push(`  ${role}: ${parts.join(" ")}`);
+        } else {
+          lines.push(`  ${role}: (not set)`);
+        }
       }
       ctx.ui.notify(lines.join("\n"), "info");
     },
@@ -903,68 +924,181 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
     description: "Configure truth and comparison documents for each role",
     handler: async (_args, ctx) => {
       const existing = loadAgentsFilesConfig(ctx.cwd);
-      const documents: Partial<Record<OrchestraRole, AgentFilesDocuments>> = existing
-        ? { ...existing.documents }
-        : {};
-      let i = 0;
+      const config: AgentsFilesConfig = existing ?? { version: 2, documents: {} };
+      const filesConfig = loadFilesConfig(ctx.cwd);
+      const candidates = buildDocumentCandidates(ctx.cwd, filesConfig);
 
-      while (i < ORCHESTRA_ROLES.length) {
-        const role = ORCHESTRA_ROLES[i];
-        const current = documents[role] ?? {};
-        const summary = current.primary
-          ? `${role}: truth=${current.primary}${current.reads?.length ? ` reads=[${current.reads.join(", ")}]` : ""}`
-          : `${role}: no assignment`;
-
-        const options = [
-          "Set truth document",
-          "Add comparison document",
-          "Remove comparison document",
-          "Clear assignment",
-          "Skip",
-        ];
-        if (i > 0) options.push("← Back");
-        if (i < ORCHESTRA_ROLES.length - 1) options.push("Next →");
-        else options.push("Finish");
-
-        const choice = await ctx.ui.select(summary, options);
-
-        if (choice === "Set truth document") {
-          const input = await ctx.ui.input("Truth document path:");
-          if (input) documents[role] = { ...current, primary: input };
-          continue;
-        } else if (choice === "Add comparison document") {
-          const input = await ctx.ui.input("Comparison document path:");
-          if (input) {
-            const reads = [...(current.reads ?? []), input];
-            documents[role] = { ...current, reads };
+      let editing = true;
+      while (editing) {
+        const options = ORCHESTRA_ROLES.map((role) => {
+          const docs = config.documents[role];
+          let summary: string;
+          if (docs?.primary) {
+            summary = `truth=${docs.primary}${docs.reads?.length ? ` reads=${docs.reads.length}` : ""}`;
+          } else if (docs?.reads?.length) {
+            summary = `reads=${docs.reads.length}`;
+          } else {
+            summary = "not set";
           }
+          return `${role} — ${summary}`;
+        });
+        options.push("Finish");
+
+        const choice = await ctx.ui.select("Configure agent documents", options);
+        if (!choice || choice === "Finish") {
+          editing = false;
           continue;
-        } else if (choice === "Remove comparison document") {
-          if (current.reads && current.reads.length > 0) {
-            const toRemove = await ctx.ui.select("Select path to remove", current.reads);
-            if (toRemove) {
-              documents[role] = {
-                ...current,
-                reads: current.reads.filter((r) => r !== toRemove),
-              };
-            }
-          }
-          continue;
-        } else if (choice === "Clear assignment") {
-          delete documents[role];
-        } else if (choice === "← Back") {
-          i = Math.max(0, i - 1);
-          continue;
-        } else if (choice === "Finish") {
-          break;
-        } else if (choice === "Next →" || choice === "Skip") {
-          // keep current and advance
         }
-        i++;
+
+        const role = ORCHESTRA_ROLES.find((r) => choice.startsWith(r));
+        if (!role) continue;
+
+        await editRoleDocuments(
+          ctx,
+          role,
+          config,
+          candidates,
+          filesConfig?.excludedPaths ?? [],
+        );
       }
 
-      saveAgentsFilesConfig(ctx.cwd, { version: 1, documents });
+      saveAgentsFilesConfig(ctx.cwd, config);
       ctx.ui.notify("Agent document assignments saved to .pi/orchestra/agents_files.json", "info");
     },
   });
+}
+
+async function editRoleDocuments(
+  ctx: ExtensionContext,
+  role: OrchestraRole,
+  config: AgentsFilesConfig,
+  candidates: string[],
+  excludedPaths: string[],
+): Promise<void> {
+  const docs = config.documents[role] ?? {};
+  let primary = docs.primary;
+  let reads = [...(docs.reads ?? [])];
+  let filterQuery = "";
+
+  let editing = true;
+  while (editing) {
+    const customActions: ListEditorCustomAction[] = [
+      { id: "set-truth", label: "Set truth document" },
+      { id: "add-custom-read", label: "Add custom path" },
+    ];
+    if (primary) {
+      customActions.unshift({ id: "clear-truth", label: "Clear truth" });
+    }
+
+    const action = await runListEditor(ctx, {
+      title: `${role}${primary ? ` — truth: ${primary}` : ""}`,
+      items: buildRoleDocumentItems(primary, reads, candidates),
+      filterQuery,
+      enableFilter: true,
+      customActions,
+      pageSize: SUGGESTION_PAGE_SIZE,
+    });
+
+    switch (action.kind) {
+      case "back":
+        editing = false;
+        break;
+      case "done":
+        reads = action.paths;
+        updateRoleDocs(config, role, primary, reads);
+        editing = false;
+        break;
+      case "filter":
+        reads = action.paths;
+        filterQuery = action.query;
+        updateRoleDocs(config, role, primary, reads);
+        break;
+      case "custom": {
+        reads = action.paths;
+        updateRoleDocs(config, role, primary, reads);
+        if (action.id === "set-truth") {
+          const truth = await pickTruthDocument(ctx, primary, reads, candidates);
+          if (truth !== undefined) primary = truth;
+          updateRoleDocs(config, role, primary, reads);
+        } else if (action.id === "clear-truth") {
+          primary = undefined;
+          updateRoleDocs(config, role, primary, reads);
+        } else if (action.id === "add-custom-read") {
+          const picked = await browsePath(ctx, ctx.cwd, "both", excludedPaths);
+          if (picked) {
+            const normalized = normalizePath(picked);
+            if (!reads.includes(normalized) && normalized !== primary) {
+              reads.push(normalized);
+              updateRoleDocs(config, role, primary, reads);
+            }
+          }
+        }
+        break;
+      }
+    }
+  }
+}
+
+function buildRoleDocumentItems(
+  primary: string | undefined,
+  reads: string[],
+  candidates: string[],
+): ListEditorItem[] {
+  const items: ListEditorItem[] = [];
+  const used = new Set<string>();
+  if (primary) used.add(primary);
+  for (const r of reads) used.add(r);
+
+  for (const r of reads) {
+    items.push({
+      id: `read:${r}`,
+      kind: "selected",
+      label: `✅ Read: ${r}`,
+      value: r,
+    });
+  }
+  for (const c of candidates) {
+    if (used.has(c)) continue;
+    items.push({
+      id: `suggest:${c}`,
+      kind: "suggestion",
+      label: `⬜ Suggest: ${c}`,
+      value: c,
+    });
+  }
+  return items;
+}
+
+function updateRoleDocs(
+  config: AgentsFilesConfig,
+  role: OrchestraRole,
+  primary: string | undefined,
+  reads: string[],
+): void {
+  if (!primary && reads.length === 0) {
+    delete config.documents[role];
+    return;
+  }
+  const docs: AgentFilesDocuments = {};
+  if (primary) docs.primary = primary;
+  if (reads.length > 0) docs.reads = [...reads];
+  config.documents[role] = docs;
+}
+
+async function pickTruthDocument(
+  ctx: ExtensionContext,
+  current: string | undefined,
+  reads: string[],
+  candidates: string[],
+): Promise<string | undefined> {
+  const options: string[] = [];
+  if (current) options.push("(clear truth document)");
+  for (const c of candidates) {
+    if (c === current || reads.includes(c)) continue;
+    options.push(c);
+  }
+  const choice = await ctx.ui.select("Select truth document", options);
+  if (!choice) return current;
+  if (choice === "(clear truth document)") return undefined;
+  return choice;
 }

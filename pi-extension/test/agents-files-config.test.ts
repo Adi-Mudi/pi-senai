@@ -25,15 +25,34 @@ describe("agents-files-config", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("loadAgentsFilesConfig reads valid config", () => {
+  it("loadAgentsFilesConfig reads valid v2 config", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
     const config: AgentsFilesConfig = {
-      version: 1,
+      version: 2,
       documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
     };
     saveAgentsFilesConfig(tmpDir, config);
     const loaded = loadAgentsFilesConfig(tmpDir);
     assert.deepStrictEqual(loaded, config);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadAgentsFilesConfig migrates v1 config to v2", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "orchestra", "agents_files.json"),
+      JSON.stringify({
+        version: 1,
+        documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
+      }, null, 2),
+      "utf8",
+    );
+    const loaded = loadAgentsFilesConfig(tmpDir);
+    assert.deepStrictEqual(loaded, {
+      version: 2,
+      documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
+    });
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -50,10 +69,10 @@ describe("agents-files-config", () => {
   });
 
   it("validateAgentsFilesConfig accepts valid config", () => {
-    assert.doesNotThrow(() => validateAgentsFilesConfig({ version: 1, documents: {} }));
+    assert.doesNotThrow(() => validateAgentsFilesConfig({ version: 2, documents: {} }));
     assert.doesNotThrow(() =>
       validateAgentsFilesConfig({
-        version: 1,
+        version: 2,
         documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
       }),
     );
@@ -64,7 +83,7 @@ describe("agents-files-config", () => {
   });
 
   it("validateAgentsFilesConfig rejects missing documents", () => {
-    assert.throws(() => validateAgentsFilesConfig({ version: 1 } as any), /documents/);
+    assert.throws(() => validateAgentsFilesConfig({ version: 2 } as any), /documents/);
   });
 
   it("validateAgentsFilesConfig rejects unknown roles", () => {
@@ -91,6 +110,15 @@ describe("agents-files-config", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
     saveAgentsFilesConfig(tmpDir, { version: 1, documents: {} });
     assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "orchestra", "agents_files.json")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("saveAgentsFilesConfig writes version 2", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    saveAgentsFilesConfig(tmpDir, { version: 1, documents: {} });
+    const raw = fs.readFileSync(path.join(tmpDir, ".pi", "orchestra", "agents_files.json"), "utf8");
+    const parsed = JSON.parse(raw);
+    assert.strictEqual(parsed.version, 2);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

@@ -736,30 +736,28 @@ describe("commands", () => {
   });
 
   it("orchestra-configure-agents-files saves user choices", async () => {
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["Doc/planner.md", "Doc/plan.md"],
+      testPaths: [],
+      excludedPaths: [".git/", "node_modules/"],
+    });
     registerAgentsFilesCommands(makeApi());
-    const agentInputs = ["Doc/planner.md", "Doc/plan.md"];
-    let agentInputIndex = 0;
-    const ctx = {
-      ...makeCtx(),
-      ui: {
-        ...makeCtx().ui,
-        input: async () => agentInputs[agentInputIndex++] ?? "",
-      },
-    } as ExtensionContext;
 
-    // Navigate past scout-1..discussion, then configure planner.
+    // Top-level role picker: choose planner.
+    // Per-role editor: set truth, add read, go back.
+    // Top-level: finish.
     selectChoices.push(
-      "Next →",
-      "Next →",
-      "Next →",
-      "Next →",
-      "Next →",
+      "planner — not set",
       "Set truth document",
-      "Add comparison document",
+      "Doc/planner.md",
+      "⬜ Suggest: Doc/plan.md",
+      "Back",
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-agents-files"]("", ctx);
+    await commandHandlers["orchestra-configure-agents-files"]("", makeCtx());
     const saved = loadAgentsFilesConfig(tmpDir);
     assert.strictEqual(saved?.documents.planner?.primary, "Doc/planner.md");
     assert.deepStrictEqual(saved?.documents.planner?.reads, ["Doc/plan.md"]);

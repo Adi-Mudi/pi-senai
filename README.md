@@ -107,10 +107,14 @@ Configure document assignments for each role:
 /orchestra-configure-agents-files
 ```
 
+This command shows every Orchestra role in a top-level picker. Selecting a role opens the same custom list editor used by `/orchestra-configure-files`, pre-filled with documents from `/orchestra-configure-files` (the `inputDocuments` pool plus discovered markdown files).
+
 Each role can have:
 
 1. A **truth document** — the primary document the agent must follow.
 2. **Comparison documents** — other files the agent checks against the truth document.
+
+Use the action bar to set/clear the truth document or add a custom path. Press Enter on a suggestion to add it to the reads list, or on a selected read to remove it.
 
 If a role has no assignment, it falls back to the relevant project context category plus the current stage artifacts.
 

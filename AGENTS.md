@@ -83,7 +83,7 @@ Three config files live under `.pi/orchestra/`:
 |---|---|---|
 | `agents.json` | `/orchestra-configure-agents` | Maps each Orchestra role to a subagent name. |
 | `files.json` | `/orchestra-configure-files` | Categorized project context: code paths, input documents, and test paths. |
-| `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. |
+| `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. |
 
 ### `files.json` schema (version 2)
 
