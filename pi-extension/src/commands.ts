@@ -768,15 +768,31 @@ function normalizePath(input: string): string {
 }
 
 function isPathConflict(path: string, current: string[], other: string[]): boolean {
-  // A folder blocks any file inside it, and a file inside blocks the folder.
-  const all = [...current, ...other];
-  for (const existing of all) {
+  // Within the same category, a folder blocks any file inside it,
+  // and a file inside blocks the folder.
+  for (const existing of current) {
     if (existing === path) return true;
     if (existing.endsWith("/")) {
       if (path.startsWith(existing)) return true;
     }
     if (path.endsWith("/")) {
       if (existing.startsWith(path)) return true;
+    }
+  }
+  // Across categories, only block exact duplicates.
+  for (const existing of other) {
+    if (existing === path) return true;
+  }
+  return false;
+}
+
+function isFolderLike(dir: string, entry: fs.Dirent): boolean {
+  if (entry.isDirectory()) return true;
+  if (entry.isSymbolicLink()) {
+    try {
+      return fs.statSync(path.join(dir, entry.name)).isDirectory();
+    } catch {
+      return false;
     }
   }
   return false;
@@ -799,12 +815,12 @@ async function browsePath(
     const entries = safeReadDir(currentDir)
       .filter((e) => {
         if (e.name.startsWith(".") && e.name !== ".github") return false;
-        const rel = `${prefix}${e.name}${e.isDirectory() ? "/" : ""}`;
+        const rel = `${prefix}${e.name}${isFolderLike(currentDir, e) ? "/" : ""}`;
         return !isExcluded(rel, excludedPaths);
       })
       .sort((a, b) => {
-        if (a.isDirectory() && !b.isDirectory()) return -1;
-        if (!a.isDirectory() && b.isDirectory()) return 1;
+        if (isFolderLike(currentDir, a) && !isFolderLike(currentDir, b)) return -1;
+        if (!isFolderLike(currentDir, a) && isFolderLike(currentDir, b)) return 1;
         return a.name.localeCompare(b.name);
       });
 
@@ -813,7 +829,7 @@ async function browsePath(
       options.push(`📁 Select this folder (${relativeDir}/)`);
     }
     for (const entry of entries) {
-      if (entry.isDirectory()) {
+      if (isFolderLike(currentDir, entry)) {
         options.push(`📂 ${entry.name}/`);
       } else if (mode !== "folder") {
         options.push(`📄 ${entry.name}`);
@@ -840,6 +856,7 @@ async function browsePath(
       currentDir = path.join(currentDir, name);
       continue;
     }
+
     if (choice?.startsWith("📄 ")) {
       const name = choice.replace("📄 ", "");
       return relativeDir ? `${relativeDir}/${name}` : name;

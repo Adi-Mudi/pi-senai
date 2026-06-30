@@ -712,28 +712,27 @@ describe("commands", () => {
   });
 
   it("orchestra-configure-files avoids folder and child file conflicts", async () => {
-    fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, "src", "main.ts"), "", "utf8");
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "", "utf8");
 
     registerFilesCommands(makeApi());
     selectChoices.push(
-      "Edit code paths",
+      "Edit input documents",
       "Add custom path",
-      "📂 src/",
-      "📁 Select this folder (src/)",
+      "📂 docs/",
+      "📁 Select this folder (docs/)",
       "Back",
       "Edit input documents",
       "Add custom path",
-      "📂 src/",
-      "📄 main.ts",
+      "📂 docs/",
+      "📄 PRD.md",
       "Back",
       "Finish",
     );
 
     await commandHandlers["orchestra-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
-    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
-    assert.strictEqual(saved?.inputDocuments.length, 0);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/"]);
   });
 
   it("orchestra-configure-agents-files saves user choices", async () => {
@@ -787,7 +786,6 @@ describe("commands", () => {
 
   it("orchestra-configure-files prevents selecting nested folder and ancestor", async () => {
     fs.mkdirSync(path.join(tmpDir, "src", "components"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, "src", "components", "Button.ts"), "", "utf8");
 
     registerFilesCommands(makeApi());
     selectChoices.push(
@@ -796,11 +794,11 @@ describe("commands", () => {
       "📂 src/",
       "📁 Select this folder (src/)",
       "Back",
-      "Edit input documents",
+      "Edit code paths",
       "Add custom path",
       "📂 src/",
       "📂 components/",
-      "📄 Button.ts",
+      "📁 Select this folder (src/components/)",
       "Back",
       "Finish",
     );
@@ -808,7 +806,31 @@ describe("commands", () => {
     await commandHandlers["orchestra-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, ["src/"]);
-    assert.strictEqual(saved?.inputDocuments.length, 0);
+  });
+
+  it("orchestra-configure-files allows test files inside selected code folders", async () => {
+    fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "src", "main.test.ts"), "", "utf8");
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "📂 src/",
+      "📁 Select this folder (src/)",
+      "Back",
+      "Edit test paths",
+      "Add custom path",
+      "📂 src/",
+      "📄 main.test.ts",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
+    assert.deepStrictEqual(saved?.testPaths, ["src/main.test.ts"]);
   });
 
   it("orchestra-configure-files filters suggestions by name", async () => {
