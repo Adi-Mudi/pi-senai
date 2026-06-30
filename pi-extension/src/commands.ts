@@ -22,6 +22,10 @@ import {
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
 import { buildStagePrompt } from "./prompt.js";
 import {
+  runListEditor,
+  type ListEditorItem,
+} from "./ui/list-editor.js";
+import {
   advanceStage,
   loadState,
   resetState,
@@ -652,77 +656,74 @@ type CategoryKey = "codePaths" | "inputDocuments" | "testPaths";
 
 const SUGGESTION_PAGE_SIZE = 10;
 
+function buildCategoryItems(
+  suggestions: string[],
+  current: string[],
+  otherPaths: string[],
+): ListEditorItem[] {
+  const items: ListEditorItem[] = [];
+  for (const path of suggestions) {
+    if (isPathConflict(path, current, otherPaths)) continue;
+    if (current.includes(path)) continue;
+    items.push({
+      id: `suggest:${path}`,
+      kind: "suggestion",
+      label: `⬜ Suggest: ${path}`,
+      value: path,
+    });
+  }
+  for (const path of current) {
+    items.push({
+      id: `selected:${path}`,
+      kind: "selected",
+      label: `✅ Remove: ${path}`,
+      value: path,
+    });
+  }
+  return items;
+}
+
 async function editCategory(
   ctx: ExtensionContext,
   config: FilesConfig,
   key: CategoryKey,
   suggestions: string[],
 ): Promise<void> {
-  const current = config[key];
-  const otherPaths = getAllSelectedPaths(config).filter((p) => !current.includes(p));
-
   let filterQuery = "";
-  let page = 0;
   let editing = true;
 
   while (editing) {
-    const available = suggestions
-      .filter((s) => !isPathConflict(s, current, otherPaths))
-      .filter((s) => matchesFilter(s, filterQuery));
+    const otherPaths = getAllSelectedPaths(config).filter((p) => !config[key].includes(p));
+    const action = await runListEditor(ctx, {
+      title: `${key} (${config[key].length} selected)`,
+      items: buildCategoryItems(suggestions, config[key], otherPaths),
+      filterQuery,
+      enableFilter: true,
+      customActions: [{ id: "add-custom", label: "Add custom path" }],
+      pageSize: SUGGESTION_PAGE_SIZE,
+    });
 
-    const pageCount = Math.max(1, Math.ceil(available.length / SUGGESTION_PAGE_SIZE));
-    page = Math.max(0, Math.min(page, pageCount - 1));
-    const pageStart = page * SUGGESTION_PAGE_SIZE;
-    const pageItems = available.slice(pageStart, pageStart + SUGGESTION_PAGE_SIZE);
-
-    const options: string[] = [];
-    if (filterQuery) {
-      options.push(`Filter: ${filterQuery} (clear)`);
-    } else {
-      options.push("Filter suggestions...");
-    }
-    options.push(...pageItems.map((s) => `⬜ Suggest: ${s}`));
-    if (pageCount > 1) {
-      if (page > 0) options.push("← Previous page");
-      if (page < pageCount - 1) options.push("Next page →");
-    }
-    options.push("Add custom path");
-    options.push(...current.map((s) => `✅ Remove: ${s}`));
-    options.push("Back");
-
-    const choice = await ctx.ui.select(
-      `${key} (${current.length} selected, ${available.length} suggestions)`,
-      options,
-    );
-
-    if (choice === "Filter suggestions...") {
-      const input = await ctx.ui.input("Filter by name (empty clears):");
-      filterQuery = normalizePath(input ?? "").toLowerCase();
-      page = 0;
-    } else if (choice?.startsWith("Filter: ")) {
-      filterQuery = "";
-      page = 0;
-    } else if (choice === "Next page →") {
-      page++;
-    } else if (choice === "← Previous page") {
-      page--;
-    } else if (choice?.startsWith("⬜ Suggest: ")) {
-      const path = choice.replace("⬜ Suggest: ", "");
-      if (!isPathConflict(path, current, otherPaths)) {
-        current.push(path);
+    switch (action.kind) {
+      case "back":
+        editing = false;
+        break;
+      case "done":
+        config[key] = action.paths as FilesConfig[CategoryKey];
+        editing = false;
+        break;
+      case "filter":
+        config[key] = action.paths as FilesConfig[CategoryKey];
+        filterQuery = action.query;
+        break;
+      case "custom": {
+        config[key] = action.paths as FilesConfig[CategoryKey];
+        const mode: PickerMode = key === "codePaths" ? "folder" : "both";
+        const picked = await browsePath(ctx, ctx.cwd, mode, config.excludedPaths);
+        if (picked && !isPathConflict(picked, config[key], otherPaths)) {
+          config[key].push(normalizePath(picked));
+        }
+        break;
       }
-    } else if (choice === "Add custom path") {
-      const mode: PickerMode = key === "codePaths" ? "folder" : "both";
-      const picked = await browsePath(ctx, ctx.cwd, mode, config.excludedPaths);
-      if (picked && !isPathConflict(picked, current, otherPaths)) {
-        current.push(normalizePath(picked));
-      }
-    } else if (choice?.startsWith("✅ Remove: ")) {
-      const path = choice.replace("✅ Remove: ", "");
-      const idx = current.indexOf(path);
-      if (idx >= 0) current.splice(idx, 1);
-    } else {
-      editing = false;
     }
   }
 }
@@ -735,25 +736,31 @@ function matchesFilter(path: string, query: string): boolean {
 async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Promise<void> {
   let editing = true;
   while (editing) {
-    const options = [
-      "Add excluded path",
-      ...config.excludedPaths.map((s) => `✅ Remove: ${s}`),
-      "Back",
-    ];
-    const choice = await ctx.ui.select(
-      `Excluded paths (${config.excludedPaths.length})`,
-      options,
-    );
+    const action = await runListEditor(ctx, {
+      title: `Excluded paths (${config.excludedPaths.length})`,
+      items: config.excludedPaths.map((p) => ({
+        id: `selected:${p}`,
+        kind: "selected" as const,
+        label: `✅ Remove: ${p}`,
+        value: p,
+      })),
+      customActions: [{ id: "add-excluded", label: "Add excluded path" }],
+    });
 
-    if (choice === "Add excluded path") {
-      const picked = await browsePath(ctx, ctx.cwd, "both", config.excludedPaths);
-      if (picked) config.excludedPaths.push(normalizePath(picked));
-    } else if (choice?.startsWith("✅ Remove: ")) {
-      const path = choice.replace("✅ Remove: ", "");
-      const idx = config.excludedPaths.indexOf(path);
-      if (idx >= 0) config.excludedPaths.splice(idx, 1);
-    } else {
-      editing = false;
+    switch (action.kind) {
+      case "back":
+        editing = false;
+        break;
+      case "done":
+        config.excludedPaths = action.paths;
+        editing = false;
+        break;
+      case "custom": {
+        config.excludedPaths = action.paths;
+        const picked = await browsePath(ctx, ctx.cwd, "both", config.excludedPaths);
+        if (picked) config.excludedPaths.push(normalizePath(picked));
+        break;
+      }
     }
   }
 }
