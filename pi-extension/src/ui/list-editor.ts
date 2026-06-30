@@ -508,6 +508,8 @@ async function runCustomListEditor(
       }
     }
 
+    rebuild();
+
     container.addChild(
       new Text(
         theme.fg("dim", "↑↓ navigate • enter select • esc cancel"),
@@ -518,8 +520,6 @@ async function runCustomListEditor(
     container.addChild(
       new DynamicBorder((s: string) => theme.fg("accent", s)),
     );
-
-    rebuild();
 
     return {
       render: (width: number) => container.render(width),
