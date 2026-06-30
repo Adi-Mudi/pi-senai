@@ -51,8 +51,10 @@ npm test
 │   ├── constants.ts     # paths, stage enum, transitions, helpers
 │   ├── agent-discovery.ts   # discover project/user/built-in agents
 │   ├── agent-suggestions.ts # suggest agents per Orchestra role
-│   ├── agent-config.ts      # load/save/validate .pi/orchestra/agents.json
-│   └── agent-registry.ts    # build agent registry prompt block
+│   ├── agent-config.ts           # load/save/validate .pi/orchestra/agents.json
+│   ├── agent-registry.ts         # build agent registry prompt block
+│   ├── files-config.ts           # load/save/validate .pi/orchestra/files.json
+│   └── agents-files-config.ts    # load/save/validate .pi/orchestra/agents_files.json
 ├── pi-extension/test/   # unit tests
 ├── skills/              # stage skill markdown files
 │   ├── orchestra-plan.md
@@ -71,6 +73,25 @@ npm test
 2. **Local-only state.** All state and artifacts live under `.IDE_Plans/orchestra/` inside the project directory.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
 4. **Approve auto-runs the next stage.** `/orchestra-approve` advances the state and immediately sends the next stage prompt. Manual `/orchestra-XXX` commands remain available as overrides.
+5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.
+
+## Document scope configuration
+
+Three config files live under `.pi/orchestra/`:
+
+| File | Command | Purpose |
+|---|---|---|
+| `agents.json` | `/orchestra-configure-agents` | Maps each Orchestra role to a subagent name. |
+| `files.json` | `/orchestra-configure-files` | Lists important project files and folders. |
+| `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. |
+
+The Document Scope block in stage prompts shows:
+
+1. Which roles have truth documents and comparison documents.
+2. The default project file list for unconfigured roles.
+3. A fallback instruction to read current stage artifacts when needed.
+
+Validation checks JSON shape and known role names. It does not require files to exist, because earlier stages may create them.
 
 ## State and artifacts
 

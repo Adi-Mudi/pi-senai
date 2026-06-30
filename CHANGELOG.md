@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Document scope configuration.
+  - New source modules: `files-config.ts` and `agents-files-config.ts`.
+  - New slash commands: `/orchestra-configure-files`, `/orchestra-files`, `/orchestra-configure-agents-files`, `/orchestra-agents-files`.
+  - New config files: `.pi/orchestra/files.json` and `.pi/orchestra/agents_files.json`.
+  - Per-role truth document and comparison document assignment.
+  - `## Document Scope` block injected into every stage prompt.
+  - Stage commands now validate the new config files before running.
+  - Unit tests for all new modules and updated command/prompt tests.
+
 - Local agent configuration feature.
   - New source modules: `agent-discovery.ts`, `agent-suggestions.ts`, `agent-config.ts`, `agent-registry.ts`.
   - New slash commands: `/orchestra-configure-agents` and `/orchestra-agents`.

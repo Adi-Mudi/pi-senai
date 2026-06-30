@@ -2,6 +2,14 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import * as fs from "node:fs";
 import { getConfigPath, loadAgentConfig, saveAgentConfig, validateMappedAgents } from "./agent-config.js";
 import { discoverAgents } from "./agent-discovery.js";
+import {
+  loadAgentsFilesConfig,
+  saveAgentsFilesConfig,
+  validateAgentsFilesConfig,
+  type AgentsFilesConfig,
+  type AgentFilesDocuments,
+} from "./agents-files-config.js";
+import { loadFilesConfig, saveFilesConfig, validateFilesConfig } from "./files-config.js";
 import { buildAgentRegistryBlock } from "./agent-registry.js";
 import {
   DEFAULT_AGENTS,
@@ -423,6 +431,21 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
     return false;
   }
   const errors = validateMappedAgents(cwd, config);
+
+  try {
+    const filesConfig = loadFilesConfig(cwd);
+    if (filesConfig) validateFilesConfig(filesConfig);
+  } catch (err: any) {
+    errors.push(`Files config error: ${err.message}`);
+  }
+
+  try {
+    const agentsFilesConfig = loadAgentsFilesConfig(cwd);
+    if (agentsFilesConfig) validateAgentsFilesConfig(agentsFilesConfig);
+  } catch (err: any) {
+    errors.push(`Agent files config error: ${err.message}`);
+  }
+
   if (errors.length > 0) {
     ctx.ui.notify("Agent configuration errors:\n" + errors.join("\n"), "error");
     return false;
@@ -537,3 +560,160 @@ export function registerAgentCommands(pi: ExtensionAPI) {
   });
 }
 
+
+
+export function registerFilesCommands(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-files", {
+    description: "Show the configured project file list",
+    handler: async (_args, ctx) => {
+      const config = loadFilesConfig(ctx.cwd);
+      if (!config || config.files.length === 0) {
+        ctx.ui.notify("No project files configured. Run /orchestra-configure-files first.", "info");
+        return;
+      }
+      const lines = ["Pi Orchestra Project Files", "", ...config.files.map((f) => `  ${f}`)];
+      ctx.ui.notify(lines.join("\n"), "info");
+    },
+  });
+
+  pi.registerCommand("orchestra-configure-files", {
+    description: "Configure important project files and folders",
+    handler: async (_args, ctx) => {
+      const existing = loadFilesConfig(ctx.cwd);
+      const files: string[] = existing ? [...existing.files] : [];
+
+      const suggestions = ["README.md", "Doc/", "src/", "CHANGELOG.md"];
+      const missingSuggestions = suggestions.filter((s) => !files.includes(s));
+
+      let adding = true;
+      while (adding) {
+        const options = [
+          ...missingSuggestions.map((s) => `Suggest: ${s}`),
+          "Add custom path",
+          "Remove a path",
+          "Finish",
+        ];
+        const choice = await ctx.ui.select(
+          `Project files (${files.length} configured)`,
+          options,
+        );
+
+        if (choice?.startsWith("Suggest: ")) {
+          files.push(choice.replace("Suggest: ", ""));
+        } else if (choice === "Add custom path") {
+          const input = await ctx.ui.input("File or folder path:");
+          if (input) files.push(input);
+        } else if (choice === "Remove a path") {
+          const toRemove = await ctx.ui.select("Select path to remove", files);
+          if (toRemove) {
+            const idx = files.indexOf(toRemove);
+            if (idx >= 0) files.splice(idx, 1);
+          }
+        } else {
+          adding = false;
+        }
+      }
+
+      saveFilesConfig(ctx.cwd, { version: 1, files });
+      ctx.ui.notify("Project files saved to .pi/orchestra/files.json", "info");
+    },
+  });
+}
+
+export function registerAgentsFilesCommands(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-agents-files", {
+    description: "Show configured document assignments per role",
+    handler: async (_args, ctx) => {
+      const config = loadAgentsFilesConfig(ctx.cwd);
+      if (!config || Object.keys(config.documents).length === 0) {
+        ctx.ui.notify(
+          "No agent document assignments configured. Run /orchestra-configure-agents-files first.",
+          "info",
+        );
+        return;
+      }
+      const lines = ["Pi Orchestra Agent Document Assignments", ""];
+      for (const role of ORCHESTRA_ROLES) {
+        const docs = config.documents[role];
+        if (!docs) continue;
+        const parts: string[] = [];
+        if (docs.primary) parts.push(`truth=${docs.primary}`);
+        if (docs.reads?.length) parts.push(`reads=[${docs.reads.join(", ")}]`);
+        if (parts.length > 0) lines.push(`  ${role}: ${parts.join(" ")}`);
+      }
+      if (lines.length === 2) {
+        lines.push("  No assignments found.");
+      }
+      ctx.ui.notify(lines.join("\n"), "info");
+    },
+  });
+
+  pi.registerCommand("orchestra-configure-agents-files", {
+    description: "Configure truth and comparison documents for each role",
+    handler: async (_args, ctx) => {
+      const existing = loadAgentsFilesConfig(ctx.cwd);
+      const documents: Partial<Record<OrchestraRole, AgentFilesDocuments>> = existing
+        ? { ...existing.documents }
+        : {};
+      let i = 0;
+
+      while (i < ORCHESTRA_ROLES.length) {
+        const role = ORCHESTRA_ROLES[i];
+        const current = documents[role] ?? {};
+        const summary = current.primary
+          ? `${role}: truth=${current.primary}${current.reads?.length ? ` reads=[${current.reads.join(", ")}]` : ""}`
+          : `${role}: no assignment`;
+
+        const options = [
+          "Set truth document",
+          "Add comparison document",
+          "Remove comparison document",
+          "Clear assignment",
+          "Skip",
+        ];
+        if (i > 0) options.push("← Back");
+        if (i < ORCHESTRA_ROLES.length - 1) options.push("Next →");
+        else options.push("Finish");
+
+        const choice = await ctx.ui.select(summary, options);
+
+        if (choice === "Set truth document") {
+          const input = await ctx.ui.input("Truth document path:");
+          if (input) documents[role] = { ...current, primary: input };
+          continue;
+        } else if (choice === "Add comparison document") {
+          const input = await ctx.ui.input("Comparison document path:");
+          if (input) {
+            const reads = [...(current.reads ?? []), input];
+            documents[role] = { ...current, reads };
+          }
+          continue;
+        } else if (choice === "Remove comparison document") {
+          if (current.reads && current.reads.length > 0) {
+            const toRemove = await ctx.ui.select("Select path to remove", current.reads);
+            if (toRemove) {
+              documents[role] = {
+                ...current,
+                reads: current.reads.filter((r) => r !== toRemove),
+              };
+            }
+          }
+          continue;
+        } else if (choice === "Clear assignment") {
+          delete documents[role];
+        } else if (choice === "← Back") {
+          i = Math.max(0, i - 1);
+          continue;
+        } else if (choice === "Finish") {
+          break;
+        } else if (choice === "Next →" || choice === "Skip") {
+          // keep current and advance
+        }
+        i++;
+      }
+
+      saveAgentsFilesConfig(ctx.cwd, { version: 1, documents });
+      ctx.ui.notify("Agent document assignments saved to .pi/orchestra/agents_files.json", "info");
+    },
+  });
+}

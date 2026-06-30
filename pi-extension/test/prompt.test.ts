@@ -5,6 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { loadSkill, buildStagePrompt } from "../src/prompt.js";
 import { saveAgentConfig } from "../src/agent-config.js";
+import { saveFilesConfig } from "../src/files-config.js";
+import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
 import type { OrchestraState } from "../src/state.js";
 
 describe("prompt", () => {
@@ -138,5 +140,41 @@ describe("prompt", () => {
       assert.strictEqual(context.stage, stage);
       assert.ok(context.artifacts.runDir.includes(`.IDE_Plans/orchestra/runs/run-${stage}`));
     }
+  });
+
+  it("buildStagePrompt includes Document Scope block when configured", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, { version: 1, files: ["README.md"] });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 1,
+      documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
+    });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes("## Document Scope"));
+    assert.ok(prompt.includes("Doc/planner.md"));
+    assert.ok(prompt.includes("Doc/plan.md"));
+    assert.ok(prompt.includes("README.md"));
+  });
+
+  it("buildStagePrompt shows fallback when only files config exists", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, { version: 1, files: ["README.md"] });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes("## Document Scope"));
+    assert.ok(prompt.includes("Default project files"));
+    assert.ok(!prompt.includes("Per-agent document assignments"));
+  });
+
+  it("buildStagePrompt handles missing configs gracefully", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes("## Document Scope"));
+    assert.ok(prompt.includes("No default project files configured"));
   });
 });

@@ -3,12 +3,20 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { checkStageArtifact, registerCommands, registerAgentCommands } from "../src/commands.js";
+import {
+  checkStageArtifact,
+  registerCommands,
+  registerAgentCommands,
+  registerFilesCommands,
+  registerAgentsFilesCommands,
+} from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
 import type { OrchestraState } from "../src/state.js";
 import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { saveAgentConfig } from "../src/agent-config.js";
+import { saveFilesConfig, loadFilesConfig } from "../src/files-config.js";
+import { saveAgentsFilesConfig, loadAgentsFilesConfig } from "../src/agents-files-config.js";
 import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -628,5 +636,80 @@ describe("commands", () => {
     await commandHandlers["orchestra-implement"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("Plan artifacts not found"));
+  });
+
+  it("registerFilesCommands registers file commands", () => {
+    registerFilesCommands(makeApi());
+    ["orchestra-files", "orchestra-configure-files"].forEach((cmd) =>
+      assert.ok(commandHandlers[cmd], `missing ${cmd}`),
+    );
+  });
+
+  it("registerAgentsFilesCommands registers agent file commands", () => {
+    registerAgentsFilesCommands(makeApi());
+    ["orchestra-agents-files", "orchestra-configure-agents-files"].forEach((cmd) =>
+      assert.ok(commandHandlers[cmd], `missing ${cmd}`),
+    );
+  });
+
+  it("orchestra-files shows configured project files", async () => {
+    saveFilesConfig(tmpDir, { version: 1, files: ["README.md", "Doc/"] });
+    registerFilesCommands(makeApi());
+
+    await commandHandlers["orchestra-files"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Orchestra Project Files"));
+    assert.ok(notifications[0].message.includes("README.md"));
+  });
+
+  it("orchestra-agents-files shows configured assignments", async () => {
+    saveAgentsFilesConfig(tmpDir, {
+      version: 1,
+      documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
+    });
+    registerAgentsFilesCommands(makeApi());
+
+    await commandHandlers["orchestra-agents-files"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent Document Assignments"));
+    assert.ok(notifications[0].message.includes("Doc/planner.md"));
+    assert.ok(notifications[0].message.includes("Doc/plan.md"));
+  });
+
+  it("orchestra-configure-files saves user choices", async () => {
+    registerFilesCommands(makeApi());
+    selectChoices.push("Suggest: README.md", "Finish");
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.files, ["README.md"]);
+  });
+
+  it("orchestra-configure-agents-files saves user choices", async () => {
+    registerAgentsFilesCommands(makeApi());
+    const inputs = ["Doc/planner.md", "Doc/plan.md"];
+    let inputIndex = 0;
+    const ctx = {
+      ...makeCtx(),
+      ui: {
+        ...makeCtx().ui,
+        input: async () => inputs[inputIndex++] ?? "",
+      },
+    } as ExtensionContext;
+
+    // Navigate past scout-1..discussion, then configure planner.
+    selectChoices.push(
+      "Next →",
+      "Next →",
+      "Next →",
+      "Next →",
+      "Next →",
+      "Set truth document",
+      "Add comparison document",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-agents-files"]("", ctx);
+    const saved = loadAgentsFilesConfig(tmpDir);
+    assert.strictEqual(saved?.documents.planner?.primary, "Doc/planner.md");
+    assert.deepStrictEqual(saved?.documents.planner?.reads, ["Doc/plan.md"]);
   });
 });

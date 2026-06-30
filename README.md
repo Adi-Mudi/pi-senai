@@ -80,6 +80,39 @@ Check the current mapping and validation status:
 
 Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will warn and stop if the configuration is missing or maps a custom agent that cannot be found.
 
+## Document scope configuration
+
+You can control which documents each subagent reads. Pi Orchestra uses two optional config files:
+
+- `.pi/orchestra/files.json` — list of important project files and folders.
+- `.pi/orchestra/agents_files.json` — per-role truth document and comparison documents.
+
+Configure the project file list:
+
+```
+/orchestra-configure-files
+```
+
+Configure document assignments for each role:
+
+```
+/orchestra-configure-agents-files
+```
+
+Each role can have:
+
+1. A **truth document** — the primary document the agent must follow.
+2. **Comparison documents** — other files the agent checks against the truth document.
+
+If a role has no assignment, it falls back to the project file list plus the current stage artifacts.
+
+Check the current settings:
+
+```
+/orchestra-files
+/orchestra-agents-files
+```
+
 ## Artifact layout
 
 ```
