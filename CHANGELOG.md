@@ -18,6 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Stage commands now validate the new config files before running.
   - Unit tests for all new modules and updated command/prompt tests.
 
+- Categorized file configuration with deep scanning.
+  - New source module: `files-discovery.ts`.
+  - `files.json` schema upgraded to version 2 with `codePaths`, `inputDocuments`, `testPaths`, and `excludedPaths`.
+  - Old `version: 1` configs are automatically migrated on load.
+  - `/orchestra-configure-files` now deep-scans the project and suggests real files and folders.
+  - Selections are split into code paths, input documents, and test paths.
+  - Folder and child-file mutual exclusion prevents overlapping selections.
+  - Scanner recognizes standard folder names and detects custom folder names by file contents.
+  - Suggestions include a reason so users understand why each item was picked.
+  - Unit tests for discovery, migration, and command behavior.
+
 - Local agent configuration feature.
   - New source modules: `agent-discovery.ts`, `agent-suggestions.ts`, `agent-config.ts`, `agent-registry.ts`.
   - New slash commands: `/orchestra-configure-agents` and `/orchestra-agents`.

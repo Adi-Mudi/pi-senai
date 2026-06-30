@@ -9,7 +9,8 @@ import {
   type AgentsFilesConfig,
   type AgentFilesDocuments,
 } from "./agents-files-config.js";
-import { loadFilesConfig, saveFilesConfig, validateFilesConfig } from "./files-config.js";
+import { discoverProjectFiles } from "./files-discovery.js";
+import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./files-config.js";
 import { buildAgentRegistryBlock } from "./agent-registry.js";
 import {
   DEFAULT_AGENTS,
@@ -567,11 +568,26 @@ export function registerFilesCommands(pi: ExtensionAPI) {
     description: "Show the configured project file list",
     handler: async (_args, ctx) => {
       const config = loadFilesConfig(ctx.cwd);
-      if (!config || config.files.length === 0) {
+      if (!config || getAllSelectedPaths(config).length === 0) {
         ctx.ui.notify("No project files configured. Run /orchestra-configure-files first.", "info");
         return;
       }
-      const lines = ["Pi Orchestra Project Files", "", ...config.files.map((f) => `  ${f}`)];
+      const lines = ["Pi Orchestra Project Files", ""];
+      if (config.codePaths.length > 0) {
+        lines.push("Code paths:");
+        for (const f of config.codePaths) lines.push(`  ${f}`);
+        lines.push("");
+      }
+      if (config.inputDocuments.length > 0) {
+        lines.push("Input documents:");
+        for (const f of config.inputDocuments) lines.push(`  ${f}`);
+        lines.push("");
+      }
+      if (config.testPaths.length > 0) {
+        lines.push("Test paths:");
+        for (const f of config.testPaths) lines.push(`  ${f}`);
+        lines.push("");
+      }
       ctx.ui.notify(lines.join("\n"), "info");
     },
   });
@@ -580,44 +596,147 @@ export function registerFilesCommands(pi: ExtensionAPI) {
     description: "Configure important project files and folders",
     handler: async (_args, ctx) => {
       const existing = loadFilesConfig(ctx.cwd);
-      const files: string[] = existing ? [...existing.files] : [];
+      const config: FilesConfig = existing ?? {
+        version: 2,
+        codePaths: [],
+        inputDocuments: [],
+        testPaths: [],
+        excludedPaths: [
+          ".git/", "node_modules/", "__pycache__/", ".venv/", "venv/",
+          "dist/", "build/", "target/", ".pi/", ".idea/", ".vscode/",
+        ],
+      };
 
-      const suggestions = ["README.md", "Doc/", "src/", "CHANGELOG.md"];
-      const missingSuggestions = suggestions.filter((s) => !files.includes(s));
+      const discovered = discoverProjectFiles(ctx.cwd, config.excludedPaths);
 
-      let adding = true;
-      while (adding) {
-        const options = [
-          ...missingSuggestions.map((s) => `Suggest: ${s}`),
-          "Add custom path",
-          "Remove a path",
-          "Finish",
-        ];
+      let editing = true;
+      while (editing) {
         const choice = await ctx.ui.select(
-          `Project files (${files.length} configured)`,
-          options,
+          `Project files — ${config.codePaths.length} code, ${config.inputDocuments.length} docs, ${config.testPaths.length} tests`,
+          [
+            "Edit code paths",
+            "Edit input documents",
+            "Edit test paths",
+            "Edit excluded paths",
+            "Finish",
+          ],
         );
 
-        if (choice?.startsWith("Suggest: ")) {
-          files.push(choice.replace("Suggest: ", ""));
-        } else if (choice === "Add custom path") {
-          const input = await ctx.ui.input("File or folder path:");
-          if (input) files.push(input);
-        } else if (choice === "Remove a path") {
-          const toRemove = await ctx.ui.select("Select path to remove", files);
-          if (toRemove) {
-            const idx = files.indexOf(toRemove);
-            if (idx >= 0) files.splice(idx, 1);
-          }
+        if (choice === "Edit code paths") {
+          await editCategory(ctx, config, "codePaths", discovered.codeFolders.map((f) => f.path));
+        } else if (choice === "Edit input documents") {
+          await editCategory(ctx, config, "inputDocuments", discovered.documentFiles);
+        } else if (choice === "Edit test paths") {
+          await editCategory(ctx, config, "testPaths", [
+            ...discovered.testFolders.map((f) => f.path),
+            ...discovered.testFiles,
+          ]);
+        } else if (choice === "Edit excluded paths") {
+          await editExcludedPaths(ctx, config);
         } else {
-          adding = false;
+          editing = false;
         }
       }
 
-      saveFilesConfig(ctx.cwd, { version: 1, files });
+      saveFilesConfig(ctx.cwd, config);
       ctx.ui.notify("Project files saved to .pi/orchestra/files.json", "info");
     },
   });
+}
+
+type CategoryKey = "codePaths" | "inputDocuments" | "testPaths";
+
+async function editCategory(
+  ctx: ExtensionContext,
+  config: FilesConfig,
+  key: CategoryKey,
+  suggestions: string[],
+): Promise<void> {
+  const current = config[key];
+  const otherPaths = getAllSelectedPaths(config).filter((p) => !current.includes(p));
+
+  let editing = true;
+  while (editing) {
+    const available = suggestions.filter((s) => !isPathConflict(s, current, otherPaths));
+    const options = [
+      ...available.map((s) => `Suggest: ${s}`),
+      "Add custom path",
+      ...current.map((s) => `Remove: ${s}`),
+      "Back",
+    ];
+    const choice = await ctx.ui.select(
+      `${key} (${current.length} selected)`,
+      options,
+    );
+
+    if (choice?.startsWith("Suggest: ")) {
+      const path = choice.replace("Suggest: ", "");
+      if (!isPathConflict(path, current, otherPaths)) {
+        current.push(path);
+      }
+    } else if (choice === "Add custom path") {
+      const input = await ctx.ui.input("File or folder path:");
+      if (input && !isPathConflict(input, current, otherPaths)) {
+        current.push(normalizePath(input));
+      }
+    } else if (choice?.startsWith("Remove: ")) {
+      const path = choice.replace("Remove: ", "");
+      const idx = current.indexOf(path);
+      if (idx >= 0) current.splice(idx, 1);
+    } else {
+      editing = false;
+    }
+  }
+}
+
+async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Promise<void> {
+  let editing = true;
+  while (editing) {
+    const options = [
+      "Add excluded path",
+      ...config.excludedPaths.map((s) => `Remove: ${s}`),
+      "Back",
+    ];
+    const choice = await ctx.ui.select(
+      `Excluded paths (${config.excludedPaths.length})`,
+      options,
+    );
+
+    if (choice === "Add excluded path") {
+      const input = await ctx.ui.input("Path to exclude (folder should end with /):");
+      if (input) config.excludedPaths.push(normalizePath(input));
+    } else if (choice?.startsWith("Remove: ")) {
+      const path = choice.replace("Remove: ", "");
+      const idx = config.excludedPaths.indexOf(path);
+      if (idx >= 0) config.excludedPaths.splice(idx, 1);
+    } else {
+      editing = false;
+    }
+  }
+}
+
+function getAllSelectedPaths(config: FilesConfig): string[] {
+  return [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
+}
+
+function normalizePath(input: string): string {
+  // Keep trailing slash if the user included it; otherwise treat as file.
+  return input.replace(/\\/g, "/");
+}
+
+function isPathConflict(path: string, current: string[], other: string[]): boolean {
+  // A folder blocks any file inside it, and a file inside blocks the folder.
+  const all = [...current, ...other];
+  for (const existing of all) {
+    if (existing === path) return true;
+    if (existing.endsWith("/")) {
+      if (path.startsWith(existing)) return true;
+    }
+    if (path.endsWith("/")) {
+      if (existing.startsWith(path)) return true;
+    }
+  }
+  return false;
 }
 
 export function registerAgentsFilesCommands(pi: ExtensionAPI) {

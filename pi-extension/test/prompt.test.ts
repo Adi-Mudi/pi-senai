@@ -144,7 +144,13 @@ describe("prompt", () => {
 
   it("buildStagePrompt includes Document Scope block when configured", () => {
     saveAgentConfig(tmpDir, { version: 1, agents: {} });
-    saveFilesConfig(tmpDir, { version: 1, files: ["README.md"] });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
     saveAgentsFilesConfig(tmpDir, {
       version: 1,
       documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
@@ -160,12 +166,18 @@ describe("prompt", () => {
 
   it("buildStagePrompt shows fallback when only files config exists", () => {
     saveAgentConfig(tmpDir, { version: 1, agents: {} });
-    saveFilesConfig(tmpDir, { version: 1, files: ["README.md"] });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
 
     const state = makeState("planning", "run-scope");
     const { prompt } = buildStagePrompt(tmpDir, state, "plan");
     assert.ok(prompt.includes("## Document Scope"));
-    assert.ok(prompt.includes("Default project files"));
+    assert.ok(prompt.includes("Default project context"));
     assert.ok(!prompt.includes("Per-agent document assignments"));
   });
 

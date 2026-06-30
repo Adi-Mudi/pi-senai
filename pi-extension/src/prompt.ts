@@ -66,16 +66,29 @@ function buildDocumentScopeBlock(
     lines.push("");
   }
 
-  if (filesConfig?.files && filesConfig.files.length > 0) {
-    lines.push(`Default project files: ${filesConfig.files.join(", ")}`);
+  if (filesConfig && getAllSelectedPaths(filesConfig).length > 0) {
+    lines.push("Default project context:");
+    if (filesConfig.codePaths.length > 0) {
+      lines.push(`- Code paths: ${filesConfig.codePaths.join(", ")}`);
+    }
+    if (filesConfig.inputDocuments.length > 0) {
+      lines.push(`- Input documents: ${filesConfig.inputDocuments.join(", ")}`);
+    }
+    if (filesConfig.testPaths.length > 0) {
+      lines.push(`- Test paths: ${filesConfig.testPaths.join(", ")}`);
+    }
     lines.push(
-      "For roles without assignments, read these files plus current stage artifacts when needed.",
+      "For roles without assignments, read the relevant category plus current stage artifacts when needed.",
     );
   } else {
     lines.push("No default project files configured.");
   }
 
   return lines.join("\n");
+}
+
+function getAllSelectedPaths(config: FilesConfig): string[] {
+  return [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
 }
 
 export function buildStagePrompt(

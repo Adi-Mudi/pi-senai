@@ -84,14 +84,22 @@ Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`
 
 You can control which documents each subagent reads. Pi Orchestra uses two optional config files:
 
-- `.pi/orchestra/files.json` — list of important project files and folders.
+- `.pi/orchestra/files.json` — categorized project context (code paths, input documents, test paths).
 - `.pi/orchestra/agents_files.json` — per-role truth document and comparison documents.
 
-Configure the project file list:
+Configure the project context:
 
 ```
 /orchestra-configure-files
 ```
+
+This command deep-scans your project and suggests real files and folders. It splits selections into three categories:
+
+1. **Code paths** — folders that contain source code (e.g., `src/`, `app/`, `backend/`).
+2. **Input documents** — files the agent should read as instructions (e.g., `docs/PRD.md`, `README.md`).
+3. **Test paths** — folders or files that contain tests (e.g., `tests/`, `e2e/`).
+
+The scanner recognizes both standard folder names (like `src/`, `docs/`, `tests/`) and custom names by looking at the file types inside each folder. If you select a folder, the tool will not let you also select a file inside it, and vice versa, to avoid conflicts.
 
 Configure document assignments for each role:
 
@@ -104,7 +112,7 @@ Each role can have:
 1. A **truth document** — the primary document the agent must follow.
 2. **Comparison documents** — other files the agent checks against the truth document.
 
-If a role has no assignment, it falls back to the project file list plus the current stage artifacts.
+If a role has no assignment, it falls back to the relevant project context category plus the current stage artifacts.
 
 Check the current settings:
 

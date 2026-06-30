@@ -82,13 +82,32 @@ Three config files live under `.pi/orchestra/`:
 | File | Command | Purpose |
 |---|---|---|
 | `agents.json` | `/orchestra-configure-agents` | Maps each Orchestra role to a subagent name. |
-| `files.json` | `/orchestra-configure-files` | Lists important project files and folders. |
+| `files.json` | `/orchestra-configure-files` | Categorized project context: code paths, input documents, and test paths. |
 | `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. |
+
+### `files.json` schema (version 2)
+
+```json
+{
+  "version": 2,
+  "codePaths": ["src/", "app/"],
+  "inputDocuments": ["docs/PRD.md", "README.md"],
+  "testPaths": ["tests/"],
+  "excludedPaths": [".git/", "node_modules/", "dist/"]
+}
+```
+
+- `codePaths` — folders that contain implementation code.
+- `inputDocuments` — individual files the agent should read as instructions.
+- `testPaths` — folders or files that contain tests.
+- `excludedPaths` — folders the scanner should ignore.
+
+The `/orchestra-configure-files` command deep-scans the project and suggests items for each category. It recognizes standard names like `src/`, `docs/`, and `tests/`, and also detects custom folder names by looking at the file types inside them. Selecting a folder blocks selection of any file inside it, and vice versa, to prevent overlap.
 
 The Document Scope block in stage prompts shows:
 
 1. Which roles have truth documents and comparison documents.
-2. The default project file list for unconfigured roles.
+2. The categorized project context for unconfigured roles.
 3. A fallback instruction to read current stage artifacts when needed.
 
 Validation checks JSON shape and known role names. It does not require files to exist, because earlier stages may create them.

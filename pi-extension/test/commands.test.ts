@@ -26,6 +26,8 @@ describe("commands", () => {
   let commandHandlers: Record<string, (args: string, ctx: ExtensionContext) => Promise<void>>;
   let selectChoices: string[];
   let selectIndex: number;
+  let inputs: string[];
+  let inputIndex: number;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-cmd-test-"));
@@ -34,6 +36,8 @@ describe("commands", () => {
     commandHandlers = {};
     selectChoices = [];
     selectIndex = 0;
+    inputs = [];
+    inputIndex = 0;
     writeDefaultAgentConfig(tmpDir);
   });
 
@@ -45,7 +49,7 @@ describe("commands", () => {
           notifications.push({ message, type });
         },
         confirm: async (_title: string, _message: string) => true,
-        input: async () => "",
+        input: async () => inputs[inputIndex++] ?? "",
         select: async (_title: string, options: string[]) => {
           const choice = selectChoices[selectIndex++] ?? options[0];
           return choice;
@@ -653,12 +657,19 @@ describe("commands", () => {
   });
 
   it("orchestra-files shows configured project files", async () => {
-    saveFilesConfig(tmpDir, { version: 1, files: ["README.md", "Doc/"] });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["Doc/"],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
     registerFilesCommands(makeApi());
 
     await commandHandlers["orchestra-files"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Pi Orchestra Project Files"));
     assert.ok(notifications[0].message.includes("README.md"));
+    assert.ok(notifications[0].message.includes("Doc/"));
   });
 
   it("orchestra-agents-files shows configured assignments", async () => {
@@ -674,13 +685,42 @@ describe("commands", () => {
     assert.ok(notifications[0].message.includes("Doc/plan.md"));
   });
 
-  it("orchestra-configure-files saves user choices", async () => {
+  it("orchestra-configure-files saves categorized choices", async () => {
     registerFilesCommands(makeApi());
-    selectChoices.push("Suggest: README.md", "Finish");
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "Back",
+      "Edit input documents",
+      "Add custom path",
+      "Back",
+      "Finish",
+    );
+    inputs.push("src/", "docs/PRD.md");
 
     await commandHandlers["orchestra-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
-    assert.deepStrictEqual(saved?.files, ["README.md"]);
+    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/PRD.md"]);
+  });
+
+  it("orchestra-configure-files avoids folder and child file conflicts", async () => {
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "Back",
+      "Edit input documents",
+      "Add custom path",
+      "Back",
+      "Finish",
+    );
+    inputs.push("src/", "src/main.ts");
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
+    assert.strictEqual(saved?.inputDocuments.length, 0);
   });
 
   it("orchestra-configure-agents-files saves user choices", async () => {
