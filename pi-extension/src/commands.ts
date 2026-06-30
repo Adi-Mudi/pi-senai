@@ -1,5 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
+import * as path from "node:path";
 import { getConfigPath, loadAgentConfig, saveAgentConfig, validateMappedAgents } from "./agent-config.js";
 import { discoverAgents } from "./agent-discovery.js";
 import {
@@ -9,7 +10,7 @@ import {
   type AgentsFilesConfig,
   type AgentFilesDocuments,
 } from "./agents-files-config.js";
-import { discoverProjectFiles } from "./files-discovery.js";
+import { discoverProjectFiles, safeReadDir, isExcluded } from "./files-discovery.js";
 import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./files-config.js";
 import { buildAgentRegistryBlock } from "./agent-registry.js";
 import {
@@ -625,7 +626,10 @@ export function registerFilesCommands(pi: ExtensionAPI) {
         if (choice === "Edit code paths") {
           await editCategory(ctx, config, "codePaths", discovered.codeFolders.map((f) => f.path));
         } else if (choice === "Edit input documents") {
-          await editCategory(ctx, config, "inputDocuments", discovered.documentFiles);
+          await editCategory(ctx, config, "inputDocuments", [
+            ...discovered.documentFolders.map((f) => f.path),
+            ...discovered.documentFiles,
+          ]);
         } else if (choice === "Edit test paths") {
           await editCategory(ctx, config, "testPaths", [
             ...discovered.testFolders.map((f) => f.path),
@@ -708,9 +712,10 @@ async function editCategory(
         current.push(path);
       }
     } else if (choice === "Add custom path") {
-      const input = await ctx.ui.input("File or folder path:");
-      if (input && !isPathConflict(input, current, otherPaths)) {
-        current.push(normalizePath(input));
+      const mode: PickerMode = key === "codePaths" ? "folder" : "both";
+      const picked = await browsePath(ctx, ctx.cwd, mode, config.excludedPaths);
+      if (picked && !isPathConflict(picked, current, otherPaths)) {
+        current.push(normalizePath(picked));
       }
     } else if (choice?.startsWith("Remove: ")) {
       const path = choice.replace("Remove: ", "");
@@ -741,8 +746,8 @@ async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Pr
     );
 
     if (choice === "Add excluded path") {
-      const input = await ctx.ui.input("Path to exclude (folder should end with /):");
-      if (input) config.excludedPaths.push(normalizePath(input));
+      const picked = await browsePath(ctx, ctx.cwd, "both", config.excludedPaths);
+      if (picked) config.excludedPaths.push(normalizePath(picked));
     } else if (choice?.startsWith("Remove: ")) {
       const path = choice.replace("Remove: ", "");
       const idx = config.excludedPaths.indexOf(path);
@@ -775,6 +780,71 @@ function isPathConflict(path: string, current: string[], other: string[]): boole
     }
   }
   return false;
+}
+
+type PickerMode = "folder" | "file" | "both";
+
+async function browsePath(
+  ctx: ExtensionContext,
+  cwd: string,
+  mode: PickerMode,
+  excludedPaths: string[],
+): Promise<string | null> {
+  const root = path.resolve(cwd);
+  let currentDir = root;
+
+  while (true) {
+    const relativeDir = path.relative(root, currentDir).replace(/\\/g, "/") || "";
+    const prefix = relativeDir ? `${relativeDir}/` : "";
+    const entries = safeReadDir(currentDir)
+      .filter((e) => {
+        if (e.name.startsWith(".") && e.name !== ".github") return false;
+        const rel = `${prefix}${e.name}${e.isDirectory() ? "/" : ""}`;
+        return !isExcluded(rel, excludedPaths);
+      })
+      .sort((a, b) => {
+        if (a.isDirectory() && !b.isDirectory()) return -1;
+        if (!a.isDirectory() && b.isDirectory()) return 1;
+        return a.name.localeCompare(b.name);
+      });
+
+    const options: string[] = [];
+    if (relativeDir && mode !== "file") {
+      options.push(`📁 Select this folder (${relativeDir}/)`);
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) {
+        options.push(`📂 ${entry.name}/`);
+      } else if (mode !== "folder") {
+        options.push(`📄 ${entry.name}`);
+      }
+    }
+    if (currentDir !== root) {
+      options.push("⬆️ ../");
+    }
+    options.push("❌ Cancel");
+
+    const title = relativeDir ? `Browsing ${relativeDir}/` : "Browsing project root";
+    const choice = await ctx.ui.select(title, options);
+
+    if (choice === "❌ Cancel") return null;
+    if (choice === "⬆️ ../") {
+      currentDir = path.dirname(currentDir);
+      continue;
+    }
+    if (choice?.startsWith("📁 Select this folder")) {
+      return `${relativeDir}/`;
+    }
+    if (choice?.startsWith("📂 ")) {
+      const name = choice.replace("📂 ", "").replace(/\/$/, "");
+      currentDir = path.join(currentDir, name);
+      continue;
+    }
+    if (choice?.startsWith("📄 ")) {
+      const name = choice.replace("📄 ", "");
+      return relativeDir ? `${relativeDir}/${name}` : name;
+    }
+  }
 }
 
 export function registerAgentsFilesCommands(pi: ExtensionAPI) {

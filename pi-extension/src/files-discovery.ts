@@ -87,7 +87,7 @@ export function discoverProjectFiles(
   return result;
 }
 
-function safeReadDir(dir: string): fs.Dirent[] {
+export function safeReadDir(dir: string): fs.Dirent[] {
   try {
     return fs.readdirSync(dir, { withFileTypes: true });
   } catch {
@@ -95,7 +95,7 @@ function safeReadDir(dir: string): fs.Dirent[] {
   }
 }
 
-function isExcluded(relative: string, excludedPaths: string[]): boolean {
+export function isExcluded(relative: string, excludedPaths: string[]): boolean {
   return excludedPaths.some((ex) => relative === ex || relative.startsWith(ex));
 }
 
