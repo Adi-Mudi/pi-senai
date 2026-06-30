@@ -6,6 +6,8 @@ import { runListEditor, type ListEditorAction, type ListEditorOptions } from "..
 const ENTER = "\r";
 const DOWN = "\x1b[B";
 const UP = "\x1b[A";
+const RIGHT = "\x1b[C";
+const LEFT = "\x1b[D";
 
 function makeTheme() {
   return {
@@ -142,8 +144,7 @@ describe("runListEditor custom TUI", () => {
       items: [{ id: "r1", kind: "selected", label: "✅ Remove: b", value: "b" }],
     });
     const comp = getComponent() as { handleInput: (data: string) => void };
-    // Move from the selected item down to Back, then confirm.
-    comp.handleInput(DOWN);
+    // The top action bar starts focused on Back; just confirm it.
     comp.handleInput(ENTER);
     const result = await promise;
     assert.deepStrictEqual(result, { kind: "done", paths: ["b"] });
@@ -159,6 +160,8 @@ describe("runListEditor custom TUI", () => {
       handleInput: (data: string) => void;
       render: (width: number) => string[];
     };
+    // Move focus from the action bar into the content list, then add the suggestion.
+    comp.handleInput(DOWN);
     comp.handleInput(ENTER);
 
     const line = selectedLine(comp.render(80));
@@ -183,18 +186,88 @@ describe("runListEditor custom TUI", () => {
       handleInput: (data: string) => void;
       render: (width: number) => string[];
     };
-    // Move to "b" and remove it.
+    // Move from the action bar into the content list, then down to "b" and remove it.
+    comp.handleInput(DOWN);
     comp.handleInput(DOWN);
     comp.handleInput(ENTER);
 
     const line = selectedLine(comp.render(80));
     assert.ok(line?.includes("c"), `expected cursor on c after removing b, got: ${line}`);
 
-    // Remove c as well, then Back.
+    // Remove c as well, then move back up to Back and finish.
     comp.handleInput(ENTER);
+    comp.handleInput(UP);
     comp.handleInput(ENTER);
 
     const result = await promise;
     assert.deepStrictEqual(result, { kind: "done", paths: ["a"] });
+  });
+
+  it("keeps action bar visible while scrolling a long list", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items = Array.from({ length: 15 }, (_, i) => ({
+      id: `s${i}`,
+      kind: "suggestion" as const,
+      label: `⬜ Suggest: path${i}`,
+      value: `path${i}`,
+    }));
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items,
+      pageSize: 5,
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+
+    // Move into the list and scroll down well past the visible window.
+    comp.handleInput(DOWN);
+    for (let i = 0; i < 12; i++) {
+      comp.handleInput(DOWN);
+    }
+
+    const lines = comp.render(80);
+    assert.ok(
+      lines.some((line) => line.includes("Back")),
+      `expected action bar to stay visible, got:\n${lines.join("\n")}`,
+    );
+
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("triggers Filter from the top action bar", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [{ id: "s1", kind: "suggestion", label: "⬜ Suggest: a", value: "a" }],
+      enableFilter: true,
+    });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    // Focus starts on Back; move down to Filter and confirm.
+    comp.handleInput(DOWN);
+    comp.handleInput(ENTER);
+
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "filter", query: "", paths: [] });
+  });
+
+  it("triggers Add custom path from the top action bar", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [{ id: "s1", kind: "suggestion", label: "⬜ Suggest: a", value: "a" }],
+      enableFilter: true,
+      customActions: [{ id: "add-custom", label: "Add custom path" }],
+    });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    // Focus starts on Back; move down past Filter to Add custom path and confirm.
+    comp.handleInput(DOWN);
+    comp.handleInput(DOWN);
+    comp.handleInput(ENTER);
+
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "custom", id: "add-custom", paths: [] });
   });
 });

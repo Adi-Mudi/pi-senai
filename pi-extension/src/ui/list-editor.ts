@@ -2,8 +2,11 @@ import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { DynamicBorder } from "@mariozechner/pi-coding-agent";
 import {
   Container,
+  Key,
   SelectList,
   Text,
+  matchesKey,
+  type Component,
   type SelectItem,
 } from "@mariozechner/pi-tui";
 
@@ -290,6 +293,64 @@ async function runFallbackListEditor(
   }
 }
 
+function buildActionItems(options: ListEditorOptions): ListEditorItem[] {
+  const items: ListEditorItem[] = [];
+  items.push({ id: BACK_ID, kind: "action", label: "Back", value: BACK_ID });
+
+  if (options.enableFilter) {
+    const query = options.filterQuery ?? "";
+    items.push({
+      id: FILTER_ID,
+      kind: "action",
+      label: query ? `Filter: ${query} (clear)` : "Filter suggestions...",
+      value: FILTER_ID,
+    });
+  }
+
+  for (const action of options.customActions ?? []) {
+    items.push({
+      id: `custom:${action.id}`,
+      kind: "action",
+      label: action.label,
+      value: action.id,
+    });
+  }
+
+  return items;
+}
+
+function buildContentItems(
+  options: ListEditorOptions,
+  currentPaths: string[],
+  suggestions: string[],
+): ListEditorItem[] {
+  const items: ListEditorItem[] = [];
+  const query = options.filterQuery ?? "";
+
+  for (const path of suggestions) {
+    if (currentPaths.includes(path)) continue;
+    if (matchesFilter(path, query)) {
+      items.push({
+        id: `suggest:${path}`,
+        kind: "suggestion",
+        label: `⬜ Suggest: ${path}`,
+        value: path,
+      });
+    }
+  }
+
+  for (const path of currentPaths) {
+    items.push({
+      id: `selected:${path}`,
+      kind: "selected",
+      label: `✅ Remove: ${path}`,
+      value: path,
+    });
+  }
+
+  return items;
+}
+
 async function runCustomListEditor(
   ctx: ExtensionContext,
   options: ListEditorOptions,
@@ -310,9 +371,12 @@ async function runCustomListEditor(
       new Text(theme.fg("accent", theme.bold(options.title)), 1, 0),
     );
 
-    let state = new ListEditorState(
-      buildEditorItems(options, currentPaths, allSuggestions),
-    );
+    const actionItems = buildActionItems(options);
+    let actionIndex = 0;
+    let focusArea: "actions" | "content" = "actions";
+    let contentSelectedIndex = 0;
+    let contentList: SelectList | null = null;
+    let contentPlaceholder: Text | null = null;
 
     const selectListTheme = {
       selectedPrefix: (t: string) => theme.fg("accent", t),
@@ -322,14 +386,127 @@ async function runCustomListEditor(
       noMatch: (t: string) => theme.fg("warning", t),
     };
 
-    let selectList = new SelectList(
-      toSelectItems(state.getItems()),
-      options.pageSize ?? 10,
-      selectListTheme,
+    const actionText = new Text("", 1, 0);
+    container.addChild(actionText);
+    container.addChild(
+      new DynamicBorder((s: string) => theme.fg("borderMuted", s)),
     );
-    selectList.setSelectedIndex(state.getSelectedIndex());
-    selectList.onSelectionChange = (item) => state.setSelectedId(item.value);
-    container.addChild(selectList);
+
+    function updateActionText() {
+      const labels = actionItems.map((action, i) => {
+        const focused = focusArea === "actions" && i === actionIndex;
+        const prefix = focused ? "→ " : "  ";
+        const label = focused
+          ? theme.fg("accent", theme.bold(action.label))
+          : theme.fg("text", action.label);
+        return `${prefix}${label}`;
+      });
+      actionText.setText(labels.join("   "));
+    }
+
+    function mountContentList(items: ListEditorItem[]) {
+      if (contentList) {
+        container.removeChild(contentList);
+        contentList = null;
+      }
+      if (contentPlaceholder) {
+        container.removeChild(contentPlaceholder);
+        contentPlaceholder = null;
+      }
+
+      if (items.length === 0) {
+        contentPlaceholder = new Text(theme.fg("dim", "  (no items)"), 1, 0);
+        container.addChild(contentPlaceholder);
+        return;
+      }
+
+      const list = new SelectList(
+        toSelectItems(items),
+        options.pageSize ?? 10,
+        selectListTheme,
+      );
+      list.onSelect = handleContentSelect;
+      list.onCancel = () => done({ kind: "back" });
+      contentList = list;
+      container.addChild(contentList);
+      syncContentHighlight();
+    }
+
+    function syncContentHighlight() {
+      if (!contentList) return;
+      const listState = contentList as unknown as {
+        selectedIndex: number;
+        items: SelectItem[];
+      };
+      if (focusArea === "actions") {
+        listState.selectedIndex = -1;
+      } else {
+        listState.selectedIndex = Math.min(
+          contentSelectedIndex,
+          listState.items.length - 1,
+        );
+      }
+    }
+
+    function rebuild() {
+      const contentItems = buildContentItems(
+        options,
+        currentPaths,
+        allSuggestions,
+      );
+      mountContentList(contentItems);
+      updateActionText();
+      tui.requestRender();
+    }
+
+    async function handleAction(action: ListEditorItem) {
+      if (action.id === BACK_ID) {
+        done({ kind: "done", paths: currentPaths });
+        return;
+      }
+
+      if (action.id === FILTER_ID) {
+        const input = await ctx.ui.input("Filter by name (empty clears):");
+        const query = (input ?? "").trim().toLowerCase();
+        done({ kind: "filter", query, paths: currentPaths });
+        return;
+      }
+
+      if (action.id.startsWith("custom:")) {
+        done({
+          kind: "custom",
+          id: action.value,
+          paths: currentPaths,
+        });
+        return;
+      }
+    }
+
+    async function handleContentSelect(item: SelectItem) {
+      const contentItems = buildContentItems(
+        options,
+        currentPaths,
+        allSuggestions,
+      );
+      const editorItem = contentItems.find((i) => i.id === item.value);
+      if (!editorItem) return;
+
+      if (editorItem.kind === "suggestion") {
+        const path = editorItem.value;
+        if (!currentPaths.includes(path)) {
+          currentPaths.push(path);
+          rebuild();
+        }
+        return;
+      }
+
+      if (editorItem.kind === "selected") {
+        const path = editorItem.value;
+        currentPaths = currentPaths.filter((p) => p !== path);
+        rebuild();
+        return;
+      }
+    }
 
     container.addChild(
       new Text(
@@ -342,73 +519,84 @@ async function runCustomListEditor(
       new DynamicBorder((s: string) => theme.fg("accent", s)),
     );
 
-    function rebuild() {
-      const items = buildEditorItems(options, currentPaths, allSuggestions);
-      state.updateItems(items);
-      const newList = new SelectList(
-        toSelectItems(state.getItems()),
-        options.pageSize ?? 10,
-        selectListTheme,
-      );
-      newList.setSelectedIndex(state.getSelectedIndex());
-      newList.onSelectionChange = (item) => state.setSelectedId(item.value);
-      newList.onSelect = handleSelect;
-      newList.onCancel = () => done({ kind: "back" });
-      container.removeChild(selectList);
-      container.addChild(newList);
-      selectList = newList;
-      tui.requestRender();
-    }
-
-    async function handleSelect(item: SelectItem) {
-      const editorItem = state.getItems().find((i) => i.id === item.value);
-      if (!editorItem) return;
-
-      if (editorItem.id === BACK_ID) {
-        done({ kind: "done", paths: currentPaths });
-        return;
-      }
-
-      if (editorItem.id === FILTER_ID) {
-        const input = await ctx.ui.input("Filter by name (empty clears):");
-        const query = (input ?? "").trim().toLowerCase();
-        done({ kind: "filter", query, paths: currentPaths });
-        return;
-      }
-
-      if (editorItem.id.startsWith("custom:")) {
-        done({
-          kind: "custom",
-          id: editorItem.value,
-          paths: currentPaths,
-        });
-        return;
-      }
-
-      if (editorItem.kind === "suggestion") {
-        if (!currentPaths.includes(editorItem.value)) {
-          currentPaths.push(editorItem.value);
-          rebuild();
-        }
-        return;
-      }
-
-      if (editorItem.kind === "selected") {
-        currentPaths = currentPaths.filter((p) => p !== editorItem.value);
-        rebuild();
-        return;
-      }
-    }
-
-    selectList.onSelect = handleSelect;
-    selectList.onCancel = () => done({ kind: "back" });
+    rebuild();
 
     return {
       render: (width: number) => container.render(width),
       invalidate: () => container.invalidate(),
       handleInput: (data: string) => {
-        selectList.handleInput(data);
-        tui.requestRender();
+        if (matchesKey(data, Key.escape)) {
+          done({ kind: "back" });
+          return;
+        }
+
+        if (matchesKey(data, Key.enter)) {
+          if (focusArea === "actions") {
+            handleAction(actionItems[actionIndex]);
+          } else {
+            const item = contentList?.getSelectedItem();
+            if (item) contentList?.onSelect?.(item);
+          }
+          return;
+        }
+
+        if (matchesKey(data, Key.up)) {
+          if (focusArea === "actions") {
+            if (actionIndex > 0) {
+              actionIndex--;
+            } else {
+              focusArea = "content";
+              const listState = contentList
+                ? (contentList as unknown as { items: SelectItem[] })
+                : null;
+              contentSelectedIndex = Math.max(
+                0,
+                (listState?.items.length ?? 1) - 1,
+              );
+            }
+          } else if (contentList) {
+            const listState = contentList as unknown as {
+              selectedIndex: number;
+              items: SelectItem[];
+            };
+            if (listState.selectedIndex > 0) {
+              contentSelectedIndex = listState.selectedIndex - 1;
+            } else {
+              focusArea = "actions";
+              actionIndex = actionItems.length - 1;
+            }
+          }
+          syncContentHighlight();
+          updateActionText();
+          tui.requestRender();
+          return;
+        }
+
+        if (matchesKey(data, Key.down)) {
+          if (focusArea === "actions") {
+            if (actionIndex < actionItems.length - 1) {
+              actionIndex++;
+            } else {
+              focusArea = "content";
+              contentSelectedIndex = 0;
+            }
+          } else if (contentList) {
+            const listState = contentList as unknown as {
+              selectedIndex: number;
+              items: SelectItem[];
+            };
+            if (listState.selectedIndex < listState.items.length - 1) {
+              contentSelectedIndex = listState.selectedIndex + 1;
+            } else {
+              focusArea = "actions";
+              actionIndex = 0;
+            }
+          }
+          syncContentHighlight();
+          updateActionText();
+          tui.requestRender();
+          return;
+        }
       },
     };
   });
