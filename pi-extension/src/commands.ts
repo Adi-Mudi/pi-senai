@@ -1,7 +1,13 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getConfigPath, loadAgentConfig, saveAgentConfig, validateMappedAgents } from "./agent-config.js";
+import {
+  getConfigPath,
+  loadAgentConfig,
+  resolveAgentName,
+  saveAgentConfig,
+  validateMappedAgents,
+} from "./agent-config.js";
 import { discoverAgents } from "./agent-discovery.js";
 import {
   loadAgentsFilesConfig,
@@ -925,12 +931,14 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const existing = loadAgentsFilesConfig(ctx.cwd);
       const config: AgentsFilesConfig = existing ?? { version: 2, documents: {} };
+      const agentConfig = loadAgentConfig(ctx.cwd);
       const filesConfig = loadFilesConfig(ctx.cwd);
       const candidates = buildDocumentCandidates(ctx.cwd, filesConfig);
 
       let editing = true;
       while (editing) {
         const options = ORCHESTRA_ROLES.map((role) => {
+          const agent = resolveAgentName(agentConfig, role);
           const docs = config.documents[role];
           let summary: string;
           if (docs?.primary) {
@@ -940,7 +948,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           } else {
             summary = "not set";
           }
-          return `${role} — ${summary}`;
+          return `${role} (${agent}) — ${summary}`;
         });
         options.push("Finish");
 
@@ -950,7 +958,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           continue;
         }
 
-        const role = ORCHESTRA_ROLES.find((r) => choice.startsWith(r));
+        const role = ORCHESTRA_ROLES.find((r) => choice.startsWith(`${r} `));
         if (!role) continue;
 
         await editRoleDocuments(

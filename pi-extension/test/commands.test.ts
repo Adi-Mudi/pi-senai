@@ -749,7 +749,7 @@ describe("commands", () => {
     // Per-role editor: set truth, add read, go back.
     // Top-level: finish.
     selectChoices.push(
-      "planner — not set",
+      "planner (planner) — not set",
       "Set truth document",
       "Doc/planner.md",
       "⬜ Suggest: Doc/plan.md",
