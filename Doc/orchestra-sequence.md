@@ -48,6 +48,7 @@ Configuration commands:
 - `/orchestra-files` — show the configured project file list.
 - `/orchestra-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/orchestra/agents_files.json`.
 - `/orchestra-agents-files` — show configured document assignments per role.
+- `/orchestra-doctor` — run a full diagnostic on Orchestra configuration, agent-role fit, file scope, and runtime environment.
 
 Other commands:
 

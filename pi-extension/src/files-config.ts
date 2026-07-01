@@ -3,6 +3,8 @@ import * as path from "node:path";
 
 export const FILES_CONFIG_FILE = "files.json";
 
+export const CURRENT_FILES_CONFIG_VERSION = 2;
+
 const DEFAULT_EXCLUDED_PATHS = [
   ".git/",
   "node_modules/",
@@ -57,8 +59,10 @@ export function saveFilesConfig(cwd: string, config: FilesConfig): void {
 }
 
 export function validateFilesConfig(config: FilesConfig): void {
-  if (config.version !== 2) {
-    throw new Error("Missing or invalid 'version' field; expected 2");
+  if (config.version !== CURRENT_FILES_CONFIG_VERSION) {
+    throw new Error(
+      `Unsupported files.json version: ${config.version}. Expected version: ${CURRENT_FILES_CONFIG_VERSION}. Run /orchestra-configure-files to recreate.`,
+    );
   }
   const arrays = ["codePaths", "inputDocuments", "testPaths", "excludedPaths"] as const;
   for (const key of arrays) {

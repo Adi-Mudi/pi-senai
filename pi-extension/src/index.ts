@@ -4,6 +4,7 @@ import {
   registerAgentCommands,
   registerAgentsFilesCommands,
   registerCommands,
+  registerDoctorCommand,
   registerFilesCommands,
 } from "./commands.js";
 import { loadState } from "./state.js";
@@ -18,6 +19,7 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
   registerAgentCommands(pi);
   registerFilesCommands(pi);
   registerAgentsFilesCommands(pi);
+  registerDoctorCommand(pi);
 
   // Inject orchestra status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {
