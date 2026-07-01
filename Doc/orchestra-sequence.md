@@ -2,8 +2,8 @@
 
 ## Subagent Orchestration — Plan → Implement → Document → Deliver
 
-**Version:** 1.3  
-**Date:** 2026-06-12  
+**Version:** 1.4  
+**Date:** 2026-07-01  
 **Status:** Current
 
 ---
@@ -44,6 +44,10 @@ Configuration commands:
 
 - `/orchestra-configure-agents` — interactively map Orchestra roles to subagent names and save `.pi/orchestra/agents.json`.
 - `/orchestra-agents` — show the current mapping and validate that every mapped agent exists.
+- `/orchestra-configure-files` — interactively configure code paths, input documents, and test paths in `.pi/orchestra/files.json`.
+- `/orchestra-files` — show the configured project file list.
+- `/orchestra-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/orchestra/agents_files.json`.
+- `/orchestra-agents-files` — show configured document assignments per role.
 
 Other commands:
 
@@ -274,4 +278,4 @@ All auto-generated files go into `.IDE_Plans/orchestra/`:
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
 8. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command that moves the run forward; manual stage commands are still available as overrides.
 9. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
-10. **Configure agents first.** Stage commands require a valid `.pi/orchestra/agents.json`. Run `/orchestra-configure-agents` before the first stage.
+10. **Configure first.** Stage commands require valid `.pi/orchestra/agents.json`, `.pi/orchestra/files.json`, and `.pi/orchestra/agents_files.json`. Run `/orchestra-configure-agents`, `/orchestra-configure-files`, and `/orchestra-configure-agents-files` before the first stage.

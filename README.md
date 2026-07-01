@@ -20,6 +20,30 @@ npm install
 npm test
 ```
 
+## Before your first run
+
+Pi Orchestra requires three configuration files before any stage command will run:
+
+1. **Agent configuration** — map each Orchestra role to a subagent name:
+
+   ```
+   /orchestra-configure-agents
+   ```
+
+2. **Project file configuration** — tell Orchestra which code, input documents, and tests to include:
+
+   ```
+   /orchestra-configure-files
+   ```
+
+3. **Agent document assignments** — assign truth and comparison documents to each role:
+
+   ```
+   /orchestra-configure-agents-files
+   ```
+
+You can check the current settings with `/orchestra-agents`, `/orchestra-files`, and `/orchestra-agents-files`.
+
 ## Usage
 
 Start a new run:
@@ -56,7 +80,7 @@ Reset the current run:
 
 ## Agent configuration
 
-Before running any stage, Pi Orchestra needs to know which subagent names to use for each role. This is stored in `.pi/orchestra/agents.json`.
+Before running any stage, Pi Orchestra needs three valid configuration files under `.pi/orchestra/`: `agents.json`, `files.json`, and `agents_files.json`.
 
 Create the configuration interactively:
 
@@ -78,11 +102,11 @@ Check the current mapping and validation status:
 /orchestra-agents
 ```
 
-Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will warn and stop if the configuration is missing or maps a custom agent that cannot be found.
+Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will warn and stop if any of these configs is missing, invalid, or maps a custom agent that cannot be found.
 
 ## Document scope configuration
 
-You can control which documents each subagent reads. Pi Orchestra uses two optional config files:
+You can control which documents each subagent reads. Pi Orchestra uses three config files:
 
 - `.pi/orchestra/files.json` — categorized project context (code paths, input documents, test paths).
 - `.pi/orchestra/agents_files.json` — per-role truth document and comparison documents.

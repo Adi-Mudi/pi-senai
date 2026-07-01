@@ -85,6 +85,8 @@ Three config files live under `.pi/orchestra/`:
 | `files.json` | `/orchestra-configure-files` | Categorized project context: code paths, input documents, and test paths. |
 | `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. The custom role picker highlights roles that already have assignments. |
 
+All three files are required before any stage command (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will run. Run the corresponding `/orchestra-configure-*` command for each missing file.
+
 ### `files.json` schema (version 2)
 
 ```json

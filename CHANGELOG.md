@@ -35,11 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Interactive per-project mapping of Orchestra roles to subagent names, saved in `.pi/orchestra/agents.json`.
   - Agent discovery from project `.pi/agents/*.md`, user agent directory, and built-in defaults.
   - Agent registry block injected into every stage prompt so subagents are spawned by the configured names.
-  - Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) now require a valid agent configuration before running.
   - Unit tests for all new modules and updated tests for commands and prompt injection.
-
-### Added
-
 - New `README.md` and updated `AGENTS.md` with project conventions, layout, and test commands.
 - Full production-readiness test coverage: 66 unit tests covering every exported function and major edge case.
 - Unit tests for `loadSkill` and `buildStagePrompt` across all four stage skills.
@@ -49,6 +45,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests verifying that `advanceStage` returns a new state object and does not mutate the input.
 - Unit tests verifying that `/orchestra-document` and `/orchestra-deliver` reject manual starts when the preceding stage's artifacts are missing.
 - Unit test verifying that `/orchestra-document` rejects running from the `planned` stage.
+- New `plan-overview.md` artifact under `plan/`. The Plan stage now writes both:
+  - `plan.md` — concrete, actionable implementation plan for agents.
+  - `plan-overview.md` — user-friendly summary with mission, approach, key decisions, and expected outcome.
 
 ### Changed
 
@@ -61,16 +60,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `checkStageArtifact` now supports checking artifacts for `implement`, `document`, and `deliver` stages in addition to `plan`.
 - `/orchestra-document` now verifies that the `implement/` directory contains artifacts before starting.
 - `/orchestra-deliver` now verifies that the `document/` directory contains artifacts before starting.
+- Stage commands now require valid `.pi/orchestra/agents.json`, `.pi/orchestra/files.json`, and `.pi/orchestra/agents_files.json` before running.
 - Updated all documentation to reflect the current artifact paths, command behavior, and stage prerequisites.
-
-### Added
-
-- New `plan-overview.md` artifact under `plan/`. The Plan stage now writes both:
-  - `plan.md` — concrete, actionable implementation plan for agents.
-  - `plan-overview.md` — user-friendly summary with mission, approach, key decisions, and expected outcome.
-
-### Changed
-
 - Run IDs now include the local hour and minute: `YYYY-MM-DD-HH-MM-<mission-slug>`.
 - `/orchestra-approve` now automatically advances through the completed stage and immediately starts the next working stage (Implement, Document, or Deliver).
 - `/orchestra-status` now shows the next command for every stage.

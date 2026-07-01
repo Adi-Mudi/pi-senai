@@ -3,8 +3,8 @@
 
 > **Implementation note:** This specification is implemented by the `pi-orchestra` extension in this repository. The commands below reference the `pi-orchestra` slash-command names (`/orchestra-*`).
 
-**Version:** 1.3  
-**Date:** 2026-06-12  
+**Version:** 1.4  
+**Date:** 2026-07-01  
 **Status:** Current
 
 ---
@@ -45,6 +45,10 @@ Configuration commands:
 
 - `/orchestra-configure-agents` — discover project, user, and built-in agents and interactively map each Orchestra role to a subagent name.
 - `/orchestra-agents` — show the current role-to-agent mapping and report any missing custom agents.
+- `/orchestra-configure-files` — interactively configure code paths, input documents, and test paths in `.pi/orchestra/files.json`.
+- `/orchestra-files` — show the configured project file list.
+- `/orchestra-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/orchestra/agents_files.json`.
+- `/orchestra-agents-files` — show configured document assignments per role.
 
 Other commands:
 
@@ -53,9 +57,15 @@ Other commands:
 
 ---
 
-## 3. Agent Configuration
+## 3. Configuration
 
-Before running any stage, Pi Orchestra loads `.pi/orchestra/agents.json`. This file maps each Orchestra role to the name of a subagent that the main agent should spawn.
+Before running any stage, Pi Orchestra requires three configuration files under `.pi/orchestra/`:
+
+1. `agents.json` — maps each Orchestra role to the name of a subagent that the main agent should spawn.
+2. `files.json` — categorizes project context into code paths, input documents, and test paths.
+3. `agents_files.json` — assigns truth and comparison documents to each role.
+
+### Agent mapping (`agents.json`)
 
 A typical config looks like:
 
@@ -87,6 +97,33 @@ Agents are discovered from:
 3. Built-in defaults.
 
 Project agents override user agents, and both override built-ins. Agent files must contain `name` and `description` YAML frontmatter fields.
+
+### Project file context (`files.json`)
+
+```json
+{
+  "version": 2,
+  "codePaths": ["src/", "app/"],
+  "inputDocuments": ["docs/PRD.md", "README.md"],
+  "testPaths": ["tests/"],
+  "excludedPaths": [".git/", "node_modules/", "dist/"]
+}
+```
+
+Use `/orchestra-configure-files` to create or edit this file.
+
+### Agent document assignments (`agents_files.json`)
+
+```json
+{
+  "version": 2,
+  "documents": {
+    "scout-1": { "primary": "docs/PRD.md" }
+  }
+}
+```
+
+Each role may have a `primary` truth document and a `reads` list of comparison documents. Use `/orchestra-configure-agents-files` to create or edit this file.
 
 ## 4. Stage 1 — Plan
 
@@ -349,7 +386,7 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 8. **No direct subagent calls from the extension.** The extension injects prompts; the LLM invokes the `subagent` tool.
 9. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command to move forward; manual stage commands are still available as overrides.
 10. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
-11. **Configure agents first.** A valid `.pi/orchestra/agents.json` is required before any stage command will run.
+11. **Configure first.** Valid `.pi/orchestra/agents.json`, `.pi/orchestra/files.json`, and `.pi/orchestra/agents_files.json` are required before any stage command will run.
 
 ---
 
