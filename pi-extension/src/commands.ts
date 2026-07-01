@@ -34,6 +34,10 @@ import {
   type ListEditorItem,
 } from "./ui/list-editor.js";
 import {
+  runRolePicker,
+  type RolePickerItem,
+} from "./ui/role-picker.js";
+import {
   advanceStage,
   loadState,
   resetState,
@@ -936,39 +940,62 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       const filesConfig = loadFilesConfig(ctx.cwd);
       const candidates = buildDocumentCandidates(ctx.cwd, filesConfig);
 
+      const pickerItems: RolePickerItem[] = ORCHESTRA_ROLES.map((role) => {
+        const agent = resolveAgentName(agentConfig, role);
+        const docs = config.documents[role];
+        let summary: string;
+        let assigned = false;
+        if (docs?.primary) {
+          summary = `truth=${docs.primary}${docs.reads?.length ? ` reads=${docs.reads.length}` : ""}`;
+          assigned = true;
+        } else if (docs?.reads?.length) {
+          summary = `reads=${docs.reads.length}`;
+          assigned = true;
+        } else {
+          summary = "not set";
+        }
+        return {
+          id: role,
+          label: ROLE_LABELS[role],
+          agent,
+          summary,
+          assigned,
+        };
+      });
+
       let editing = true;
       while (editing) {
-        const options = ORCHESTRA_ROLES.map((role) => {
-          const agent = resolveAgentName(agentConfig, role);
-          const docs = config.documents[role];
-          let summary: string;
-          if (docs?.primary) {
-            summary = `truth=${docs.primary}${docs.reads?.length ? ` reads=${docs.reads.length}` : ""}`;
-          } else if (docs?.reads?.length) {
-            summary = `reads=${docs.reads.length}`;
-          } else {
-            summary = "not set";
-          }
-          return `${role}: ${ROLE_LABELS[role]} (${agent}) — ${summary}`;
+        const action = await runRolePicker(ctx, {
+          title: "Configure agent documents",
+          items: pickerItems,
         });
-        options.push("Finish");
 
-        const choice = await ctx.ui.select("Configure agent documents", options);
-        if (!choice || choice === "Finish") {
+        if (action.kind === "back" || action.kind === "finish") {
           editing = false;
-          continue;
+        } else {
+          await editRoleDocuments(
+            ctx,
+            action.role as OrchestraRole,
+            config,
+            candidates,
+            filesConfig?.excludedPaths ?? [],
+          );
+          // Refresh the summary/assigned state for the selected role.
+          const docs = config.documents[action.role as OrchestraRole];
+          const item = pickerItems.find((i) => i.id === action.role);
+          if (item) {
+            if (docs?.primary) {
+              item.summary = `truth=${docs.primary}${docs.reads?.length ? ` reads=${docs.reads.length}` : ""}`;
+              item.assigned = true;
+            } else if (docs?.reads?.length) {
+              item.summary = `reads=${docs.reads.length}`;
+              item.assigned = true;
+            } else {
+              item.summary = "not set";
+              item.assigned = false;
+            }
+          }
         }
-
-        const role = ORCHESTRA_ROLES.find((r) => choice.startsWith(`${r}:`));
-        if (!role) continue;
-
-        await editRoleDocuments(
-          ctx,
-          role,
-          config,
-          candidates,
-          filesConfig?.excludedPaths ?? [],
-        );
       }
 
       saveAgentsFilesConfig(ctx.cwd, config);

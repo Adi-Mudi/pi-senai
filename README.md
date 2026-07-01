@@ -107,7 +107,7 @@ Configure document assignments for each role:
 /orchestra-configure-agents-files
 ```
 
-This command shows every Orchestra role in a top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Selecting a role opens the same custom list editor used by `/orchestra-configure-files`, pre-filled with documents from `/orchestra-configure-files` (the `inputDocuments` pool plus discovered markdown files).
+This command shows every Orchestra role in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Selecting a role opens the same custom list editor used by `/orchestra-configure-files`, pre-filled with documents from `/orchestra-configure-files` (the `inputDocuments` pool plus discovered markdown files).
 
 Each role can have:
 

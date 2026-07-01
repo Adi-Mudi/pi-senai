@@ -83,7 +83,7 @@ Three config files live under `.pi/orchestra/`:
 |---|---|---|
 | `agents.json` | `/orchestra-configure-agents` | Maps each Orchestra role to a subagent name. Roles are shown with friendly labels (e.g., `Scout 1 — Architecture / big-picture`). |
 | `files.json` | `/orchestra-configure-files` | Categorized project context: code paths, input documents, and test paths. |
-| `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. |
+| `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. The custom role picker highlights roles that already have assignments. |
 
 ### `files.json` schema (version 2)
 

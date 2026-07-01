@@ -749,12 +749,12 @@ describe("commands", () => {
     // Per-role editor: set truth, add read, go back.
     // Top-level: finish.
     selectChoices.push(
-      "planner: Planner (planner) — not set",
+      "⬜ planner: Planner (planner) — not set",
       "Set truth document",
       "Doc/planner.md",
       "⬜ Suggest: Doc/plan.md",
       "Back",
-      "Finish",
+      "⬜ Finish",
     );
 
     await commandHandlers["orchestra-configure-agents-files"]("", makeCtx());
