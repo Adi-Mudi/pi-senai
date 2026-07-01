@@ -80,6 +80,11 @@ function buildDocumentScopeBlock(
     lines.push(
       "For roles without assignments, read the relevant category plus current stage artifacts when needed.",
     );
+    lines.push("");
+    lines.push(
+      "Verification rule: Before acting on new user input, compare it with your truth document. " +
+        "If the input conflicts with the truth, stop and ask the user. Do not override the truth silently.",
+    );
   } else {
     lines.push("No default project files configured.");
   }

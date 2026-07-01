@@ -162,6 +162,7 @@ describe("prompt", () => {
     assert.ok(prompt.includes("Doc/planner.md"));
     assert.ok(prompt.includes("Doc/plan.md"));
     assert.ok(prompt.includes("README.md"));
+    assert.ok(prompt.includes("Verification rule"));
   });
 
   it("buildStagePrompt shows fallback when only files config exists", () => {

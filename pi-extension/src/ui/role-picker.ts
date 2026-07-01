@@ -115,6 +115,12 @@ async function runCustomRolePicker(
       const border = "─".repeat(Math.max(2, width));
       lines.push(theme.fg("accent", border));
       lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
+      lines.push(
+        theme.fg(
+          "warning",
+          " Tip: scouts and reviewers usually need documents; other roles use stage artifacts.",
+        ),
+      );
       lines.push(theme.fg("accent", border));
 
       const visible = items.slice(scrollOffset, scrollOffset + pageSize);

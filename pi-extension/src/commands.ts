@@ -439,6 +439,25 @@ function dirHasFiles(dir: string): boolean {
   }
 }
 
+function validateTruthDocuments(
+  cwd: string,
+  config: AgentsFilesConfig | null,
+): string[] {
+  const errors: string[] = [];
+  if (!config) return errors;
+  for (const role of ORCHESTRA_ROLES) {
+    const docs = config.documents[role];
+    if (!docs?.primary) continue;
+    const fullPath = path.resolve(cwd, docs.primary);
+    if (!fs.existsSync(fullPath)) {
+      errors.push(
+        `Truth document for ${ROLE_LABELS[role]} (${role}) not found: ${docs.primary}`,
+      );
+    }
+  }
+  return errors;
+}
+
 function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
   const config = loadAgentConfig(cwd);
   if (!config) {
@@ -450,18 +469,31 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
   }
   const errors = validateMappedAgents(cwd, config);
 
-  try {
-    const filesConfig = loadFilesConfig(cwd);
-    if (filesConfig) validateFilesConfig(filesConfig);
-  } catch (err: any) {
-    errors.push(`Files config error: ${err.message}`);
+  const filesConfig = loadFilesConfig(cwd);
+  if (!filesConfig) {
+    errors.push(
+      "No project files configured. Please run /orchestra-configure-files first.",
+    );
+  } else {
+    try {
+      validateFilesConfig(filesConfig);
+    } catch (err: any) {
+      errors.push(`Files config error: ${err.message}`);
+    }
   }
 
-  try {
-    const agentsFilesConfig = loadAgentsFilesConfig(cwd);
-    if (agentsFilesConfig) validateAgentsFilesConfig(agentsFilesConfig);
-  } catch (err: any) {
-    errors.push(`Agent files config error: ${err.message}`);
+  const agentsFilesConfig = loadAgentsFilesConfig(cwd);
+  if (!agentsFilesConfig) {
+    errors.push(
+      "No agent document assignments configured. Please run /orchestra-configure-agents-files first.",
+    );
+  } else {
+    try {
+      validateAgentsFilesConfig(agentsFilesConfig);
+      errors.push(...validateTruthDocuments(cwd, agentsFilesConfig));
+    } catch (err: any) {
+      errors.push(`Agent files config error: ${err.message}`);
+    }
   }
 
   if (errors.length > 0) {
@@ -914,18 +946,16 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       const lines = ["Pi Orchestra Agent Document Assignments", ""];
       for (const role of ORCHESTRA_ROLES) {
         const docs = config.documents[role];
-        if (!docs) {
-          lines.push(`  ${role}: (not set)`);
-          continue;
-        }
+        if (!docs) continue;
         const parts: string[] = [];
         if (docs.primary) parts.push(`truth=${docs.primary}`);
         if (docs.reads?.length) parts.push(`reads=[${docs.reads.join(", ")}]`);
         if (parts.length > 0) {
           lines.push(`  ${ROLE_LABELS[role]} (${role}): ${parts.join(" ")}`);
-        } else {
-          lines.push(`  ${ROLE_LABELS[role]} (${role}): (not set)`);
         }
+      }
+      if (lines.length === 2) {
+        lines.push("  No assignments found.");
       }
       ctx.ui.notify(lines.join("\n"), "info");
     },

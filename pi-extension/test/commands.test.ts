@@ -39,6 +39,8 @@ describe("commands", () => {
     inputs = [];
     inputIndex = 0;
     writeDefaultAgentConfig(tmpDir);
+    writeDefaultFilesConfig(tmpDir);
+    writeDefaultAgentsFilesConfig(tmpDir);
   });
 
   function makeCtx(): ExtensionContext {
@@ -77,6 +79,20 @@ describe("commands", () => {
     saveAgentConfig(cwd, { version: 1, agents: { ...DEFAULT_AGENTS } });
   }
 
+  function writeDefaultFilesConfig(cwd: string): void {
+    saveFilesConfig(cwd, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [".git/", "node_modules/"],
+    });
+  }
+
+  function writeDefaultAgentsFilesConfig(cwd: string): void {
+    saveAgentsFilesConfig(cwd, { version: 2, documents: {} });
+  }
+
   function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
     const result = advanceStage(cwd, state, stage);
     if (!result.ok) throw new Error(result.reason);
@@ -95,6 +111,33 @@ describe("commands", () => {
       "orchestra-approve",
       "orchestra-reset",
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
+  });
+
+  it("blocks stage commands when files.json is missing", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "orchestra", "files.json"));
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("/orchestra-configure-files"));
+  });
+
+  it("blocks stage commands when agents_files.json is missing", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "orchestra", "agents_files.json"));
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("/orchestra-configure-agents-files"));
+  });
+
+  it("blocks stage commands when a truth document is missing", async () => {
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-1": { primary: "missing-doc.md" } },
+    });
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("Truth document"));
   });
 
   it("registerAgentCommands registers agent commands", () => {
