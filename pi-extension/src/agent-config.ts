@@ -1,7 +1,12 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getUserAgentsDir } from "./agent-discovery.js";
-import { ORCHESTRA_ROLES, type OrchestraRole, DEFAULT_AGENTS } from "./agent-suggestions.js";
+import {
+  ORCHESTRA_ROLES,
+  ROLE_LABELS,
+  type OrchestraRole,
+  DEFAULT_AGENTS,
+} from "./agent-suggestions.js";
 
 export const CONFIG_DIR = ".pi/orchestra";
 export const CONFIG_FILE = "agents.json";
@@ -44,7 +49,7 @@ export function validateAgentConfig(config: AgentConfig): void {
   for (const role of Object.keys(config.agents)) {
     if (!ORCHESTRA_ROLES.includes(role as OrchestraRole)) {
       throw new Error(
-        `Unknown role "${role}". Allowed roles: ${ORCHESTRA_ROLES.join(", ")}`,
+        `Unknown role "${role}". Allowed roles: ${ORCHESTRA_ROLES.map((r) => `${ROLE_LABELS[r]} (${r})`).join(", ")}`,
       );
     }
   }
@@ -68,7 +73,7 @@ export function validateMappedAgents(cwd: string, config: AgentConfig): string[]
 
     if (!isBuiltin && !fs.existsSync(projectPath) && !fs.existsSync(userPath)) {
       errors.push(
-        `Custom agent "${agentName}" for role "${role}" not found. Expected ${projectPath} or ${userPath}.`,
+        `Custom agent "${agentName}" for role ${ROLE_LABELS[role as OrchestraRole]} (${role}) not found. Expected ${projectPath} or ${userPath}.`,
       );
     }
   }

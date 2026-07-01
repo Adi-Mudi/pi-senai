@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAgentConfig } from "./agent-config.js";
 import { buildAgentRegistryBlock } from "./agent-registry.js";
-import { ORCHESTRA_ROLES, type OrchestraRole } from "./agent-suggestions.js";
+import { ORCHESTRA_ROLES, ROLE_LABELS, type OrchestraRole } from "./agent-suggestions.js";
 import {
   loadAgentsFilesConfig,
   type AgentsFilesConfig,
@@ -61,7 +61,7 @@ function buildDocumentScopeBlock(
     for (const role of ORCHESTRA_ROLES) {
       const docs = agentsFilesConfig.documents[role];
       const docPart = formatAgentDocuments(docs);
-      if (docPart) lines.push(`- ${role}: ${docPart}`);
+      if (docPart) lines.push(`- ${ROLE_LABELS[role]} (${role}): ${docPart}`);
     }
     lines.push("");
   }

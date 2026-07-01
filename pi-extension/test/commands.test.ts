@@ -147,7 +147,7 @@ describe("commands", () => {
     registerAgentCommands(makeApi());
     await commandHandlers["orchestra-agents"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
-    assert.ok(notifications[0].message.includes("planner → planner"));
+    assert.ok(notifications[0].message.includes("Planner (planner) → planner"));
     assert.ok(notifications[0].message.includes("All mapped agents are available"));
   });
 
@@ -749,7 +749,7 @@ describe("commands", () => {
     // Per-role editor: set truth, add read, go back.
     // Top-level: finish.
     selectChoices.push(
-      "planner (planner) — not set",
+      "planner: Planner (planner) — not set",
       "Set truth document",
       "Doc/planner.md",
       "⬜ Suggest: Doc/plan.md",

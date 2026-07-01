@@ -1,5 +1,5 @@
 import type { AgentConfig } from "./agent-config.js";
-import { ORCHESTRA_ROLES, DEFAULT_AGENTS } from "./agent-suggestions.js";
+import { ORCHESTRA_ROLES, DEFAULT_AGENTS, ROLE_LABELS } from "./agent-suggestions.js";
 
 export function buildAgentRegistryBlock(config: AgentConfig | null): string {
   const lines = [
@@ -12,7 +12,7 @@ export function buildAgentRegistryBlock(config: AgentConfig | null): string {
   for (const role of ORCHESTRA_ROLES) {
     const agentName = config?.agents?.[role] ?? DEFAULT_AGENTS[role];
     const marker = config?.agents?.[role] ? "→" : "(default) →";
-    lines.push(`- ${role} ${marker} ${agentName}`);
+    lines.push(`- ${ROLE_LABELS[role]} (${role}) ${marker} ${agentName}`);
   }
 
   lines.push("");

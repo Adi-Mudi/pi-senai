@@ -22,6 +22,7 @@ import { buildAgentRegistryBlock } from "./agent-registry.js";
 import {
   DEFAULT_AGENTS,
   ORCHESTRA_ROLES,
+  ROLE_LABELS,
   type OrchestraRole,
   buildSuggestionMap,
 } from "./agent-suggestions.js";
@@ -483,7 +484,7 @@ export function registerAgentCommands(pi: ExtensionAPI) {
       const lines = ["Pi Orchestra Agent Registry", ""];
       for (const role of ORCHESTRA_ROLES) {
         const agentName = config.agents[role] ?? DEFAULT_AGENTS[role];
-        lines.push(`  ${role} → ${agentName}`);
+        lines.push(`  ${ROLE_LABELS[role]} (${role}) → ${agentName}`);
       }
 
       if (errors.length > 0) {
@@ -529,7 +530,7 @@ export function registerAgentCommands(pi: ExtensionAPI) {
           options.push("Finish");
         }
 
-        const choice = await ctx.ui.select(`Configure agent for role "${role}"`, options);
+        const choice = await ctx.ui.select(`Configure agent for ${ROLE_LABELS[role]} (${role})`, options);
 
         if (choice?.startsWith("Keep current:")) {
           mapping[role] = existingValue!;
@@ -539,7 +540,7 @@ export function registerAgentCommands(pi: ExtensionAPI) {
           i++;
         } else if (choice === "Choose different") {
           const agentOptions = agents.map((a) => `${a.name} (${a.source})`);
-          const selected = await ctx.ui.select(`Select agent for "${role}"`, agentOptions);
+          const selected = await ctx.ui.select(`Select agent for ${ROLE_LABELS[role]} (${role})`, agentOptions);
           if (selected) {
             mapping[role] = selected.split(" ")[0];
           } else {
@@ -917,9 +918,9 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
         if (docs.primary) parts.push(`truth=${docs.primary}`);
         if (docs.reads?.length) parts.push(`reads=[${docs.reads.join(", ")}]`);
         if (parts.length > 0) {
-          lines.push(`  ${role}: ${parts.join(" ")}`);
+          lines.push(`  ${ROLE_LABELS[role]} (${role}): ${parts.join(" ")}`);
         } else {
-          lines.push(`  ${role}: (not set)`);
+          lines.push(`  ${ROLE_LABELS[role]} (${role}): (not set)`);
         }
       }
       ctx.ui.notify(lines.join("\n"), "info");
@@ -948,7 +949,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           } else {
             summary = "not set";
           }
-          return `${role} (${agent}) — ${summary}`;
+          return `${role}: ${ROLE_LABELS[role]} (${agent}) — ${summary}`;
         });
         options.push("Finish");
 
@@ -958,7 +959,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           continue;
         }
 
-        const role = ORCHESTRA_ROLES.find((r) => choice.startsWith(`${r} `));
+        const role = ORCHESTRA_ROLES.find((r) => choice.startsWith(`${r}:`));
         if (!role) continue;
 
         await editRoleDocuments(
@@ -999,7 +1000,7 @@ async function editRoleDocuments(
     }
 
     const action = await runListEditor(ctx, {
-      title: `${role}${primary ? ` — truth: ${primary}` : ""}`,
+      title: `${ROLE_LABELS[role]} (${role})${primary ? ` — truth: ${primary}` : ""}`,
       items: buildRoleDocumentItems(primary, reads, candidates),
       filterQuery,
       enableFilter: true,

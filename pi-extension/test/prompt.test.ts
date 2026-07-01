@@ -96,8 +96,8 @@ describe("prompt", () => {
 
     assert.ok(prompt.includes("## Agent Registry"));
     assert.ok(prompt.includes("For this project, use these agent names when spawning subagents:"));
-    assert.ok(prompt.includes("- planner (default) → planner"));
-    assert.ok(prompt.includes("- implementer (default) → worker"));
+    assert.ok(prompt.includes("- Planner (planner) (default) → planner"));
+    assert.ok(prompt.includes("- Implementer (implementer) (default) → worker"));
     assert.ok(prompt.includes("If a role is not listed above, use the default agent name."));
   });
 
@@ -109,9 +109,9 @@ describe("prompt", () => {
     const state = makeState("planning", "run-1");
     const { prompt } = buildStagePrompt(tmpDir, state, "plan");
 
-    assert.ok(prompt.includes("- planner → custom-planner"));
-    assert.ok(prompt.includes("- implementer → custom-coder"));
-    assert.ok(prompt.includes("- scout-1 (default) → scout"));
+    assert.ok(prompt.includes("- Planner (planner) → custom-planner"));
+    assert.ok(prompt.includes("- Implementer (implementer) → custom-coder"));
+    assert.ok(prompt.includes("- Scout 1 — Architecture / big-picture (scout-1) (default) → scout"));
   });
 
   it("buildStagePrompt uses default artifact paths when runId is empty", () => {
