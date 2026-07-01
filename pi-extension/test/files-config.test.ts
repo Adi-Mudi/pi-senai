@@ -78,8 +78,11 @@ describe("files-config", () => {
     );
   });
 
-  it("validateFilesConfig rejects wrong version", () => {
-    assert.throws(() => validateFilesConfig({ version: 1, files: [] } as any), /version/);
+  it("validateFilesConfig rejects unsupported version", () => {
+    assert.throws(
+      () => validateFilesConfig({ version: 3, files: [] } as any),
+      /Unsupported files\.json version: 3\. Expected version: 2/,
+    );
   });
 
   it("validateFilesConfig rejects invalid codePaths", () => {

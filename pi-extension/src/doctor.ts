@@ -97,10 +97,18 @@ export function runOrchestraDiagnostic(cwd: string): DiagnosticReport {
   const sections: DiagnosticSection[] = [];
 
   const agentConfig = loadAgentConfig(cwd);
-  const filesConfig = loadFilesConfig(cwd);
+
+  let filesConfig: FilesConfig | null = null;
+  let filesConfigError: string | null = null;
+  try {
+    filesConfig = loadFilesConfig(cwd);
+  } catch (err: any) {
+    filesConfigError = err.message;
+  }
+
   const agentsFilesConfig = loadAgentsFilesConfig(cwd);
 
-  sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig));
+  sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError));
 
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
   sections.push(checkAgentMappings(resolvedAgents));
@@ -136,6 +144,7 @@ function checkConfigFiles(
   agentConfig: AgentConfig | null,
   filesConfig: FilesConfig | null,
   agentsFilesConfig: AgentsFilesConfig | null,
+  filesConfigError: string | null,
 ): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
@@ -157,14 +166,14 @@ function checkConfigFiles(
   }
 
   const filesPath = path.join(cwd, ".pi", "orchestra", "files.json");
-  if (filesConfig) {
+  if (filesConfigError) {
+    items.push({
+      status: "error",
+      message: filesConfigError,
+      details: ["Run /orchestra-configure-files to recreate the file."],
+    });
+  } else if (filesConfig) {
     items.push({ status: "ok", message: `files.json found and valid at ${filesPath}` });
-    if (filesConfig.version !== 2) {
-      items.push({
-        status: "warning",
-        message: `files.json version is ${filesConfig.version}; expected 2`,
-      });
-    }
   } else {
     items.push({
       status: "error",

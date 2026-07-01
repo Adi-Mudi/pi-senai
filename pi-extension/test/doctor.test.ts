@@ -84,6 +84,36 @@ describe("doctor", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("reports files.json version mismatch instead of crashing", () => {
+    const tmpDir = makeTmpDir("doctor-version-mismatch-");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "orchestra", "files.json"),
+      JSON.stringify({
+        version: 3,
+        codePaths: ["src/"],
+        inputDocuments: ["README.md"],
+        testPaths: ["tests/"],
+        excludedPaths: [".git/"],
+      }),
+      "utf8",
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+
+    const report = runOrchestraDiagnostic(tmpDir);
+
+    assert.strictEqual(report.ok, false);
+    const configSection = report.sections.find((s) => s.title === "Configuration files");
+    assert.ok(configSection);
+    const mismatch = configSection.items.find(
+      (i) => i.status === "error" && i.message.includes("Unsupported files.json version: 3"),
+    );
+    assert.ok(mismatch, "should report unsupported files.json version");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("reports not-found custom agent", () => {
     const tmpDir = makeTmpDir("doctor-missing-agent-");
 
