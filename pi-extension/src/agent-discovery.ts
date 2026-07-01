@@ -94,6 +94,17 @@ function loadAgentsFromDir(dir: string, source: "project" | "user"): DiscoveredA
   return agents;
 }
 
+export interface AgentFrontmatter {
+  name: string;
+  description: string;
+  filePath: string;
+  tools?: string[];
+  output?: string;
+  skills?: string[];
+  maxSubagentDepth?: number;
+  thinking?: string;
+}
+
 export function parseAgentFile(
   filePath: string,
 ): { name: string; description: string; filePath: string } | undefined {
@@ -107,4 +118,37 @@ export function parseAgentFile(
   } catch {
     return undefined;
   }
+}
+
+export function parseAgentFileFull(filePath: string): AgentFrontmatter | undefined {
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
+    const name = String(frontmatter.name ?? "").trim();
+    const description = String(frontmatter.description ?? "").trim();
+    if (!name || !description) return undefined;
+
+    const tools = parseStringArray(frontmatter.tools);
+    const skills = parseStringArray(frontmatter.skills);
+    const output = frontmatter.output ? String(frontmatter.output) : undefined;
+    const thinking = frontmatter.thinking ? String(frontmatter.thinking) : undefined;
+    const maxSubagentDepth =
+      typeof frontmatter.maxSubagentDepth === "number"
+        ? frontmatter.maxSubagentDepth
+        : undefined;
+
+    return { name, description, filePath, tools, output, skills, maxSubagentDepth, thinking };
+  } catch {
+    return undefined;
+  }
+}
+
+function parseStringArray(value: unknown): string[] | undefined {
+  if (typeof value === "string") {
+    return value.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+  if (Array.isArray(value)) {
+    return value.map((s) => String(s).trim()).filter(Boolean);
+  }
+  return undefined;
 }

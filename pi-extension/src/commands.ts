@@ -27,6 +27,10 @@ import {
   buildSuggestionMap,
 } from "./agent-suggestions.js";
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
+import {
+  formatDiagnosticReport,
+  runOrchestraDiagnostic,
+} from "./doctor.js";
 import { buildStagePrompt } from "./prompt.js";
 import {
   runListEditor,
@@ -1167,4 +1171,16 @@ async function pickTruthDocument(
   if (!choice) return current;
   if (choice === "(clear truth document)") return undefined;
   return choice;
+}
+
+
+export function registerDoctorCommand(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-doctor", {
+    description: "Run a full diagnostic check on Orchestra configuration",
+    handler: async (_args, ctx) => {
+      const report = runOrchestraDiagnostic(ctx.cwd);
+      const text = formatDiagnosticReport(report);
+      pi.sendUserMessage(text);
+    },
+  });
 }

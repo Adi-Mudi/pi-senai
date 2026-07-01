@@ -48,6 +48,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - New `plan-overview.md` artifact under `plan/`. The Plan stage now writes both:
   - `plan.md` — concrete, actionable implementation plan for agents.
   - `plan-overview.md` — user-friendly summary with mission, approach, key decisions, and expected outcome.
+- New `/orchestra-doctor` diagnostic command.
+  - Audits `agents.json`, `files.json`, and `agents_files.json` for validity.
+  - Reports the exact source of every mapped agent (project, user, or built-in).
+  - Checks agent-role capability fit by reading agent frontmatter (`tools`, `output`, description/mandate).
+  - Validates file scopes, truth documents, and runtime environment (tmux/Zellij).
+  - No separate agent file; runs directly in the main Pi session.
+  - Unit tests cover missing configs, missing agents, conflicting mandates, missing tools, path conflicts, and missing truth documents.
 
 ### Changed
 

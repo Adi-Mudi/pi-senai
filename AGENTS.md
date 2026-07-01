@@ -87,6 +87,8 @@ Three config files live under `.pi/orchestra/`:
 
 All three files are required before any stage command (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will run. Run the corresponding `/orchestra-configure-*` command for each missing file.
 
+Use `/orchestra-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Orchestra role, validates file scopes and truth documents, and verifies the runtime environment.
+
 ### `files.json` schema (version 2)
 
 ```json

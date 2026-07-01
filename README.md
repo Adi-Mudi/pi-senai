@@ -44,6 +44,14 @@ Pi Orchestra requires three configuration files before any stage command will ru
 
 You can check the current settings with `/orchestra-agents`, `/orchestra-files`, and `/orchestra-agents-files`.
 
+After configuring, run a full diagnostic:
+
+```
+/orchestra-doctor
+```
+
+This checks that all config files exist, every mapped agent is found in the right place, each agent has the right tools for its Orchestra role, file scopes are valid, truth documents exist, and you are running inside a supported terminal multiplexer.
+
 ## Usage
 
 Start a new run:
