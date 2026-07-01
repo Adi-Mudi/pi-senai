@@ -5,6 +5,8 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { loadSkill, buildStagePrompt } from "../src/prompt.js";
 import { saveAgentConfig } from "../src/agent-config.js";
+import { saveFilesConfig } from "../src/files-config.js";
+import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
 import type { OrchestraState } from "../src/state.js";
 
 describe("prompt", () => {
@@ -94,8 +96,8 @@ describe("prompt", () => {
 
     assert.ok(prompt.includes("## Agent Registry"));
     assert.ok(prompt.includes("For this project, use these agent names when spawning subagents:"));
-    assert.ok(prompt.includes("- planner (default) → planner"));
-    assert.ok(prompt.includes("- implementer (default) → worker"));
+    assert.ok(prompt.includes("- Planner (planner) (default) → planner"));
+    assert.ok(prompt.includes("- Implementer (implementer) (default) → worker"));
     assert.ok(prompt.includes("If a role is not listed above, use the default agent name."));
   });
 
@@ -107,9 +109,9 @@ describe("prompt", () => {
     const state = makeState("planning", "run-1");
     const { prompt } = buildStagePrompt(tmpDir, state, "plan");
 
-    assert.ok(prompt.includes("- planner → custom-planner"));
-    assert.ok(prompt.includes("- implementer → custom-coder"));
-    assert.ok(prompt.includes("- scout-1 (default) → scout"));
+    assert.ok(prompt.includes("- Planner (planner) → custom-planner"));
+    assert.ok(prompt.includes("- Implementer (implementer) → custom-coder"));
+    assert.ok(prompt.includes("- Scout 1 — Architecture / big-picture (scout-1) (default) → scout"));
   });
 
   it("buildStagePrompt uses default artifact paths when runId is empty", () => {
@@ -138,5 +140,54 @@ describe("prompt", () => {
       assert.strictEqual(context.stage, stage);
       assert.ok(context.artifacts.runDir.includes(`.IDE_Plans/orchestra/runs/run-${stage}`));
     }
+  });
+
+  it("buildStagePrompt includes Document Scope block when configured", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 1,
+      documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
+    });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes("## Document Scope"));
+    assert.ok(prompt.includes("Doc/planner.md"));
+    assert.ok(prompt.includes("Doc/plan.md"));
+    assert.ok(prompt.includes("README.md"));
+    assert.ok(prompt.includes("Verification rule"));
+  });
+
+  it("buildStagePrompt shows fallback when only files config exists", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes("## Document Scope"));
+    assert.ok(prompt.includes("Default project context"));
+    assert.ok(!prompt.includes("Per-agent document assignments"));
+  });
+
+  it("buildStagePrompt handles missing configs gracefully", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes("## Document Scope"));
+    assert.ok(prompt.includes("No default project files configured"));
   });
 });

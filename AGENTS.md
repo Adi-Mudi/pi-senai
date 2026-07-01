@@ -51,8 +51,10 @@ npm test
 │   ├── constants.ts     # paths, stage enum, transitions, helpers
 │   ├── agent-discovery.ts   # discover project/user/built-in agents
 │   ├── agent-suggestions.ts # suggest agents per Orchestra role
-│   ├── agent-config.ts      # load/save/validate .pi/orchestra/agents.json
-│   └── agent-registry.ts    # build agent registry prompt block
+│   ├── agent-config.ts           # load/save/validate .pi/orchestra/agents.json
+│   ├── agent-registry.ts         # build agent registry prompt block
+│   ├── files-config.ts           # load/save/validate .pi/orchestra/files.json
+│   └── agents-files-config.ts    # load/save/validate .pi/orchestra/agents_files.json
 ├── pi-extension/test/   # unit tests
 ├── skills/              # stage skill markdown files
 │   ├── orchestra-plan.md
@@ -71,6 +73,46 @@ npm test
 2. **Local-only state.** All state and artifacts live under `.IDE_Plans/orchestra/` inside the project directory.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
 4. **Approve auto-runs the next stage.** `/orchestra-approve` advances the state and immediately sends the next stage prompt. Manual `/orchestra-XXX` commands remain available as overrides.
+5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.
+
+## Document scope configuration
+
+Three config files live under `.pi/orchestra/`:
+
+| File | Command | Purpose |
+|---|---|---|
+| `agents.json` | `/orchestra-configure-agents` | Maps each Orchestra role to a subagent name. Roles are shown with friendly labels (e.g., `Scout 1 — Architecture / big-picture`). |
+| `files.json` | `/orchestra-configure-files` | Categorized project context: code paths, input documents, and test paths. |
+| `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. The custom role picker highlights roles that already have assignments. |
+
+All three files are required before any stage command (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will run. Run the corresponding `/orchestra-configure-*` command for each missing file.
+
+### `files.json` schema (version 2)
+
+```json
+{
+  "version": 2,
+  "codePaths": ["src/", "app/"],
+  "inputDocuments": ["docs/PRD.md", "README.md"],
+  "testPaths": ["tests/"],
+  "excludedPaths": [".git/", "node_modules/", "dist/"]
+}
+```
+
+- `codePaths` — folders that contain implementation code.
+- `inputDocuments` — individual files the agent should read as instructions.
+- `testPaths` — folders or files that contain tests.
+- `excludedPaths` — folders the scanner should ignore.
+
+The `/orchestra-configure-files` command deep-scans the project and suggests items for each category. It recognizes standard names like `src/`, `docs/`, and `tests/`, and also detects custom folder names by looking at the file types inside them. Selecting a folder blocks selection of any file inside it, and vice versa, to prevent overlap.
+
+The Document Scope block in stage prompts shows:
+
+1. Which roles have truth documents and comparison documents.
+2. The categorized project context for unconfigured roles.
+3. A fallback instruction to read current stage artifacts when needed.
+
+Validation checks JSON shape and known role names. It does not require files to exist, because earlier stages may create them.
 
 ## State and artifacts
 

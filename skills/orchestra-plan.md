@@ -17,6 +17,7 @@ scout-1, scout-2, scout-3, scout-4 (parallel) → discussion → AskUserQuestion
 - Spawn fresh scouts every run. Do NOT reuse or read scout reports from any previous run folder.
 - Do not edit source files in this stage.
 - Do not wait for user input except at the AskUserQuestion step and the final approval gate.
+- The extension requires valid `.pi/orchestra/agents.json`, `.pi/orchestra/files.json`, and `.pi/orchestra/agents_files.json` before this command runs; if any are missing, tell the user to run the matching `/orchestra-configure-*` command.
 
 ## Subagent conventions
 
@@ -60,9 +61,9 @@ Use the `subagent` tool (provided by `pi-interactive-subagents`) with pi.dev bes
 Spawn four scouts in parallel. Each must write its own report.
 
 - **scout-1** (agent `scout`): Architecture / big-picture reconnaissance for mission `"<mission>"`. Write to `<scoutAngle1>`.
-- **scout-2** (agent `scout`): Target-area deep-dive. Write to `<scoutAngle2>`.
-- **scout-3** (agent `scout`): Risk / dependency audit. Write to `<scoutAngle3>`.
-- **scout-4** (agent `scout`): Requirements / documentation audit. Read customer documents such as PRD, RTM, development order, and atomic-function specs. Summarize requirements, acceptance criteria, constraints, and open questions. Write to `<scoutAngle4>`.
+- **scout-2** (agent `scout`): Coder Search. Write to `<scoutAngle2>`.
+- **scout-3** (agent `scout`): Code Risk / dependency audit. Write to `<scoutAngle3>`.
+- **scout-4** (agent `scout`): PRD / documentation audit. Read customer documents such as PRD, RTM, development order, and atomic-function specs. Summarize requirements, acceptance criteria, constraints, and open questions. Write to `<scoutAngle4>`.
 
 Wait for all four to finish, then read the reports. If a report is missing, check the live subagent widget first; only respawn if the agent is stalled or has failed.
 

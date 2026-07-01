@@ -20,8 +20,8 @@ describe("agent-registry", () => {
 
   it("uses default agents when config is null", () => {
     const block = buildAgentRegistryBlock(null);
-    assert.ok(block.includes("scout-1 (default) → scout"));
-    assert.ok(block.includes("implementer (default) → worker"));
+    assert.ok(block.includes("Scout 1 — Architecture / big-picture (scout-1) (default) → scout"));
+    assert.ok(block.includes("Implementer (implementer) (default) → worker"));
   });
 
   it("uses custom agents from config", () => {
@@ -33,9 +33,9 @@ describe("agent-registry", () => {
       },
     };
     const block = buildAgentRegistryBlock(config);
-    assert.ok(block.includes("scout-1 → custom-scout"));
-    assert.ok(block.includes("implementer → gas-coder"));
-    assert.ok(block.includes("scout-2 (default) → scout"));
+    assert.ok(block.includes("Scout 1 — Architecture / big-picture (scout-1) → custom-scout"));
+    assert.ok(block.includes("Implementer (implementer) → gas-coder"));
+    assert.ok(block.includes("Scout 2 — Coder Search (scout-2) (default) → scout"));
   });
 
   it("includes fallback instruction", () => {

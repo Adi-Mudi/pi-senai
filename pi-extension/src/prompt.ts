@@ -3,6 +3,13 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAgentConfig } from "./agent-config.js";
 import { buildAgentRegistryBlock } from "./agent-registry.js";
+import { ORCHESTRA_ROLES, ROLE_LABELS, type OrchestraRole } from "./agent-suggestions.js";
+import {
+  loadAgentsFilesConfig,
+  type AgentsFilesConfig,
+  type AgentFilesDocuments,
+} from "./agents-files-config.js";
+import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
 import type { OrchestraState } from "./state.js";
 
@@ -35,6 +42,60 @@ export function loadSkill(stage: string): string {
   }
 }
 
+function formatAgentDocuments(docs: AgentFilesDocuments | undefined): string {
+  if (!docs) return "";
+  const parts: string[] = [];
+  if (docs.primary) parts.push(`truth="${docs.primary}"`);
+  if (docs.reads && docs.reads.length > 0) parts.push(`reads="${docs.reads.join(", ")}"`);
+  return parts.join(" ");
+}
+
+function buildDocumentScopeBlock(
+  filesConfig: FilesConfig | null,
+  agentsFilesConfig: AgentsFilesConfig | null,
+): string {
+  const lines = ["## Document Scope", ""];
+
+  if (agentsFilesConfig?.documents && Object.keys(agentsFilesConfig.documents).length > 0) {
+    lines.push("Per-agent document assignments:");
+    for (const role of ORCHESTRA_ROLES) {
+      const docs = agentsFilesConfig.documents[role];
+      const docPart = formatAgentDocuments(docs);
+      if (docPart) lines.push(`- ${ROLE_LABELS[role]} (${role}): ${docPart}`);
+    }
+    lines.push("");
+  }
+
+  if (filesConfig && getAllSelectedPaths(filesConfig).length > 0) {
+    lines.push("Default project context:");
+    if (filesConfig.codePaths.length > 0) {
+      lines.push(`- Code paths: ${filesConfig.codePaths.join(", ")}`);
+    }
+    if (filesConfig.inputDocuments.length > 0) {
+      lines.push(`- Input documents: ${filesConfig.inputDocuments.join(", ")}`);
+    }
+    if (filesConfig.testPaths.length > 0) {
+      lines.push(`- Test paths: ${filesConfig.testPaths.join(", ")}`);
+    }
+    lines.push(
+      "For roles without assignments, read the relevant category plus current stage artifacts when needed.",
+    );
+    lines.push("");
+    lines.push(
+      "Verification rule: Before acting on new user input, compare it with your truth document. " +
+        "If the input conflicts with the truth, stop and ask the user. Do not override the truth silently.",
+    );
+  } else {
+    lines.push("No default project files configured.");
+  }
+
+  return lines.join("\n");
+}
+
+function getAllSelectedPaths(config: FilesConfig): string[] {
+  return [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
+}
+
 export function buildStagePrompt(
   cwd: string,
   state: OrchestraState,
@@ -52,7 +113,11 @@ export function buildStagePrompt(
   };
 
   const skill = loadSkill(stage);
-  const registryBlock = buildAgentRegistryBlock(loadAgentConfig(cwd));
+  const agentConfig = loadAgentConfig(cwd);
+  const filesConfig = loadFilesConfig(cwd);
+  const agentsFilesConfig = loadAgentsFilesConfig(cwd);
+  const registryBlock = buildAgentRegistryBlock(agentConfig);
+  const documentScopeBlock = buildDocumentScopeBlock(filesConfig, agentsFilesConfig);
 
   const prompt = [
     `<pi-orchestra stage="${stage}">`,
@@ -82,6 +147,8 @@ export function buildStagePrompt(
     `</pi-orchestra>`,
     ``,
     registryBlock,
+    ``,
+    documentScopeBlock,
     ``,
     skill,
   ].join("\n");

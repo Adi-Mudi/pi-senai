@@ -50,6 +50,30 @@ export const DEFAULT_AGENTS: Record<OrchestraRole, string> = {
   archive: "worker",
 };
 
+export const ROLE_LABELS: Record<OrchestraRole, string> = {
+  "scout-1": "Scout 1 — Architecture / big-picture",
+  "scout-2": "Scout 2 — Coder Search",
+  "scout-3": "Scout 3 — Code Risk / dependency audit",
+  "scout-4": "Scout 4 — PRD / documentation audit",
+  discussion: "Discussion",
+  planner: "Planner",
+  "plan-overview": "Plan overview",
+  "reviewer-correctness": "Reviewer — Correctness",
+  "reviewer-security": "Reviewer — Security",
+  "reviewer-tests": "Reviewer — Tests",
+  "test-skeleton": "Test skeleton",
+  implementer: "Implementer",
+  linter: "Linter",
+  "code-review": "Code review",
+  "full-test": "Full test",
+  "readme-writer": "README writer",
+  "changelog-writer": "Changelog writer",
+  "api-docs-writer": "API docs writer",
+  "other-docs-writer": "Other docs writer",
+  "security-gate": "Security gate",
+  archive: "Archive",
+};
+
 export function suggestAgentForRole(
   role: OrchestraRole,
   agents: DiscoveredAgent[],

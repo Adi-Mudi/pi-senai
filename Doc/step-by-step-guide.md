@@ -34,6 +34,32 @@ This guide walks you through running a full **Plan → Implement → Document �
 
 ---
 
+## Configure the orchestra
+
+Before you run any stage, you must create three configuration files. Pi Orchestra will block stage commands until these exist and are valid.
+
+1. **Configure agents** — map each Orchestra role to a subagent name:
+
+   ```text
+   /orchestra-configure-agents
+   ```
+
+2. **Configure project files** — select code paths, input documents, and test paths:
+
+   ```text
+   /orchestra-configure-files
+   ```
+
+3. **Configure agent document assignments** — assign truth and comparison documents per role:
+
+   ```text
+   /orchestra-configure-agents-files
+   ```
+
+Check the current settings anytime with `/orchestra-agents`, `/orchestra-files`, and `/orchestra-agents-files`.
+
+---
+
 ## Stage 1 — Plan
 
 ### Start the plan
@@ -48,10 +74,10 @@ What happens:
 2. It sets the current stage to `planning`.
 3. It sends the Plan stage skill prompt to the main agent.
 4. The main agent spawns four scouts in parallel:
-   - `scout-1` — architecture / big-picture
-   - `scout-2` — target-area deep dive
-   - `scout-3` — risk / dependency audit
-   - `scout-4` — requirements / documentation audit
+   - `scout-1` — Architecture / big-picture
+   - `scout-2` — Coder Search
+   - `scout-3` — Code Risk / dependency audit
+   - `scout-4` — PRD / documentation audit
 5. After the scouts finish, a discussion agent reads their reports and drafts clarifying questions.
 6. The main agent asks you those questions live using the **AskUserQuestion** tool.
 7. You answer the questions.

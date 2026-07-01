@@ -20,6 +20,30 @@ npm install
 npm test
 ```
 
+## Before your first run
+
+Pi Orchestra requires three configuration files before any stage command will run:
+
+1. **Agent configuration** — map each Orchestra role to a subagent name:
+
+   ```
+   /orchestra-configure-agents
+   ```
+
+2. **Project file configuration** — tell Orchestra which code, input documents, and tests to include:
+
+   ```
+   /orchestra-configure-files
+   ```
+
+3. **Agent document assignments** — assign truth and comparison documents to each role:
+
+   ```
+   /orchestra-configure-agents-files
+   ```
+
+You can check the current settings with `/orchestra-agents`, `/orchestra-files`, and `/orchestra-agents-files`.
+
 ## Usage
 
 Start a new run:
@@ -56,7 +80,7 @@ Reset the current run:
 
 ## Agent configuration
 
-Before running any stage, Pi Orchestra needs to know which subagent names to use for each role. This is stored in `.pi/orchestra/agents.json`.
+Before running any stage, Pi Orchestra needs three valid configuration files under `.pi/orchestra/`: `agents.json`, `files.json`, and `agents_files.json`.
 
 Create the configuration interactively:
 
@@ -78,7 +102,52 @@ Check the current mapping and validation status:
 /orchestra-agents
 ```
 
-Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will warn and stop if the configuration is missing or maps a custom agent that cannot be found.
+Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will warn and stop if any of these configs is missing, invalid, or maps a custom agent that cannot be found.
+
+## Document scope configuration
+
+You can control which documents each subagent reads. Pi Orchestra uses three config files:
+
+- `.pi/orchestra/files.json` — categorized project context (code paths, input documents, test paths).
+- `.pi/orchestra/agents_files.json` — per-role truth document and comparison documents.
+
+Configure the project context:
+
+```
+/orchestra-configure-files
+```
+
+This command deep-scans your project and suggests real files and folders. It splits selections into three categories:
+
+1. **Code paths** — folders that contain source code (e.g., `src/`, `app/`, `backend/`).
+2. **Input documents** — files the agent should read as instructions (e.g., `docs/PRD.md`, `README.md`).
+3. **Test paths** — folders or files that contain tests (e.g., `tests/`, `e2e/`).
+
+The scanner recognizes both standard folder names (like `src/`, `docs/`, `tests/`) and custom names by looking at the file types inside each folder. If you select a folder, the tool will not let you also select a file inside it, and vice versa, to avoid conflicts.
+
+Configure document assignments for each role:
+
+```
+/orchestra-configure-agents-files
+```
+
+This command shows every Orchestra role in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Selecting a role opens the same custom list editor used by `/orchestra-configure-files`, pre-filled with documents from `/orchestra-configure-files` (the `inputDocuments` pool plus discovered markdown files).
+
+Each role can have:
+
+1. A **truth document** — the primary document the agent must follow.
+2. **Comparison documents** — other files the agent checks against the truth document.
+
+Use the action bar to set/clear the truth document or add a custom path. Press Enter on a suggestion to add it to the reads list, or on a selected read to remove it.
+
+If a role has no assignment, it falls back to the relevant project context category plus the current stage artifacts.
+
+Check the current settings:
+
+```
+/orchestra-files
+/orchestra-agents-files
+```
 
 ## Artifact layout
 

@@ -1,6 +1,11 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { formatStageStatus } from "./constants.js";
-import { registerAgentCommands, registerCommands } from "./commands.js";
+import {
+  registerAgentCommands,
+  registerAgentsFilesCommands,
+  registerCommands,
+  registerFilesCommands,
+} from "./commands.js";
 import { loadState } from "./state.js";
 
 export default function piOrchestraExtension(pi: ExtensionAPI) {
@@ -11,6 +16,8 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
 
   registerCommands(pi);
   registerAgentCommands(pi);
+  registerFilesCommands(pi);
+  registerAgentsFilesCommands(pi);
 
   // Inject orchestra status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {

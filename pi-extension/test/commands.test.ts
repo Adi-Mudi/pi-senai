@@ -3,12 +3,20 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { checkStageArtifact, registerCommands, registerAgentCommands } from "../src/commands.js";
+import {
+  checkStageArtifact,
+  registerCommands,
+  registerAgentCommands,
+  registerFilesCommands,
+  registerAgentsFilesCommands,
+} from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
 import type { OrchestraState } from "../src/state.js";
 import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { saveAgentConfig } from "../src/agent-config.js";
+import { saveFilesConfig, loadFilesConfig } from "../src/files-config.js";
+import { saveAgentsFilesConfig, loadAgentsFilesConfig } from "../src/agents-files-config.js";
 import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -18,6 +26,8 @@ describe("commands", () => {
   let commandHandlers: Record<string, (args: string, ctx: ExtensionContext) => Promise<void>>;
   let selectChoices: string[];
   let selectIndex: number;
+  let inputs: string[];
+  let inputIndex: number;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-cmd-test-"));
@@ -26,7 +36,11 @@ describe("commands", () => {
     commandHandlers = {};
     selectChoices = [];
     selectIndex = 0;
+    inputs = [];
+    inputIndex = 0;
     writeDefaultAgentConfig(tmpDir);
+    writeDefaultFilesConfig(tmpDir);
+    writeDefaultAgentsFilesConfig(tmpDir);
   });
 
   function makeCtx(): ExtensionContext {
@@ -37,7 +51,7 @@ describe("commands", () => {
           notifications.push({ message, type });
         },
         confirm: async (_title: string, _message: string) => true,
-        input: async () => "",
+        input: async () => inputs[inputIndex++] ?? "",
         select: async (_title: string, options: string[]) => {
           const choice = selectChoices[selectIndex++] ?? options[0];
           return choice;
@@ -65,6 +79,20 @@ describe("commands", () => {
     saveAgentConfig(cwd, { version: 1, agents: { ...DEFAULT_AGENTS } });
   }
 
+  function writeDefaultFilesConfig(cwd: string): void {
+    saveFilesConfig(cwd, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [".git/", "node_modules/"],
+    });
+  }
+
+  function writeDefaultAgentsFilesConfig(cwd: string): void {
+    saveAgentsFilesConfig(cwd, { version: 2, documents: {} });
+  }
+
   function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
     const result = advanceStage(cwd, state, stage);
     if (!result.ok) throw new Error(result.reason);
@@ -83,6 +111,33 @@ describe("commands", () => {
       "orchestra-approve",
       "orchestra-reset",
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
+  });
+
+  it("blocks stage commands when files.json is missing", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "orchestra", "files.json"));
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("/orchestra-configure-files"));
+  });
+
+  it("blocks stage commands when agents_files.json is missing", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "orchestra", "agents_files.json"));
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("/orchestra-configure-agents-files"));
+  });
+
+  it("blocks stage commands when a truth document is missing", async () => {
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-1": { primary: "missing-doc.md" } },
+    });
+    registerCommands(makeApi());
+    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent configuration errors"));
+    assert.ok(notifications[0].message.includes("Truth document"));
   });
 
   it("registerAgentCommands registers agent commands", () => {
@@ -135,7 +190,7 @@ describe("commands", () => {
     registerAgentCommands(makeApi());
     await commandHandlers["orchestra-agents"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
-    assert.ok(notifications[0].message.includes("planner → planner"));
+    assert.ok(notifications[0].message.includes("Planner (planner) → planner"));
     assert.ok(notifications[0].message.includes("All mapped agents are available"));
   });
 
@@ -628,5 +683,269 @@ describe("commands", () => {
     await commandHandlers["orchestra-implement"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("Plan artifacts not found"));
+  });
+
+  it("registerFilesCommands registers file commands", () => {
+    registerFilesCommands(makeApi());
+    ["orchestra-files", "orchestra-configure-files"].forEach((cmd) =>
+      assert.ok(commandHandlers[cmd], `missing ${cmd}`),
+    );
+  });
+
+  it("registerAgentsFilesCommands registers agent file commands", () => {
+    registerAgentsFilesCommands(makeApi());
+    ["orchestra-agents-files", "orchestra-configure-agents-files"].forEach((cmd) =>
+      assert.ok(commandHandlers[cmd], `missing ${cmd}`),
+    );
+  });
+
+  it("orchestra-files shows configured project files", async () => {
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["Doc/"],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    registerFilesCommands(makeApi());
+
+    await commandHandlers["orchestra-files"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Orchestra Project Files"));
+    assert.ok(notifications[0].message.includes("README.md"));
+    assert.ok(notifications[0].message.includes("Doc/"));
+  });
+
+  it("orchestra-agents-files shows configured assignments", async () => {
+    saveAgentsFilesConfig(tmpDir, {
+      version: 1,
+      documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
+    });
+    registerAgentsFilesCommands(makeApi());
+
+    await commandHandlers["orchestra-agents-files"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Agent Document Assignments"));
+    assert.ok(notifications[0].message.includes("Doc/planner.md"));
+    assert.ok(notifications[0].message.includes("Doc/plan.md"));
+  });
+
+  it("orchestra-configure-files saves categorized choices", async () => {
+    fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "", "utf8");
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "📂 src/",
+      "📁 Select this folder (src/)",
+      "Back",
+      "Edit input documents",
+      "Add custom path",
+      "📂 docs/",
+      "📄 PRD.md",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/PRD.md"]);
+  });
+
+  it("orchestra-configure-files avoids folder and child file conflicts", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "", "utf8");
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit input documents",
+      "Add custom path",
+      "📂 docs/",
+      "📁 Select this folder (docs/)",
+      "Back",
+      "Edit input documents",
+      "Add custom path",
+      "📂 docs/",
+      "📄 PRD.md",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/"]);
+  });
+
+  it("orchestra-configure-agents-files saves user choices", async () => {
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["Doc/planner.md", "Doc/plan.md"],
+      testPaths: [],
+      excludedPaths: [".git/", "node_modules/"],
+    });
+    registerAgentsFilesCommands(makeApi());
+
+    // Top-level role picker: choose planner.
+    // Per-role editor: set truth, add read, go back.
+    // Top-level: finish.
+    selectChoices.push(
+      "⬜ planner: Planner (planner) — not set",
+      "Set truth document",
+      "Doc/planner.md",
+      "⬜ Suggest: Doc/plan.md",
+      "Back",
+      "⬜ Finish",
+    );
+
+    await commandHandlers["orchestra-configure-agents-files"]("", makeCtx());
+    const saved = loadAgentsFilesConfig(tmpDir);
+    assert.strictEqual(saved?.documents.planner?.primary, "Doc/planner.md");
+    assert.deepStrictEqual(saved?.documents.planner?.reads, ["Doc/plan.md"]);
+  });
+
+  // Edge cases
+  it("orchestra-configure-files handles empty suggestions gracefully", async () => {
+    fs.mkdirSync(path.join(tmpDir, "custom"), { recursive: true });
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "📂 custom/",
+      "📁 Select this folder (custom/)",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["custom/"]);
+  });
+
+  it("orchestra-configure-files prevents selecting nested folder and ancestor", async () => {
+    fs.mkdirSync(path.join(tmpDir, "src", "components"), { recursive: true });
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "📂 src/",
+      "📁 Select this folder (src/)",
+      "Back",
+      "Edit code paths",
+      "Add custom path",
+      "📂 src/",
+      "📂 components/",
+      "📁 Select this folder (src/components/)",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
+  });
+
+  it("orchestra-configure-files allows test files inside selected code folders", async () => {
+    fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "src", "main.test.ts"), "", "utf8");
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "📂 src/",
+      "📁 Select this folder (src/)",
+      "Back",
+      "Edit test paths",
+      "Add custom path",
+      "📂 src/",
+      "📄 main.test.ts",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["src/"]);
+    assert.deepStrictEqual(saved?.testPaths, ["src/main.test.ts"]);
+  });
+
+  it("orchestra-configure-files filters suggestions by name", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    for (const name of ["alpha.md", "beta.md", "gamma.md"]) {
+      fs.writeFileSync(path.join(tmpDir, "docs", name), "", "utf8");
+    }
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit input documents",
+      "Filter suggestions...",
+      "⬜ Suggest: docs/beta.md",
+      "Back",
+      "Finish",
+    );
+    inputs.push("beta");
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/beta.md"]);
+  });
+
+  it("orchestra-configure-files paginates long suggestion lists", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    for (let i = 1; i <= 15; i++) {
+      const num = i.toString().padStart(2, "0");
+      fs.writeFileSync(path.join(tmpDir, "docs", `doc${num}.md`), "", "utf8");
+    }
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit input documents",
+      "Next page →",
+      "⬜ Suggest: docs/doc12.md",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/doc12.md"]);
+  });
+
+  it("orchestra-configure-files picker can select a folder for input documents", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "one.md"), "", "utf8");
+    fs.writeFileSync(path.join(tmpDir, "docs", "two.md"), "", "utf8");
+
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit input documents",
+      "⬜ Suggest: docs/",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.inputDocuments, ["docs/"]);
+  });
+
+  it("orchestra-configure-files picker cancels without adding a path", async () => {
+    registerFilesCommands(makeApi());
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "❌ Cancel",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, []);
   });
 });
