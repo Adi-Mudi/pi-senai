@@ -1235,8 +1235,8 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const existing = loadArchitectInputsConfig(ctx.cwd);
       const config: ArchitectInputsConfig = existing ?? createDefaultArchitectInputsConfig();
-
-      const discovered = discoverProjectFiles(ctx.cwd, [
+      const filesConfig = loadFilesConfig(ctx.cwd);
+      const excludedPaths = filesConfig?.excludedPaths ?? [
         ".git/",
         "node_modules/",
         "__pycache__/",
@@ -1248,7 +1248,9 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
         ".pi/",
         ".idea/",
         ".vscode/",
-      ]);
+      ];
+
+      const discovered = discoverProjectFiles(ctx.cwd, excludedPaths);
 
       const candidates = [
         ...discovered.documentFiles,
@@ -1276,48 +1278,79 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
         documentsByType[docType] = candidates.filter((p) => typePatterns[docType].test(p));
       }
 
-      for (const docType of Object.keys(typePatterns) as ArchitectDocumentType[]) {
-        const suggestions = documentsByType[docType] ?? [];
-        const current = config.documents.filter((d) => d.type === docType).map((d) => d.path);
+      const typeLabels: Record<ArchitectDocumentType, string> = {
+        prd: "PRD",
+        mrd: "MRD",
+        brd: "BRD",
+        rtm: "RTM",
+        nfr: "NFR",
+        "test-plan": "Test plan",
+        adr: "ADR",
+        readme: "README",
+        code: "Code",
+      };
 
-        const done = await editArchitectDocumentType(ctx, docType, suggestions, current);
-        if (done === null) {
+      let editing = true;
+      while (editing) {
+        const menuOptions: string[] = [];
+        for (const docType of Object.keys(typePatterns) as ArchitectDocumentType[]) {
+          const count = config.documents.filter((d) => d.type === docType).length;
+          menuOptions.push(`Configure ${typeLabels[docType]} (${count} selected)`);
+        }
+        menuOptions.push(`Skill level: ${config.skillLevel}`);
+        menuOptions.push(`Free-form requirements (${config.freeFormRequirements.length})`);
+        menuOptions.push("Finish");
+
+        const choice = await ctx.ui.select("Configure architect inputs", menuOptions);
+        if (!choice) {
           ctx.ui.notify("Configuration cancelled.", "warning");
           return;
         }
 
-        // Replace documents of this type.
+        if (choice === "Finish") {
+          editing = false;
+          continue;
+        }
+
+        if (choice.startsWith("Skill level:")) {
+          const skillLevel = await ctx.ui.select("Select team skill level", [
+            "beginner",
+            "intermediate",
+            "advanced",
+          ]);
+          if (skillLevel && isArchitectSkillLevel(skillLevel)) {
+            config.skillLevel = skillLevel;
+          }
+          continue;
+        }
+
+        if (choice.startsWith("Free-form requirements")) {
+          const freeForm = await ctx.ui.editor(
+            "Enter free-form requirements (one per line)",
+            config.freeFormRequirements.join("\n"),
+          );
+          if (freeForm !== undefined) {
+            config.freeFormRequirements = freeForm
+              .split("\n")
+              .map((line) => line.trim())
+              .filter((line) => line.length > 0);
+          }
+          continue;
+        }
+
+        const docType = (Object.keys(typePatterns) as ArchitectDocumentType[]).find(
+          (t) => choice === `Configure ${typeLabels[t]} (${config.documents.filter((d) => d.type === t).length} selected)`,
+        );
+        if (!docType) continue;
+
+        const suggestions = documentsByType[docType] ?? [];
+        const current = config.documents.filter((d) => d.type === docType).map((d) => d.path);
+        const done = await editArchitectDocumentType(ctx, docType, suggestions, current, excludedPaths);
+        if (done === null) continue;
+
         config.documents = config.documents.filter((d) => d.type !== docType);
         for (const p of done) {
           config.documents.push({ type: docType, path: p });
-        }
-      }
-
-      // Skill level.
-      const skillLevel = await ctx.ui.select("Select team skill level", [
-        "beginner",
-        "intermediate",
-        "advanced",
-      ]);
-      if (skillLevel && isArchitectSkillLevel(skillLevel)) {
-        config.skillLevel = skillLevel;
-      }
-
-      // Free-form requirements.
-      const addFreeForm = await ctx.ui.confirm(
-        "Free-form requirements",
-        "Add free-form requirements that are not in any document?",
-      );
-      if (addFreeForm) {
-        const freeForm = await ctx.ui.editor(
-          "Enter free-form requirements (one per line)",
-          config.freeFormRequirements.join("\n"),
-        );
-        if (freeForm !== undefined) {
-          config.freeFormRequirements = freeForm
-            .split("\n")
-            .map((line) => line.trim())
-            .filter((line) => line.length > 0);
         }
       }
 
@@ -1335,81 +1368,62 @@ async function editArchitectDocumentType(
   docType: ArchitectDocumentType,
   suggestions: string[],
   current: string[],
+  excludedPaths: string[],
 ): Promise<string[] | null> {
   let selected = [...current];
+  let filterQuery = "";
 
   while (true) {
-    const items: ListEditorItem[] = [];
-
-    for (const path of suggestions) {
-      if (selected.includes(path)) continue;
-      items.push({
-        id: `suggest:${path}`,
-        kind: "suggestion",
-        label: `⬜ Suggest: ${path}`,
-        value: path,
-      });
-    }
-
-    items.push({
-      id: "custom:add",
-      kind: "action",
-      label: "➕ Add custom path",
-      value: "custom:add",
+    const action = await runListEditor(ctx, {
+      title: `${docType.toUpperCase()} inputs (${selected.length} selected)`,
+      items: buildArchitectDocumentItems(suggestions, selected),
+      filterQuery,
+      enableFilter: true,
+      customActions: [{ id: "add-custom", label: "Add custom path" }],
+      pageSize: SUGGESTION_PAGE_SIZE,
     });
 
-    for (const path of selected) {
-      items.push({
-        id: `selected:${path}`,
-        kind: "selected",
-        label: `✅ Remove: ${path}`,
-        value: path,
-      });
-    }
-
-    items.push({
-      id: "done",
-      kind: "action",
-      label: "✓ Done",
-      value: "done",
-    });
-
-    items.push({
-      id: "cancel",
-      kind: "action",
-      label: "✗ Cancel",
-      value: "cancel",
-    });
-
-    const choice = await ctx.ui.select(`Configure ${docType.toUpperCase()} inputs`, items.map((i) => i.label));
-    if (!choice) return null;
-
-    if (choice === "✓ Done") {
-      return selected;
-    }
-    if (choice === "✗ Cancel") {
-      return null;
-    }
-    if (choice === "➕ Add custom path") {
-      const custom = await ctx.ui.input(`Enter custom ${docType.toUpperCase()} path`);
-      if (custom && custom.trim().length > 0 && !selected.includes(custom.trim())) {
-        selected.push(custom.trim());
+    switch (action.kind) {
+      case "back":
+        return current;
+      case "done":
+        return action.paths;
+      case "filter":
+        selected = action.paths;
+        filterQuery = action.query;
+        break;
+      case "custom": {
+        selected = action.paths;
+        const picked = await browsePath(ctx, ctx.cwd, "both", excludedPaths);
+        if (picked && !selected.includes(picked)) {
+          selected.push(normalizePath(picked));
+        }
+        break;
       }
-      continue;
-    }
-
-    if (choice.startsWith("⬜ Suggest:")) {
-      const path = choice.replace("⬜ Suggest: ", "").trim();
-      if (!selected.includes(path)) selected.push(path);
-      continue;
-    }
-
-    if (choice.startsWith("✅ Remove:")) {
-      const path = choice.replace("✅ Remove: ", "").trim();
-      selected = selected.filter((p) => p !== path);
-      continue;
     }
   }
+}
+
+function buildArchitectDocumentItems(suggestions: string[], current: string[]): ListEditorItem[] {
+  const items: ListEditorItem[] = [];
+  for (const p of suggestions) {
+    if (current.includes(p)) continue;
+    items.push({
+      id: `suggest:${p}`,
+      kind: "suggestion",
+      label: `⬜ Suggest: ${p}`,
+      value: p,
+    });
+  }
+  for (const p of current) {
+    items.push({
+      id: `selected:${p}`,
+      kind: "selected",
+      label: `✅ Remove: ${p}`,
+      value: p,
+    });
+  }
+  return items;
 }
 
 export function registerArchitectCommand(pi: ExtensionAPI) {

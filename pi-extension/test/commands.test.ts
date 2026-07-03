@@ -20,7 +20,10 @@ import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-age
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig, loadFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig, loadAgentsFilesConfig } from "../src/agents-files-config.js";
-import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
+import {
+  loadArchitectInputsConfig,
+  saveArchitectInputsConfig,
+} from "../src/architect-inputs-config.js";
 import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -32,6 +35,8 @@ describe("commands", () => {
   let selectIndex: number;
   let inputs: string[];
   let inputIndex: number;
+  let editorValues: string[];
+  let editorIndex: number;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-cmd-test-"));
@@ -42,6 +47,8 @@ describe("commands", () => {
     selectIndex = 0;
     inputs = [];
     inputIndex = 0;
+    editorValues = [];
+    editorIndex = 0;
     writeDefaultAgentConfig(tmpDir);
     writeDefaultFilesConfig(tmpDir);
     writeDefaultAgentsFilesConfig(tmpDir);
@@ -56,9 +63,10 @@ describe("commands", () => {
         },
         confirm: async (_title: string, _message: string) => true,
         input: async () => inputs[inputIndex++] ?? "",
+        editor: async (_title: string, _value: string) => editorValues[editorIndex++] ?? "",
         select: async (_title: string, options: string[]) => {
-          const choice = selectChoices[selectIndex++] ?? options[0];
-          return choice;
+          if (selectIndex >= selectChoices.length) return options[0];
+          return selectChoices[selectIndex++];
         },
       },
     } as unknown as ExtensionContext;
@@ -961,13 +969,69 @@ describe("commands", () => {
     assert.ok(sentMessages.some((m) => m.includes("Architecture setup")));
   });
 
-  it("registerArchitectInputsCommands cancels when user selects cancel", async () => {
+  it("registerArchitectInputsCommands cancels when main menu is dismissed", async () => {
     registerArchitectInputsCommands(makeApi());
     assert.ok(commandHandlers["orchestra-configure-architect-inputs"]);
 
-    selectChoices.push("✗ Cancel");
+    selectChoices.push(undefined as unknown as string);
     await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
     assert.ok(notifications.some((n) => n.message.includes("Configuration cancelled")));
+  });
+
+  it("orchestra-configure-architect-inputs saves selected suggestions", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+
+    registerArchitectInputsCommands(makeApi());
+    selectChoices.push(
+      "Configure PRD (0 selected)",
+      "⬜ Suggest: docs/PRD.md",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    const saved = loadArchitectInputsConfig(tmpDir);
+    assert.ok(saved);
+    assert.ok(saved?.documents.some((d) => d.type === "prd" && d.path === "docs/PRD.md"));
+  });
+
+  it("orchestra-configure-architect-inputs adds custom path via browser", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+
+    registerArchitectInputsCommands(makeApi());
+    selectChoices.push(
+      "Configure PRD (0 selected)",
+      "Add custom path",
+      "📂 docs/",
+      "📄 PRD.md",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    const saved = loadArchitectInputsConfig(tmpDir);
+    assert.ok(saved?.documents.some((d) => d.type === "prd" && d.path === "docs/PRD.md"));
+  });
+
+  it("orchestra-configure-architect-inputs saves skill level", async () => {
+    registerArchitectInputsCommands(makeApi());
+    selectChoices.push("Skill level: intermediate", "beginner", "Finish");
+
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    const saved = loadArchitectInputsConfig(tmpDir);
+    assert.strictEqual(saved?.skillLevel, "beginner");
+  });
+
+  it("orchestra-configure-architect-inputs saves free-form requirements", async () => {
+    registerArchitectInputsCommands(makeApi());
+    editorValues.push("Keep it simple");
+    selectChoices.push("Free-form requirements (0)", "Finish");
+
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    const saved = loadArchitectInputsConfig(tmpDir);
+    assert.deepStrictEqual(saved?.freeFormRequirements, ["Keep it simple"]);
   });
 
   it("registerArchitectCommand warns when no architect inputs configured", async () => {
