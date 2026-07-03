@@ -20,7 +20,8 @@
       "skills/orchestra-plan",
       "skills/orchestra-implement",
       "skills/orchestra-document",
-      "skills/orchestra-deliver"
+      "skills/orchestra-deliver",
+      "skills/orchestra-generate-architect"
     ]
   },
   "peerDependencies": {

@@ -3,6 +3,8 @@ import { formatStageStatus } from "./constants.js";
 import {
   registerAgentCommands,
   registerAgentsFilesCommands,
+  registerArchitectCommand,
+  registerArchitectInputsCommands,
   registerCommands,
   registerDoctorCommand,
   registerFilesCommands,
@@ -20,6 +22,8 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
   registerFilesCommands(pi);
   registerAgentsFilesCommands(pi);
   registerDoctorCommand(pi);
+  registerArchitectInputsCommands(pi);
+  registerArchitectCommand(pi);
 
   // Inject orchestra status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {

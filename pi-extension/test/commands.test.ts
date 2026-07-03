@@ -9,6 +9,9 @@ import {
   registerAgentCommands,
   registerFilesCommands,
   registerAgentsFilesCommands,
+  registerDoctorCommand,
+  registerArchitectInputsCommands,
+  registerArchitectCommand,
 } from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
 import type { OrchestraState } from "../src/state.js";
@@ -17,6 +20,7 @@ import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-age
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig, loadFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig, loadAgentsFilesConfig } from "../src/agents-files-config.js";
+import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -947,5 +951,44 @@ describe("commands", () => {
     await commandHandlers["orchestra-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, []);
+  });
+
+  it("registerDoctorCommand registers /orchestra-doctor", async () => {
+    registerDoctorCommand(makeApi());
+    assert.ok(commandHandlers["orchestra-doctor"]);
+
+    await commandHandlers["orchestra-doctor"]("", makeCtx());
+    assert.ok(sentMessages.some((m) => m.includes("Architecture setup")));
+  });
+
+  it("registerArchitectInputsCommands cancels when user selects cancel", async () => {
+    registerArchitectInputsCommands(makeApi());
+    assert.ok(commandHandlers["orchestra-configure-architect-inputs"]);
+
+    selectChoices.push("✗ Cancel");
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    assert.ok(notifications.some((n) => n.message.includes("Configuration cancelled")));
+  });
+
+  it("registerArchitectCommand warns when no architect inputs configured", async () => {
+    registerArchitectCommand(makeApi());
+    assert.ok(commandHandlers["orchestra-generate-architect"]);
+
+    await commandHandlers["orchestra-generate-architect"]("", makeCtx());
+    assert.ok(notifications.some((n) => n.message.includes("No architect inputs configured")));
+  });
+
+  it("registerArchitectCommand sends prompt when inputs configured", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      freeFormRequirements: ["Keep it simple"],
+      skillLevel: "intermediate",
+    });
+
+    registerArchitectCommand(makeApi());
+    await commandHandlers["orchestra-generate-architect"]("", makeCtx());
+    assert.ok(sentMessages.some((m) => m.includes("<pi-orchestra-generate-architect>")));
+    assert.ok(sentMessages.some((m) => m.includes("docs/PRD.md")));
   });
 });

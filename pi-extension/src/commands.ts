@@ -48,6 +48,50 @@ import {
   startRun,
   type OrchestraState,
 } from "./state.js";
+import {
+  createDefaultArchitectInputsConfig,
+  getSelectedInputPaths,
+  isArchitectSkillLevel,
+  loadArchitectInputsConfig,
+  saveArchitectInputsConfig,
+  type ArchitectDocumentInput,
+  type ArchitectDocumentType,
+  type ArchitectInputsConfig,
+} from "./architect-inputs-config.js";
+import {
+  buildDocumentIngestPrompt,
+  buildIngestBatches,
+  buildMapOutputPath,
+  getArchitectMapDir,
+  loadDocumentManifest,
+  mergeMapOutputs,
+  readMapOutputs,
+  saveDocumentManifest,
+  type DocumentManifest,
+} from "./document-ingest.js";
+import {
+  createEmptyDrivers,
+  findDriverGaps,
+  loadDrivers,
+  saveDrivers,
+  type ArchitecturalDrivers,
+  type DriverGap,
+} from "./driver-extractor.js";
+import {
+  buildArchitectPrompt,
+  discoverArchitectureLibrary,
+  generateAgentFiles,
+  generateSkillFiles,
+  loadArchitectProfile,
+  loadArchitectReport,
+  saveArchitectProfile,
+  saveArchitectReport,
+  selectArchitecture,
+  slugify,
+  type ArchitectProfile,
+  type ArchitectReport,
+  type ArchitectureLibraryEntry,
+} from "./architect.js";
 
 const NEXT_COMMAND: Record<string, string> = {
   planning: "/orchestra-approve",
@@ -1183,4 +1227,266 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
       pi.sendUserMessage(text);
     },
   });
+}
+
+export function registerArchitectInputsCommands(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-configure-architect-inputs", {
+    description: "Select documents the architect agent reads",
+    handler: async (_args, ctx) => {
+      const existing = loadArchitectInputsConfig(ctx.cwd);
+      const config: ArchitectInputsConfig = existing ?? createDefaultArchitectInputsConfig();
+
+      const discovered = discoverProjectFiles(ctx.cwd, [
+        ".git/",
+        "node_modules/",
+        "__pycache__/",
+        ".venv/",
+        "venv/",
+        "dist/",
+        "build/",
+        "target/",
+        ".pi/",
+        ".idea/",
+        ".vscode/",
+      ]);
+
+      const candidates = [
+        ...discovered.documentFiles,
+        ...discovered.documentFolders.map((f) => f.path),
+        ...discovered.testFiles,
+        ...discovered.testFolders.map((f) => f.path),
+        "README.md",
+      ];
+
+      // Build type-aware suggestions.
+      const typePatterns: Record<ArchitectDocumentType, RegExp> = {
+        prd: /prd|product.requirement|requirements/i,
+        mrd: /mrd|market.requirement/i,
+        brd: /brd|business.requirement/i,
+        rtm: /rtm|traceability|trace/i,
+        nfr: /nfr|non.functional|non_functional/i,
+        "test-plan": /test.plan|test.strategy|testing/i,
+        adr: /adr|architecture.decision/i,
+        readme: /readme/i,
+        code: /src\/|app\/|lib\//i,
+      };
+
+      const documentsByType: Partial<Record<ArchitectDocumentType, string[]>> = {};
+      for (const docType of Object.keys(typePatterns) as ArchitectDocumentType[]) {
+        documentsByType[docType] = candidates.filter((p) => typePatterns[docType].test(p));
+      }
+
+      for (const docType of Object.keys(typePatterns) as ArchitectDocumentType[]) {
+        const suggestions = documentsByType[docType] ?? [];
+        const current = config.documents.filter((d) => d.type === docType).map((d) => d.path);
+
+        const done = await editArchitectDocumentType(ctx, docType, suggestions, current);
+        if (done === null) {
+          ctx.ui.notify("Configuration cancelled.", "warning");
+          return;
+        }
+
+        // Replace documents of this type.
+        config.documents = config.documents.filter((d) => d.type !== docType);
+        for (const p of done) {
+          config.documents.push({ type: docType, path: p });
+        }
+      }
+
+      // Skill level.
+      const skillLevel = await ctx.ui.select("Select team skill level", [
+        "beginner",
+        "intermediate",
+        "advanced",
+      ]);
+      if (skillLevel && isArchitectSkillLevel(skillLevel)) {
+        config.skillLevel = skillLevel;
+      }
+
+      // Free-form requirements.
+      const addFreeForm = await ctx.ui.confirm(
+        "Free-form requirements",
+        "Add free-form requirements that are not in any document?",
+      );
+      if (addFreeForm) {
+        const freeForm = await ctx.ui.editor(
+          "Enter free-form requirements (one per line)",
+          config.freeFormRequirements.join("\n"),
+        );
+        if (freeForm !== undefined) {
+          config.freeFormRequirements = freeForm
+            .split("\n")
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0);
+        }
+      }
+
+      saveArchitectInputsConfig(ctx.cwd, config);
+      ctx.ui.notify(
+        `Architect inputs saved. ${config.documents.length} documents, skill level: ${config.skillLevel}.`,
+        "info",
+      );
+    },
+  });
+}
+
+async function editArchitectDocumentType(
+  ctx: ExtensionContext,
+  docType: ArchitectDocumentType,
+  suggestions: string[],
+  current: string[],
+): Promise<string[] | null> {
+  let selected = [...current];
+
+  while (true) {
+    const items: ListEditorItem[] = [];
+
+    for (const path of suggestions) {
+      if (selected.includes(path)) continue;
+      items.push({
+        id: `suggest:${path}`,
+        kind: "suggestion",
+        label: `⬜ Suggest: ${path}`,
+        value: path,
+      });
+    }
+
+    items.push({
+      id: "custom:add",
+      kind: "action",
+      label: "➕ Add custom path",
+      value: "custom:add",
+    });
+
+    for (const path of selected) {
+      items.push({
+        id: `selected:${path}`,
+        kind: "selected",
+        label: `✅ Remove: ${path}`,
+        value: path,
+      });
+    }
+
+    items.push({
+      id: "done",
+      kind: "action",
+      label: "✓ Done",
+      value: "done",
+    });
+
+    items.push({
+      id: "cancel",
+      kind: "action",
+      label: "✗ Cancel",
+      value: "cancel",
+    });
+
+    const choice = await ctx.ui.select(`Configure ${docType.toUpperCase()} inputs`, items.map((i) => i.label));
+    if (!choice) return null;
+
+    if (choice === "✓ Done") {
+      return selected;
+    }
+    if (choice === "✗ Cancel") {
+      return null;
+    }
+    if (choice === "➕ Add custom path") {
+      const custom = await ctx.ui.input(`Enter custom ${docType.toUpperCase()} path`);
+      if (custom && custom.trim().length > 0 && !selected.includes(custom.trim())) {
+        selected.push(custom.trim());
+      }
+      continue;
+    }
+
+    if (choice.startsWith("⬜ Suggest:")) {
+      const path = choice.replace("⬜ Suggest: ", "").trim();
+      if (!selected.includes(path)) selected.push(path);
+      continue;
+    }
+
+    if (choice.startsWith("✅ Remove:")) {
+      const path = choice.replace("✅ Remove: ", "").trim();
+      selected = selected.filter((p) => p !== path);
+      continue;
+    }
+  }
+}
+
+export function registerArchitectCommand(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-generate-architect", {
+    description: "Generate a project-specific architecture agent and skills",
+    handler: async (_args, ctx) => {
+      const inputsConfig = loadArchitectInputsConfig(ctx.cwd);
+      if (!inputsConfig) {
+        ctx.ui.notify(
+          "No architect inputs configured. Run /orchestra-configure-architect-inputs first.",
+          "warning",
+        );
+        return;
+      }
+
+      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
+
+      const skillPath = path.resolve(ctx.cwd, "skills", "orchestra-generate-architect.md");
+      let skill = "";
+      try {
+        skill = fs.readFileSync(skillPath, "utf8").replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+      } catch {
+        skill = defaultArchitectSkill();
+      }
+
+      const selectedPaths = getSelectedInputPaths(inputsConfig);
+      const drivers = loadDrivers(ctx.cwd);
+
+      const prompt = [
+        `<pi-orchestra-generate-architect>`,
+        ``,
+        `Generate a project-specific architecture agent and skills.`,
+        ``,
+        `Configured input documents:`,
+        ...selectedPaths.map((p) => `  - ${p}`),
+        ``,
+        `Free-form requirements:`,
+        ...inputsConfig.freeFormRequirements.map((r) => `  - ${r}`),
+        ``,
+        `Skill level: ${inputsConfig.skillLevel}`,
+        ``,
+        drivers
+          ? `Existing architectural drivers are available at .pi/orchestra/architectural-drivers.json. Re-run the full flow only if the user asks for it or the inputs changed.`
+          : `No architectural drivers found. Run the full architect flow.`,
+        ``,
+        `Expected artifacts:`,
+        `  - .pi/orchestra/architectural-drivers.json`,
+        `  - .pi/orchestra/architect-profile.json`,
+        `  - .pi/orchestra/architect-report.json`,
+        `  - .pi/agents/<project>-<architecture>-<role>.md`,
+        `  - skills/<project>-<architecture>-<stage>.md`,
+        ``,
+        `</pi-orchestra-generate-architect>`,
+        ``,
+        skill,
+      ].join("\n");
+
+      pi.sendUserMessage(prompt);
+    },
+  });
+}
+
+function defaultArchitectSkill(): string {
+  return [
+    `# Architect Generation`,
+    ``,
+    `Follow the sequence in Doc/architect-sequence.md.`,
+    ``,
+    `1. Read .pi/orchestra/architect-inputs.json.`,
+    `2. For each configured document, spawn an architect-document-ingest subagent to extract architectural drivers. Run up to 4 subagents in parallel.`,
+    `3. Merge all map outputs into .pi/orchestra/architectural-drivers.json.`,
+    `4. Check for missing critical drivers. Use AskUserQuestion to fill gaps.`,
+    `5. Save the updated profile to .pi/orchestra/architect-profile.json.`,
+    `6. Read .pi/architecture-library/ and select the best architecture.`,
+    `7. Write .pi/orchestra/architect-report.json with selectedArchitecture, confidence, missingResources, reasoning, and skillProfile.`,
+    `8. If missingResources is not empty, stop and ask the user whether to search the web for resources.`,
+    `9. Generate project agents in .pi/agents/ and skills in skills/.`,
+    `10. Notify the user of the results.`,
+  ].join("\n");
 }

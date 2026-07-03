@@ -8,6 +8,7 @@ import {
   findNearestProjectAgentsDir,
   getUserAgentsDir,
   parseAgentFile,
+  parseAgentFileFull,
 } from "../src/agent-discovery.js";
 
 describe("agent-discovery", () => {
@@ -168,5 +169,61 @@ describe("agent-discovery", () => {
   it("getUserAgentsDir returns agents subdirectory of getAgentDir", () => {
     const dir = getUserAgentsDir();
     assert.ok(dir.endsWith(path.join("agents")));
+  });
+
+  it("parseAgentFileFull reads all frontmatter fields", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "full-agent.md");
+    fs.writeFileSync(
+      filePath,
+      "---\n" +
+        "name: full-agent\n" +
+        "description: Full agent\n" +
+        "tools: read, write, bash\n" +
+        "skills: skill-a, skill-b\n" +
+        "output: markdown\n" +
+        "thinking: medium\n" +
+        "maxSubagentDepth: 2\n" +
+        "---\n",
+      "utf8",
+    );
+
+    const parsed = parseAgentFileFull(filePath);
+    assert.ok(parsed);
+    assert.strictEqual(parsed?.name, "full-agent");
+    assert.strictEqual(parsed?.description, "Full agent");
+    assert.deepStrictEqual(parsed?.tools, ["read", "write", "bash"]);
+    assert.deepStrictEqual(parsed?.skills, ["skill-a", "skill-b"]);
+    assert.strictEqual(parsed?.output, "markdown");
+    assert.strictEqual(parsed?.thinking, "medium");
+    assert.strictEqual(parsed?.maxSubagentDepth, 2);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFileFull returns undefined when name is missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "bad-agent.md");
+    fs.writeFileSync(filePath, "---\ndescription: No name\n---\n", "utf8");
+
+    const parsed = parseAgentFileFull(filePath);
+    assert.strictEqual(parsed, undefined);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFileFull handles array fields", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "array-agent.md");
+    fs.writeFileSync(
+      filePath,
+      "---\nname: array-agent\ndescription: Array agent\ntools:\n  - read\n  - write\n---\n",
+      "utf8",
+    );
+
+    const parsed = parseAgentFileFull(filePath);
+    assert.deepStrictEqual(parsed?.tools, ["read", "write"]);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

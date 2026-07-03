@@ -157,6 +157,39 @@ Check the current settings:
 /orchestra-agents-files
 ```
 
+## Architecture generation
+
+Pi Orchestra can generate project-specific architecture agents and skills from your requirements documents.
+
+1. **Choose the input documents** the architect should read:
+
+   ```
+   /orchestra-configure-architect-inputs
+   ```
+
+   This command reuses the same file picker as `/orchestra-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, and any other documents that describe the architecture. You can also add free-form requirements and pick a skill level (beginner, intermediate, advanced).
+
+   The selection is saved to `.pi/orchestra/architect-inputs.json`.
+
+2. **Generate the architecture agents and skills**:
+
+   ```
+   /orchestra-generate-architect
+   ```
+
+   This runs a Map-Reduce ingest over the selected documents: up to four subagents read documents in parallel, extract architectural drivers, and a reducer merges them into `.pi/orchestra/architectural-drivers.json`. The main agent then asks clarifying questions for any missing critical drivers, matches the drivers against the architecture library in `.pi/architecture-library/`, selects the best architecture, and writes:
+
+   The architecture library includes common patterns such as monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, Pi's own layered monorepo, and Google Apps Script spreadsheet automation.
+
+   - `.pi/orchestra/architect-profile.json` — the chosen architecture and project profile.
+   - `.pi/orchestra/architect-report.json` — reasoning, confidence, and any missing resources.
+   - `.pi/agents/<project>-<architecture>-<role>.md` — project-specific agents for planner, implementer, reviewer-correctness, reviewer-security, and reviewer-tests.
+   - `skills/<project>-<architecture>-<stage>.md` — project-specific skills for plan, implement, document, and deliver stages.
+
+   If the architecture library lacks a matching pattern, the agent falls back to web search to gather relevant guidance before generating the agents.
+
+   After generation, `/orchestra-doctor` also validates the architecture setup.
+
 ## Artifact layout
 
 ```

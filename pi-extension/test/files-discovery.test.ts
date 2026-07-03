@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { discoverProjectFiles } from "../src/files-discovery.js";
+import { discoverProjectFiles, formatSuggestion, isExcluded, safeReadDir } from "../src/files-discovery.js";
 
 describe("files-discovery", () => {
   it("discovers standard code and document folders", () => {
@@ -124,5 +124,30 @@ describe("files-discovery", () => {
     assert.ok(result.documentFiles.includes("docs/nested/note.md"));
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("safeReadDir returns entries for existing directory", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    fs.writeFileSync(path.join(tmpDir, "a.txt"), "", "utf8");
+
+    const entries = safeReadDir(tmpDir);
+    assert.ok(entries.some((e) => e.name === "a.txt"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("safeReadDir returns empty array for missing directory", () => {
+    const entries = safeReadDir("/definitely/not/a/real/dir");
+    assert.deepStrictEqual(entries, []);
+  });
+
+  it("isExcluded matches exact path or prefix", () => {
+    assert.strictEqual(isExcluded("dist/", ["dist/"]), true);
+    assert.strictEqual(isExcluded("dist/bundle.js", ["dist/"]), true);
+    assert.strictEqual(isExcluded("src/main.ts", ["dist/"]), false);
+  });
+
+  it("formatSuggestion combines label and reason", () => {
+    assert.strictEqual(formatSuggestion("src/", "common code folder"), "src/ (common code folder)");
   });
 });

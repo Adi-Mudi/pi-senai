@@ -15,6 +15,10 @@ import {
   ROLE_LABELS,
   type OrchestraRole,
 } from "./agent-suggestions.js";
+import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
+import { discoverArchitectureLibrary, loadArchitectProfile, loadArchitectReport } from "./architect.js";
+import { loadDrivers } from "./driver-extractor.js";
+import { parseAgentFile } from "./agent-discovery.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 
@@ -123,6 +127,7 @@ export function runOrchestraDiagnostic(cwd: string): DiagnosticReport {
   }
 
   sections.push(checkEnvironment());
+  sections.push(checkArchitectureSetup(cwd));
 
   const summary = sections.reduce(
     (acc, section) => {
@@ -553,6 +558,125 @@ function isPathConflict(a: string, b: string): boolean {
   if (a.endsWith("/") && b.startsWith(a)) return true;
   if (b.endsWith("/") && a.startsWith(b)) return true;
   return false;
+}
+
+function checkArchitectureSetup(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  const library = discoverArchitectureLibrary(cwd);
+  if (library.length === 0) {
+    items.push({
+      status: "warning",
+      message: "Architecture library is empty or missing.",
+      details: ["Create .pi/architecture-library/*.md files with architecture references."],
+    });
+  } else {
+    items.push({
+      status: "ok",
+      message: `Architecture library has ${library.length} entries.`,
+    });
+  }
+
+  const inputsConfig = loadArchitectInputsConfig(cwd);
+  if (!inputsConfig) {
+    items.push({
+      status: "info",
+      message: "No architect inputs configured. Run /orchestra-configure-architect-inputs to set them.",
+    });
+  } else {
+    const missingFiles: string[] = [];
+    for (const doc of inputsConfig.documents) {
+      const fullPath = path.resolve(cwd, doc.path);
+      if (!fs.existsSync(fullPath)) {
+        missingFiles.push(doc.path);
+      }
+    }
+    if (missingFiles.length > 0) {
+      items.push({
+        status: "error",
+        message: `${missingFiles.length} configured architect input documents are missing.`,
+        details: missingFiles,
+      });
+    } else {
+      items.push({
+        status: "ok",
+        message: `Architect inputs configured with ${inputsConfig.documents.length} documents.`,
+      });
+    }
+  }
+
+  const drivers = loadDrivers(cwd);
+  if (!drivers) {
+    items.push({
+      status: "info",
+      message: "No architectural drivers generated yet. Run /orchestra-generate-architect.",
+    });
+  } else {
+    items.push({
+      status: "ok",
+      message: "Architectural drivers file exists.",
+    });
+  }
+
+  const profile = loadArchitectProfile(cwd);
+  if (!profile) {
+    items.push({
+      status: "info",
+      message: "No architect profile generated yet.",
+    });
+  } else {
+    items.push({
+      status: "ok",
+      message: `Architect profile exists: ${profile.projectName} → ${profile.selectedArchitecture}.`,
+    });
+  }
+
+  const report = loadArchitectReport(cwd);
+  if (!report) {
+    items.push({
+      status: "info",
+      message: "No architect report generated yet.",
+    });
+  } else {
+    items.push({
+      status: report.confidence === "high" ? "ok" : "warning",
+      message: `Architect report exists with ${report.confidence} confidence for ${report.selectedArchitecture}.`,
+    });
+  }
+
+  if (profile) {
+    const agentsDir = path.join(cwd, ".pi", "agents");
+    const expectedAgents = 5;
+    let foundAgents = 0;
+    let malformedAgents = 0;
+    if (fs.existsSync(agentsDir)) {
+      const entries = fs.readdirSync(agentsDir);
+      for (const entry of entries) {
+        if (!entry.endsWith(".md")) continue;
+        if (!entry.includes(`${profile.projectSlug}-${profile.selectedArchitecture}`)) continue;
+        const filePath = path.join(agentsDir, entry);
+        const parsed = parseAgentFile(filePath);
+        if (parsed) {
+          foundAgents++;
+        } else {
+          malformedAgents++;
+        }
+      }
+    }
+    if (foundAgents === 0) {
+      items.push({
+        status: "warning",
+        message: "No generated architecture agents found in .pi/agents/.",
+      });
+    } else {
+      items.push({
+        status: malformedAgents > 0 ? "warning" : "ok",
+        message: `Found ${foundAgents} generated architecture agents${malformedAgents > 0 ? `, ${malformedAgents} malformed` : ""}.`,
+      });
+    }
+  }
+
+  return { title: "Architecture setup", items };
 }
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {
