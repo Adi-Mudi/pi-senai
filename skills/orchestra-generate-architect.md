@@ -46,7 +46,7 @@ Output JSON format:
 
 Write each map output to:
 ```
-.pi/orchestra/architect-map/<sanitized-path>.json
+.IDE_Plans/architect/architect-map/<sanitized-path>.json
 ```
 
 Use `sanitizeDocumentPath` from the extension helpers.
@@ -57,16 +57,17 @@ Run up to **4** ingest subagents in parallel. If there are more than 4 documents
 
 ### Wait and merge
 
-Wait for all map subagents to complete. Then merge their outputs into `.pi/orchestra/architectural-drivers.json`.
+Wait for all map subagents to complete. Then call the `orchestra_merge_architect_drivers` tool to merge the map outputs into `.IDE_Plans/architect/architectural-drivers.json`.
 
-The merge must:
-- Combine all driver categories.
-- Remove duplicate IDs.
-- Keep unique uncertainties.
+Do not write the merged file by hand. The tool:
+- Combines all driver categories.
+- Removes duplicate IDs.
+- Keeps unique uncertainties.
+- Cleans up stale intermediate files from `.pi/orchestra/`.
 
 ## Step 3 — Gap analysis
 
-Load `.pi/orchestra/architectural-drivers.json`.
+Load `.IDE_Plans/architect/architectural-drivers.json`.
 
 Check for missing critical drivers:
 - Functional requirements
@@ -86,13 +87,13 @@ After receiving answers, append them to the drivers file and save.
 
 ## Step 4 — Save profile
 
-Create `.pi/orchestra/architect-profile.json`:
+Create `.IDE_Plans/architect/architect-profile.json`:
 
 ```json
 {
   "projectName": "<human-readable project name>",
   "projectSlug": "<slug>",
-  "selectedArchitecture": "<name>",
+  "selectedArchitecture": "<architecture-id>",
   "drivers": { ... },
   "additionalConstraints": [ ... ]
 }
@@ -121,11 +122,11 @@ Spawn a **doctor-architect** subagent with:
 - The architecture library entry.
 - The additional constraints from the user.
 
-The subagent writes `.pi/orchestra/architect-report.json`:
+The subagent writes `.IDE_Plans/architect/architect-report.json`:
 
 ```json
 {
-  "selectedArchitecture": "<name>",
+  "selectedArchitecture": "<architecture-id>",
   "confidence": "high|medium|low",
   "missingResources": [],
   "reasoning": "...",
@@ -160,7 +161,7 @@ The subagent writes `.pi/orchestra/architect-report.json`:
 
 ## Step 7 — Missing resource fallback
 
-Read `.pi/orchestra/architect-report.json`.
+Read `.IDE_Plans/architect/architect-report.json`.
 
 If `missingResources` is not empty:
 1. Use `SearchWeb` to find official documentation for each missing resource.
@@ -173,7 +174,7 @@ If confidence is `low`, ask the user for more context before generating agents.
 
 ## Step 8 — Feasibility check
 
-Read `.pi/orchestra/architect-report.json`.
+Read `.IDE_Plans/architect/architect-report.json`.
 
 - If `feasibility` is `not-feasible`: stop and tell the user the architecture is not feasible. Summarize `feasibilityReasoning` and ask whether to reconfigure inputs.
 - If `feasibility` is `risky`: show `feasibilityReasoning` and use **AskUserQuestion** to ask if the user wants to continue anyway.
@@ -183,13 +184,13 @@ Only proceed to agent/skill generation after the feasibility check passes.
 
 ## Step 9 — Generate architecture documents
 
-Read `.pi/orchestra/architect-report.json`.
+Read `.IDE_Plans/architect/architect-report.json`.
 
 Generate the living architecture documents:
 
 ```
-.pi/orchestra/architecture.md
-.pi/orchestra/adrs/0001-<decision-title>.md
+.IDE_Plans/architect/architecture.md
+.IDE_Plans/architect/adrs/0001-<decision-title>.md
 ```
 
 `architecture.md` must include:
@@ -208,23 +209,25 @@ Generate the living architecture documents:
 
 ## Step 10 — Generate agents and skills
 
+Call the `orchestra_finalize_architecture` tool. It reads the profile and report, selects the architecture from the library by id, and generates the exact files below.
+
 Generate project-specific agents in `.pi/agents/`:
 
 ```
-.pi/agents/<project-slug>-<architecture>-planner.md
-.pi/agents/<project-slug>-<architecture>-implementer.md
-.pi/agents/<project-slug>-<architecture>-reviewer-correctness.md
-.pi/agents/<project-slug>-<architecture>-reviewer-security.md
-.pi/agents/<project-slug>-<architecture>-reviewer-tests.md
+.pi/agents/<project-slug>-<architecture-id>-planner.md
+.pi/agents/<project-slug>-<architecture-id>-implementer.md
+.pi/agents/<project-slug>-<architecture-id>-reviewer-correctness.md
+.pi/agents/<project-slug>-<architecture-id>-reviewer-security.md
+.pi/agents/<project-slug>-<architecture-id>-reviewer-tests.md
 ```
 
 Generate project-specific skills in `.pi/skills/`:
 
 ```
-.pi/skills/<project-slug>-<architecture>-plan/SKILL.md
-.pi/skills/<project-slug>-<architecture>-implement/SKILL.md
-.pi/skills/<project-slug>-<architecture>-document/SKILL.md
-.pi/skills/<project-slug>-<architecture>-deliver/SKILL.md
+.pi/skills/<project-slug>-<architecture-id>-plan/SKILL.md
+.pi/skills/<project-slug>-<architecture-id>-implement/SKILL.md
+.pi/skills/<project-slug>-<architecture-id>-document/SKILL.md
+.pi/skills/<project-slug>-<architecture-id>-deliver/SKILL.md
 ```
 
 Agent frontmatter must include:
@@ -238,7 +241,7 @@ Agent body must include:
 - Key architecture rules from the library.
 - Project context from drivers.
 - Forbidden patterns.
-- A reference to read `.pi/orchestra/architecture.md` and relevant ADRs before acting.
+- A reference to read `.IDE_Plans/architect/architecture.md` and relevant ADRs before acting.
 
 ## Step 11 — Notify user
 
@@ -248,12 +251,12 @@ End with a concise summary:
 Architecture generated: <architecture>
 Confidence: <high|medium|low>
 Generated agents:
-  - <project>-<architecture>-planner
-  - <project>-<architecture>-implementer
+  - <project>-<architecture-id>-planner
+  - <project>-<architecture-id>-implementer
   ...
 Generated skills:
-  - <project>-<architecture>-plan
-  - <project>-<architecture>-implement
+  - <project>-<architecture-id>-plan
+  - <project>-<architecture-id>-implement
   ...
 
 Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.

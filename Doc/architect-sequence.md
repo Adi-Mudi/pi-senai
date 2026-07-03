@@ -164,7 +164,7 @@ Output format:
 
 Each map subagent writes to:
 ```
-.pi/orchestra/architect-map/<doc-id>.json
+.IDE_Plans/architect/architect-map/<doc-id>.json
 ```
 
 ### Reduce phase
@@ -178,7 +178,7 @@ description: Merges per-document architectural drivers into one file
 tools: read, write
 ---
 
-Read all files in .pi/orchestra/architect-map/.
+Read all files in .IDE_Plans/architect/architect-map/.
 Merge them into one architectural-drivers.json file.
 Remove duplicates.
 Resolve conflicts by keeping the most specific statement.
@@ -187,8 +187,10 @@ List all uncertainties.
 
 Output:
 ```
-.pi/orchestra/architectural-drivers.json
+.IDE_Plans/architect/architectural-drivers.json
 ```
+
+> **Implementation note:** The extension provides the `orchestra_merge_architect_drivers` tool. The agent should call it instead of writing the merged file by hand. This guarantees the correct schema and cleans up stale intermediate files from `.pi/orchestra/`.
 
 ### Output format after reduce
 
@@ -240,7 +242,7 @@ Example questions:
 
 Answers are merged into the driver file and saved as:
 ```
-.pi/orchestra/architect-profile.json
+.IDE_Plans/architect/architect-profile.json
 ```
 
 ---
@@ -295,7 +297,7 @@ The Doctor Architect subagent receives:
 
 It writes a report to:
 ```
-.pi/orchestra/architect-report.json
+.IDE_Plans/architect/architect-report.json
 ```
 
 ### Report format
@@ -386,13 +388,15 @@ After the missing-resources loop completes, the main agent checks the report's `
 After the report is accepted, the main agent generates the living architecture documents:
 
 ```
-.pi/orchestra/architecture.md
-.pi/orchestra/adrs/0001-<decision-title>.md
+.IDE_Plans/architect/architecture.md
+.IDE_Plans/architect/adrs/0001-<decision-title>.md
 ```
 
 `architecture.md` contains the full software architecture description: system overview, components, interfaces, data flow, data model, deployment, technology stack, development order, atomic functions, quality attribute mapping, constraints, and links to ADRs.
 
 ## Step 4 — Generate project agents and skills
+
+> **Implementation note:** The extension provides the `orchestra_finalize_architecture` tool. The agent should call it after the report is accepted. The tool reads the profile and report, selects the architecture from the library by id, and generates the docs, agents, and skills with the exact names below.
 
 ### Naming convention
 
@@ -405,25 +409,25 @@ Examples:
 - `inventory-modular-monolith-implementer`
 - `inventory-modular-monolith-reviewer-correctness`
 
-The generated agents and skills instruct subagents to read `.pi/orchestra/architecture.md` and the relevant ADRs before acting.
+The generated agents and skills instruct subagents to read `.IDE_Plans/architect/architecture.md` and the relevant ADRs before acting.
 
 ### Generated files
 
 Agents:
 ```
-.pi/agents/<project>-<architecture>-planner.md
-.pi/agents/<project>-<architecture>-implementer.md
-.pi/agents/<project>-<architecture>-reviewer-correctness.md
-.pi/agents/<project>-<architecture>-reviewer-security.md
-.pi/agents/<project>-<architecture>-reviewer-tests.md
+.pi/agents/<project>-<architecture-id>-planner.md
+.pi/agents/<project>-<architecture-id>-implementer.md
+.pi/agents/<project>-<architecture-id>-reviewer-correctness.md
+.pi/agents/<project>-<architecture-id>-reviewer-security.md
+.pi/agents/<project>-<architecture-id>-reviewer-tests.md
 ```
 
 Skills:
 ```
-.pi/skills/<project>-<architecture>-plan/SKILL.md
-.pi/skills/<project>-<architecture>-implement/SKILL.md
-.pi/skills/<project>-<architecture>-document/SKILL.md
-.pi/skills/<project>-<architecture>-deliver/SKILL.md
+.pi/skills/<project>-<architecture-id>-plan/SKILL.md
+.pi/skills/<project>-<architecture-id>-implement/SKILL.md
+.pi/skills/<project>-<architecture-id>-document/SKILL.md
+.pi/skills/<project>-<architecture-id>-deliver/SKILL.md
 ```
 
 ### Agent frontmatter
@@ -458,7 +462,7 @@ Checks include:
 - Architectural drivers file is valid JSON.
 - Architect report is valid JSON.
 - `architecture.md` exists in `.pi/orchestra/`.
-- ADRs in `.pi/orchestra/adrs/` match the report.
+- ADRs in `.IDE_Plans/architect/adrs/` match the report.
 - Generated agent files have valid frontmatter.
 - Generated skill files exist.
 
@@ -500,13 +504,13 @@ Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
     <doc-id>.json
 
 .pi/agents/
-  <project>-<architecture>-planner.md
-  <project>-<architecture>-implementer.md
+  <project>-<architecture-id>-planner.md
+  <project>-<architecture-id>-implementer.md
   ...
 
 .pi/skills/
-  <project>-<architecture>-plan/SKILL.md
-  <project>-<architecture>-implement/SKILL.md
+  <project>-<architecture-id>-plan/SKILL.md
+  <project>-<architecture-id>-implement/SKILL.md
   ...
 
 .pi/architecture-library/

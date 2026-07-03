@@ -10,6 +10,7 @@ import {
   registerFilesCommands,
 } from "./commands.js";
 import { loadState } from "./state.js";
+import { registerArchitectTools } from "./architect-tools.js";
 
 export default function piOrchestraExtension(pi: ExtensionAPI) {
   // Do not load inside subagent processes to avoid recursive orchestration.
@@ -24,6 +25,7 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
   registerDoctorCommand(pi);
   registerArchitectInputsCommands(pi);
   registerArchitectCommand(pi);
+  registerArchitectTools(pi);
 
   // Inject orchestra status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {

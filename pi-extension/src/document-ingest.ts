@@ -11,8 +11,8 @@ import type {
   QualityAttributeItem,
   ConstraintItem,
 } from "./driver-extractor.js";
+import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
 
-export const ARCHITECT_MAP_DIR = "architect-map";
 export const DOCUMENT_MANIFEST_FILE = "architect-documents.json";
 
 export interface DocumentManifest {
@@ -32,12 +32,8 @@ export interface ArchitectMapOutput {
   uncertainties: string[];
 }
 
-export function getArchitectMapDir(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", ARCHITECT_MAP_DIR);
-}
-
 export function getDocumentManifestPath(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", DOCUMENT_MANIFEST_FILE);
+  return path.join(getArchitectStateDir(cwd), DOCUMENT_MANIFEST_FILE);
 }
 
 export function buildMapOutputPath(cwd: string, docPath: string): string {

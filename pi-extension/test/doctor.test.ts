@@ -7,6 +7,9 @@ import { runOrchestraDiagnostic, formatDiagnosticReport } from "../src/doctor.js
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
+import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
+import { saveArchitectProfile, saveArchitectReport } from "../src/architect.js";
+import { createEmptyDrivers } from "../src/driver-extractor.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -305,3 +308,70 @@ describe("doctor", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+  it("reports missing generated architecture agents and skills as errors", () => {
+    const tmpDir = makeTmpDir("doctor-arch-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    // Create architecture inputs and profile so doctor reaches the agent/skill checks.
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "readme", path: "README.md" }],
+      additionalConstraints: [],
+    });
+
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const archSection = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(archSection);
+
+    const missingAgents = archSection.items.find((i) => i.message.includes("expected architecture agents are missing"));
+    const missingSkills = archSection.items.find((i) => i.message.includes("expected architecture skills are missing"));
+    assert.ok(missingAgents, "doctor should report missing agents as errors");
+    assert.ok(missingSkills, "doctor should report missing skills as errors");
+    assert.strictEqual(missingAgents.status, "error");
+    assert.strictEqual(missingSkills.status, "error");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });

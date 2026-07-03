@@ -3,11 +3,13 @@ import * as path from "node:path";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
 import { getDriversPath, type ArchitecturalDrivers } from "./driver-extractor.js";
+import { getArchitectStateDir } from "./constants.js";
 
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
 export const ARCHITECT_REPORT_FILE = "architect-report.json";
 
 export interface ArchitectureLibraryEntry {
+  id: string;
   name: string;
   filePath: string;
   domain: string[];
@@ -87,11 +89,11 @@ export const ARCHITECT_ROLES = [
 export const ARCHITECT_STAGES = ["plan", "implement", "document", "deliver"] as const;
 
 export function getArchitectProfilePath(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", ARCHITECT_PROFILE_FILE);
+  return path.join(getArchitectStateDir(cwd), ARCHITECT_PROFILE_FILE);
 }
 
 export function getArchitectReportPath(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", ARCHITECT_REPORT_FILE);
+  return path.join(getArchitectStateDir(cwd), ARCHITECT_REPORT_FILE);
 }
 
 export function loadArchitectProfile(cwd: string): ArchitectProfile | null {
@@ -133,26 +135,67 @@ export function discoverArchitectureLibrary(cwd: string): ArchitectureLibraryEnt
   if (!fs.existsSync(libraryDir)) return [];
 
   const entries: ArchitectureLibraryEntry[] = [];
-  const files = fs.readdirSync(libraryDir).filter((f) => f.endsWith(".md"));
+  const files = fs.readdirSync(libraryDir);
 
   for (const file of files) {
     const filePath = path.join(libraryDir, file);
     try {
-      const content = fs.readFileSync(filePath, "utf8");
-      const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
-      const name = String(frontmatter.name ?? "").trim();
-      if (!name) continue;
+      if (file.endsWith(".md")) {
+        const content = fs.readFileSync(filePath, "utf8");
+        const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
+        const name = String(frontmatter.name ?? "").trim();
+        if (!name) continue;
+        const id = String(frontmatter.id ?? "").trim() || slugify(name);
 
-      entries.push({
-        name,
-        filePath,
-        domain: parseStringArray(frontmatter.domain) ?? [],
-        teamSize: String(frontmatter["team-size"] ?? ""),
-        complexity: String(frontmatter.complexity ?? ""),
-        bestForDrivers: parseStringArray(frontmatter["best-for-drivers"]) ?? [],
-        notForDrivers: parseStringArray(frontmatter["not-for-drivers"]) ?? [],
-        content,
-      });
+        entries.push({
+          id,
+          name,
+          filePath,
+          domain: parseStringArray(frontmatter.domain) ?? [],
+          teamSize: String(frontmatter["team-size"] ?? ""),
+          complexity: String(frontmatter.complexity ?? ""),
+          bestForDrivers: parseStringArray(frontmatter["best-for-drivers"]) ?? [],
+          notForDrivers: parseStringArray(frontmatter["not-for-drivers"]) ?? [],
+          content,
+        });
+      } else if (file.endsWith(".json")) {
+        const raw = fs.readFileSync(filePath, "utf8");
+        const parsed = JSON.parse(raw) as unknown;
+        const items = Array.isArray(parsed) ? parsed : [parsed];
+        for (const item of items) {
+          if (!item || typeof item !== "object") continue;
+          const name = String((item as any).name ?? "").trim();
+          if (!name) continue;
+          const id = String((item as any).id ?? "").trim() || slugify(name);
+          const contentParts: string[] = [];
+          if ((item as any).description) contentParts.push(String((item as any).description));
+          if ((item as any).platform) contentParts.push(`Platform: ${String((item as any).platform)}`);
+          if ((item as any).runtime) contentParts.push(`Runtime: ${String((item as any).runtime)}`);
+          if ((item as any).style) contentParts.push(`Style: ${String((item as any).style)}`);
+          if (Array.isArray((item as any).strengths)) {
+            contentParts.push("Strengths: " + (item as any).strengths.join(", "));
+          }
+          if (Array.isArray((item as any).weaknesses)) {
+            contentParts.push("Weaknesses: " + (item as any).weaknesses.join(", "));
+          }
+          if ((item as any).fitRationale) contentParts.push(String((item as any).fitRationale));
+          if ((item as any).qualityAttributeSupport) {
+            contentParts.push("Quality attributes: " + JSON.stringify((item as any).qualityAttributeSupport));
+          }
+
+          entries.push({
+            id,
+            name,
+            filePath,
+            domain: parseStringArray((item as any).platform ?? (item as any).domain) ?? [],
+            teamSize: String((item as any).teamSize ?? (item as any)["team-size"] ?? ""),
+            complexity: String((item as any).complexity ?? ""),
+            bestForDrivers: parseStringArray((item as any).bestForDrivers ?? (item as any)["best-for-drivers"]) ?? [],
+            notForDrivers: parseStringArray((item as any).notForDrivers ?? (item as any)["not-for-drivers"]) ?? [],
+            content: contentParts.join("\n\n"),
+          });
+        }
+      }
     } catch {
       // Skip malformed architecture files.
     }
@@ -194,9 +237,10 @@ export function generateAgentFiles(
 
   const created: string[] = [];
   const rules = extractArchitectureRules(architecture.content);
+  const archId = architecture.id || slugify(architecture.name);
 
   for (const role of ARCHITECT_ROLES) {
-    const agentName = `${profile.projectSlug}-${architecture.name}-${role}`;
+    const agentName = `${profile.projectSlug}-${archId}-${role}`;
     const filePath = path.join(agentsDir, `${agentName}.md`);
 
     const content = buildAgentMarkdown(agentName, role, profile, architecture, rules);
@@ -216,9 +260,10 @@ export function generateSkillFiles(
   fs.mkdirSync(skillsDir, { recursive: true });
 
   const created: string[] = [];
+  const archId = architecture.id || slugify(architecture.name);
 
   for (const stage of ARCHITECT_STAGES) {
-    const skillName = `${profile.projectSlug}-${architecture.name}-${stage}`;
+    const skillName = `${profile.projectSlug}-${archId}-${stage}`;
     const skillDir = path.join(skillsDir, skillName);
     fs.mkdirSync(skillDir, { recursive: true });
     const filePath = path.join(skillDir, "SKILL.md");
@@ -232,6 +277,7 @@ export function generateSkillFiles(
 }
 
 export function buildArchitectPrompt(cwd: string, profile: ArchitectProfile): string {
+  const architectStateDir = getArchitectStateDir(cwd);
   return [
     `# Architect Generation Task`,
     "",
@@ -243,7 +289,7 @@ export function buildArchitectPrompt(cwd: string, profile: ArchitectProfile): st
     "Follow these steps:",
     "1. Load the architecture library from .pi/architecture-library/.",
     "2. Confirm the selected architecture matches the drivers.",
-    "3. Write the architect report to .pi/orchestra/architect-report.json with these fields:",
+    `3. Write the architect report to ${getArchitectReportPath(cwd)} with these fields:`,
     "   - selectedArchitecture",
     "   - confidence (high|medium|low)",
     "   - missingResources",
@@ -266,9 +312,9 @@ export function buildArchitectPrompt(cwd: string, profile: ArchitectProfile): st
     "   - constraints",
     "4. Evaluate feasibility. If not-feasible, stop and notify the user. If risky, ask the user before proceeding.",
     "5. If resources are missing, set missingResources and stop for web search.",
-    "6. Generate .pi/orchestra/architecture.md and .pi/orchestra/adrs/*.md from the report.",
+    `6. Generate ${path.join(architectStateDir, "architecture.md")} and ${path.join(architectStateDir, "adrs")}/*.md from the report.`,
     "7. Generate project-specific agents in .pi/agents/.",
-    "8. Generate project-specific skills in .pi/skills/<project>-<architecture>-<stage>/SKILL.md.",
+    "8. Generate project-specific skills in .pi/skills/<project>-<architecture-id>-<stage>/SKILL.md.",
     "",
     "Do not proceed to agent generation if confidence is low and missingResources is not empty.",
   ].join("\n");
@@ -301,7 +347,7 @@ export function generateArchitectureDocs(
   profile: ArchitectProfile,
   report: ArchitectReport,
 ): string[] {
-  const docsDir = path.join(cwd, ".pi", "orchestra");
+  const docsDir = getArchitectStateDir(cwd);
   const adrsDir = path.join(docsDir, "adrs");
   fs.mkdirSync(adrsDir, { recursive: true });
 
@@ -596,7 +642,7 @@ function buildAgentMarkdown(
   lines.push("");
   lines.push("## Architecture documents");
   lines.push("");
-  lines.push("Before making decisions, read the full architecture description at `.pi/orchestra/architecture.md` and the relevant ADRs in `.pi/orchestra/adrs/`.");
+  lines.push("Before making decisions, read the full architecture description at `.IDE_Plans/architect/architecture.md` and the relevant ADRs in `.IDE_Plans/architect/adrs/`.");
 
   lines.push("");
   lines.push("## Forbidden patterns");
@@ -636,8 +682,8 @@ function buildSkillMarkdown(
     "## Rules",
     "",
     `- Follow the ${architecture.name} architecture.`,
-    `- Respect the project constraints and quality attributes in .pi/orchestra/architectural-drivers.json.`,
-    `- Read .pi/orchestra/architecture.md and relevant ADRs in .pi/orchestra/adrs/ before acting.`,
+    `- Respect the project constraints and quality attributes in .IDE_Plans/architect/architectural-drivers.json.`,
+    `- Read .IDE_Plans/architect/architecture.md and relevant ADRs in .IDE_Plans/architect/adrs/ before acting.`,
     `- Do not use patterns listed as forbidden in the architecture library.`,
   ].join("\n");
 }

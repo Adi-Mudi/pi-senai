@@ -17,6 +17,7 @@ import {
 } from "./agent-suggestions.js";
 import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
 import {
+  ARCHITECT_ROLES,
   ARCHITECT_STAGES,
   discoverArchitectureLibrary,
   loadArchitectProfile,
@@ -25,6 +26,7 @@ import {
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
 import { parseAgentFile } from "./agent-discovery.js";
+import { getArchitectStateDir, getArchitectMapDir } from "./constants.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 
@@ -568,13 +570,14 @@ function isPathConflict(a: string, b: string): boolean {
 
 function checkArchitectureSetup(cwd: string): DiagnosticSection {
   const items: DiagnosticItem[] = [];
+  const architectStateDir = getArchitectStateDir(cwd);
 
   const library = discoverArchitectureLibrary(cwd);
   if (library.length === 0) {
     items.push({
       status: "warning",
       message: "Architecture library is empty or missing.",
-      details: ["Create .pi/architecture-library/*.md files with architecture references."],
+      details: ["Create .pi/architecture-library/*.md or *.json files with architecture references."],
     });
   } else {
     items.push({
@@ -620,8 +623,21 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
   } else {
     items.push({
       status: "ok",
-      message: "Architectural drivers file exists.",
+      message: `Architectural drivers file exists at .IDE_Plans/architect/architectural-drivers.json.`,
     });
+  }
+
+  // Warn about stale intermediate driver files in the old root location.
+  const oldRootDrivers = path.join(cwd, ".pi", "orchestra");
+  if (fs.existsSync(oldRootDrivers)) {
+    const stale = fs.readdirSync(oldRootDrivers).filter((f) => f.startsWith("drivers-") && f.endsWith(".json"));
+    if (stale.length > 0) {
+      items.push({
+        status: "warning",
+        message: `${stale.length} stale intermediate driver files found in .pi/orchestra/.`,
+        details: stale.map((f) => `.pi/orchestra/${f} — move or delete this file`),
+      });
+    }
   }
 
   const profile = loadArchitectProfile(cwd);
@@ -652,75 +668,100 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
 
   if (profile) {
     const agentsDir = path.join(cwd, ".pi", "agents");
-    const expectedAgents = 5;
-    let foundAgents = 0;
-    let malformedAgents = 0;
+    const expectedAgentNames = ARCHITECT_ROLES.map((role) => `${profile.projectSlug}-${profile.selectedArchitecture}-${role}`);
+    const expectedAgentPaths = expectedAgentNames.map((name) => path.join(agentsDir, `${name}.md`));
+    const missingAgents: string[] = [];
+    for (const filePath of expectedAgentPaths) {
+      if (!fs.existsSync(filePath)) {
+        missingAgents.push(path.relative(cwd, filePath));
+      }
+    }
+
+    const misnamedAgents: string[] = [];
     if (fs.existsSync(agentsDir)) {
-      const entries = fs.readdirSync(agentsDir);
-      for (const entry of entries) {
+      const prefix = `${profile.projectSlug}-${profile.selectedArchitecture}-`;
+      for (const entry of fs.readdirSync(agentsDir)) {
         if (!entry.endsWith(".md")) continue;
-        if (!entry.includes(`${profile.projectSlug}-${profile.selectedArchitecture}`)) continue;
-        const filePath = path.join(agentsDir, entry);
-        const parsed = parseAgentFile(filePath);
-        if (parsed) {
-          foundAgents++;
-        } else {
-          malformedAgents++;
+        if (!entry.startsWith(prefix)) continue;
+        const name = entry.slice(0, -3);
+        if (!expectedAgentNames.includes(name)) {
+          misnamedAgents.push(path.relative(cwd, path.join(agentsDir, entry)));
         }
       }
     }
-    if (foundAgents === 0) {
-      items.push({
-        status: "warning",
-        message: "No generated architecture agents found in .pi/agents/.",
-      });
+
+    if (missingAgents.length === 0 && misnamedAgents.length === 0) {
+      items.push({ status: "ok", message: `Found all ${expectedAgentNames.length} expected architecture agents in .pi/agents/.` });
     } else {
-      items.push({
-        status: malformedAgents > 0 ? "warning" : "ok",
-        message: `Found ${foundAgents} generated architecture agents${malformedAgents > 0 ? `, ${malformedAgents} malformed` : ""}.`,
-      });
+      if (missingAgents.length > 0) {
+        items.push({
+          status: "error",
+          message: `${missingAgents.length} expected architecture agents are missing.`,
+          details: missingAgents,
+        });
+      }
+      if (misnamedAgents.length > 0) {
+        items.push({
+          status: "error",
+          message: `${misnamedAgents.length} misnamed architecture agents found.`,
+          details: misnamedAgents,
+        });
+      }
     }
 
     const skillsDir = path.join(cwd, ".pi", "skills");
-    const expectedSkills = ARCHITECT_STAGES.map(
-      (stage) => `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`,
-    );
-    let foundSkills = 0;
-    for (const skillName of expectedSkills) {
-      const skillFile = path.join(skillsDir, skillName, "SKILL.md");
-      if (fs.existsSync(skillFile)) {
-        foundSkills++;
+    const expectedSkillNames = ARCHITECT_STAGES.map((stage) => `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`);
+    const expectedSkillPaths = expectedSkillNames.map((name) => path.join(skillsDir, name, "SKILL.md"));
+    const missingSkills: string[] = [];
+    for (const filePath of expectedSkillPaths) {
+      if (!fs.existsSync(filePath)) {
+        missingSkills.push(path.relative(cwd, filePath));
       }
     }
-    if (foundSkills === 0) {
-      items.push({
-        status: "warning",
-        message: "No generated architecture skills found in .pi/skills/.",
-      });
-    } else if (foundSkills < expectedSkills.length) {
-      items.push({
-        status: "warning",
-        message: `Found ${foundSkills} of ${expectedSkills.length} expected architecture skills in .pi/skills/.`,
-      });
-    } else {
-      items.push({
-        status: "ok",
-        message: `Found all ${expectedSkills.length} generated architecture skills in .pi/skills/.`,
-      });
+
+    const misnamedSkills: string[] = [];
+    if (fs.existsSync(skillsDir)) {
+      const prefix = `${profile.projectSlug}-${profile.selectedArchitecture}-`;
+      for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (!entry.name.startsWith(prefix)) continue;
+        if (!expectedSkillNames.includes(entry.name)) {
+          misnamedSkills.push(path.relative(cwd, path.join(skillsDir, entry.name)));
+        }
+      }
     }
 
-    const architecturePath = path.join(cwd, ".pi", "orchestra", "architecture.md");
+    if (missingSkills.length === 0 && misnamedSkills.length === 0) {
+      items.push({ status: "ok", message: `Found all ${expectedSkillNames.length} expected architecture skills in .pi/skills/.` });
+    } else {
+      if (missingSkills.length > 0) {
+        items.push({
+          status: "error",
+          message: `${missingSkills.length} expected architecture skills are missing.`,
+          details: missingSkills,
+        });
+      }
+      if (misnamedSkills.length > 0) {
+        items.push({
+          status: "error",
+          message: `${misnamedSkills.length} misnamed architecture skills found.`,
+          details: misnamedSkills,
+        });
+      }
+    }
+
+    const architecturePath = path.join(architectStateDir, "architecture.md");
     if (fs.existsSync(architecturePath)) {
-      items.push({ status: "ok", message: "architecture.md found in .pi/orchestra/." });
+      items.push({ status: "ok", message: "architecture.md found in .IDE_Plans/architect/." });
     } else {
       items.push({
-        status: "warning",
-        message: "No architecture.md found in .pi/orchestra/.",
+        status: "error",
+        message: "No architecture.md found in .IDE_Plans/architect/.",
       });
     }
 
     if (report && report.adrs.length > 0) {
-      const adrsDir = path.join(cwd, ".pi", "orchestra", "adrs");
+      const adrsDir = path.join(architectStateDir, "adrs");
       let foundAdrs = 0;
       for (const adr of report.adrs) {
         const adrPath = path.join(adrsDir, `${adr.id}-${slugify(adr.title)}.md`);
@@ -731,12 +772,12 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
       if (foundAdrs === report.adrs.length) {
         items.push({
           status: "ok",
-          message: `Found all ${report.adrs.length} ADRs in .pi/orchestra/adrs/.`,
+          message: `Found all ${report.adrs.length} ADRs in .IDE_Plans/architect/adrs/.`,
         });
       } else {
         items.push({
-          status: "warning",
-          message: `Found ${foundAdrs} of ${report.adrs.length} expected ADRs in .pi/orchestra/adrs/.`,
+          status: "error",
+          message: `Found ${foundAdrs} of ${report.adrs.length} expected ADRs in .IDE_Plans/architect/adrs/.`,
         });
       }
     }

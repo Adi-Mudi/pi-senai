@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { getArchitectStateDir } from "./constants.js";
 
 export const DRIVERS_FILE = "architectural-drivers.json";
 
@@ -32,20 +33,85 @@ export type DriverGap = {
 };
 
 export function getDriversPath(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", DRIVERS_FILE);
+  return path.join(getArchitectStateDir(cwd), DRIVERS_FILE);
 }
 
 export function loadDrivers(cwd: string): ArchitecturalDrivers | null {
   const driversPath = getDriversPath(cwd);
   try {
     const raw = fs.readFileSync(driversPath, "utf8");
-    const parsed = JSON.parse(raw) as ArchitecturalDrivers;
-    validateDrivers(parsed);
-    return parsed;
+    const parsed = JSON.parse(raw) as unknown;
+    const normalized = normalizeDrivers(parsed);
+    if (normalized) {
+      validateDrivers(normalized);
+      return normalized;
+    }
+    return null;
   } catch (err: any) {
     if (err.code === "ENOENT") return null;
     throw new Error(`Invalid architectural drivers at ${driversPath}: ${err.message}`);
   }
+}
+
+export function normalizeDrivers(value: unknown): ArchitecturalDrivers | null {
+  if (!value || typeof value !== "object") return null;
+
+  const obj = value as Record<string, unknown>;
+
+  // Standard schema already in place.
+  if (
+    Array.isArray(obj.functionalRequirements) &&
+    Array.isArray(obj.qualityAttributes) &&
+    Array.isArray(obj.constraints) &&
+    Array.isArray(obj.technicalConcerns) &&
+    Array.isArray(obj.uncertainties)
+  ) {
+    return obj as unknown as ArchitecturalDrivers;
+  }
+
+  // Legacy flat schema used by some early runs: top-level "drivers" array.
+  if (Array.isArray(obj.drivers)) {
+    const result: ArchitecturalDrivers = {
+      functionalRequirements: [],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+
+    for (const item of obj.drivers) {
+      if (!item || typeof item !== "object") continue;
+      const raw = item as Record<string, unknown>;
+      const id = String(raw.id ?? "unknown");
+      const description = String(raw.description ?? raw.name ?? "");
+      const source = String(raw.source ?? "");
+      const category = String(raw.category ?? "").toLowerCase();
+      if (!description) continue;
+
+      const base: DriverItem = { id, description };
+      if (source) base.source = source;
+
+      if (category === "functional") {
+        result.functionalRequirements.push(base);
+      } else if (
+        ["quality", "performance", "security", "reliability", "maintainability", "observability", "testability"].includes(category)
+      ) {
+        result.qualityAttributes.push({ ...base, category });
+      } else if (category === "technical") {
+        result.technicalConcerns.push(base);
+      } else {
+        result.constraints.push({ ...base, category: category || "general" });
+      }
+    }
+
+    if (Array.isArray(obj.uncertainties)) {
+      result.uncertainties = obj.uncertainties.filter((u): u is string => typeof u === "string");
+    }
+
+    return result;
+  }
+
+  return null;
 }
 
 export function saveDrivers(cwd: string, drivers: ArchitecturalDrivers): void {

@@ -44,8 +44,9 @@ npm test
 ├── AGENTS.md            # this file
 ├── .gitignore
 ├── pi-extension/src/    # extension source
-│   ├── index.ts         # entry point: register commands, hooks, guards
+│   ├── index.ts         # entry point: register commands, hooks, guards, tools
 │   ├── commands.ts      # slash command handlers
+│   ├── architect-tools.ts # deterministic tools for the architecture factory
 │   ├── state.ts         # read/write .IDE_Plans/orchestra/state.json
 │   ├── prompt.ts        # load stage skills and build prompts
 │   ├── constants.ts     # paths, stage enum, transitions, helpers
@@ -70,7 +71,7 @@ npm test
 ## Key design principles
 
 1. **No duplicate subagent engine.** Do not add subagent spawning logic here. The extension injects prompts; the LLM calls the `subagent` tool provided by `pi-interactive-subagents`.
-2. **Local-only state.** All state and artifacts live under `.IDE_Plans/orchestra/` inside the project directory.
+2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/orchestra/`. Architecture factory state lives under `.IDE_Plans/architect/.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
 4. **Approve auto-runs the next stage.** `/orchestra-approve` advances the state and immediately sends the next stage prompt. Manual `/orchestra-XXX` commands remain available as overrides.
 5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.
@@ -87,7 +88,40 @@ Three config files live under `.pi/orchestra/`:
 
 All three files are required before any stage command (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will run. Run the corresponding `/orchestra-configure-*` command for each missing file.
 
-Use `/orchestra-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Orchestra role, validates file scopes and truth documents, and verifies the runtime environment.
+Use `/orchestra-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Orchestra role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs.
+
+## Architecture factory layout
+
+The `/orchestra-generate-architect` command produces a one-time architecture for the project.
+
+**Input config (stays in `.pi/orchestra/`):**
+
+| File | Command | Purpose |
+|---|---|---|
+| `architect-inputs.json` | `/orchestra-configure-architect-inputs` | Documents and constraints used to derive the architecture. |
+
+**Generated state and artifacts (live in `.IDE_Plans/architect/`):**
+
+| File | Purpose |
+|---|---|
+| `architectural-drivers.json` | Merged architectural drivers from all input documents. |
+| `architect-profile.json` | Project name/slug and selected architecture id. |
+| `architect-report.json` | Full architecture report. |
+| `architecture.md` | Human-readable architecture description. |
+| `adrs/*.md` | Architecture decision records. |
+| `architect-map/*.json` | Intermediate per-document driver files (temporary). |
+
+**Generated Pi-discoverable outputs (live in `.pi/` per Pi docs):**
+
+| Location | Purpose |
+|---|---|
+| `.pi/agents/<project>-<architecture-id>-<role>.md` | Five generated architecture agents. |
+| `.pi/skills/<project>-<architecture-id>-<stage>/SKILL.md` | Four generated architecture skills. |
+
+The factory uses two deterministic tools to avoid LLM drift:
+
+- `orchestra_merge_architect_drivers` — merges map outputs and cleans stale root files.
+- `orchestra_finalize_architecture` — generates docs, agents, and skills with exact names.
 
 ### `files.json` schema (version 2)
 

@@ -10,6 +10,8 @@ import {
   makeRunId,
   STAGE_TRANSITIONS,
   formatStageStatus,
+  getArchitectStateDir,
+  getArchitectMapDir,
 } from "../src/constants.js";
 
 describe("constants", () => {
@@ -17,6 +19,14 @@ describe("constants", () => {
 
   it("getOrchestraDir returns .IDE_Plans/orchestra under cwd", () => {
     assert.strictEqual(getOrchestraDir(cwd), path.join(cwd, ".IDE_Plans/orchestra"));
+  });
+
+  it("getArchitectStateDir returns .IDE_Plans/architect under cwd", () => {
+    assert.strictEqual(getArchitectStateDir(cwd), path.join(cwd, ".IDE_Plans/architect"));
+  });
+
+  it("getArchitectMapDir returns architect-map under architect state dir", () => {
+    assert.strictEqual(getArchitectMapDir(cwd), path.join(cwd, ".IDE_Plans/architect/architect-map"));
   });
 
   it("getStatePath returns state.json under orchestra dir", () => {

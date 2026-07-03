@@ -31,14 +31,14 @@ describe("architect", () => {
   it("getArchitectProfilePath returns correct path", () => {
     assert.strictEqual(
       getArchitectProfilePath("/fake"),
-      path.join("/fake", ".pi/orchestra/architect-profile.json"),
+      path.join("/fake", ".IDE_Plans/architect/architect-profile.json"),
     );
   });
 
   it("getArchitectReportPath returns correct path", () => {
     assert.strictEqual(
       getArchitectReportPath("/fake"),
-      path.join("/fake", ".pi/orchestra/architect-report.json"),
+      path.join("/fake", ".IDE_Plans/architect/architect-report.json"),
     );
   });
 
@@ -98,6 +98,35 @@ describe("architect", () => {
     const entries = discoverArchitectureLibrary(tmpDir);
     assert.strictEqual(entries.length, 1);
     assert.strictEqual(entries[0].name, "modular-monolith");
+    assert.strictEqual(entries[0].id, "modular-monolith");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discoverArchitectureLibrary reads JSON library entries", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-lib-json-"));
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "library.json"),
+      JSON.stringify([
+        {
+          id: "gas-sheets-monolith",
+          name: "Google Apps Script + Google Sheets Monolith",
+          description: "Serverless spreadsheet automation.",
+          platform: "Google Workspace",
+          runtime: "Google Apps Script",
+          strengths: ["No hosting needed"],
+          weaknesses: ["6-minute timeout"],
+          bestForDrivers: ["google sheets"],
+        },
+      ]),
+      "utf8",
+    );
+    const entries = discoverArchitectureLibrary(tmpDir);
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].id, "gas-sheets-monolith");
+    assert.strictEqual(entries[0].name, "Google Apps Script + Google Sheets Monolith");
+    assert.ok(entries[0].content.includes("Google Workspace"));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -108,6 +137,7 @@ describe("architect", () => {
 
     const library: ArchitectureLibraryEntry[] = [
       {
+        id: "modular-monolith",
         name: "modular-monolith",
         filePath: "",
         domain: ["web"],
@@ -118,6 +148,7 @@ describe("architect", () => {
         content: "",
       },
       {
+        id: "microservices",
         name: "microservices",
         filePath: "",
         domain: ["web"],
@@ -143,6 +174,7 @@ describe("architect", () => {
       additionalConstraints: [],
     };
     const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
       name: "modular-monolith",
       filePath: "",
       domain: ["web"],
@@ -168,6 +200,7 @@ describe("architect", () => {
       additionalConstraints: [],
     };
     const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
       name: "modular-monolith",
       filePath: "",
       domain: ["web"],
@@ -235,7 +268,7 @@ describe("architect", () => {
     assert.ok(created.some((p) => p.endsWith("architecture.md")));
     assert.ok(created.some((p) => p.includes("adrs/0001-use-modular-monolith.md")));
 
-    const architecturePath = path.join(tmpDir, ".pi", "orchestra", "architecture.md");
+    const architecturePath = path.join(tmpDir, ".IDE_Plans", "architect", "architecture.md");
     const architectureContent = fs.readFileSync(architecturePath, "utf8");
     assert.ok(architectureContent.includes("Software Architecture"));
     assert.ok(architectureContent.includes("Use modular monolith"));
@@ -252,6 +285,7 @@ describe("architect", () => {
       additionalConstraints: [],
     };
     const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
       name: "modular-monolith",
       filePath: "",
       domain: ["web"],

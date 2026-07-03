@@ -7,7 +7,6 @@ import {
   buildDocumentIngestPrompt,
   buildIngestBatches,
   buildMapOutputPath,
-  getArchitectMapDir,
   getConfiguredDocuments,
   getDocumentManifestPath,
   loadDocumentManifest,
@@ -16,6 +15,7 @@ import {
   sanitizeDocumentPath,
   saveDocumentManifest,
 } from "../src/document-ingest.js";
+import { getArchitectMapDir } from "../src/constants.js";
 import type { ArchitectMapOutput } from "../src/document-ingest.js";
 import type { ArchitectInputsConfig } from "../src/architect-inputs-config.js";
 
@@ -35,7 +35,7 @@ describe("document-ingest", () => {
   it("getArchitectMapDir returns correct path", () => {
     assert.strictEqual(
       getArchitectMapDir("/fake"),
-      path.join("/fake", ".pi/orchestra/architect-map"),
+      path.join("/fake", ".IDE_Plans/architect/architect-map"),
     );
   });
 

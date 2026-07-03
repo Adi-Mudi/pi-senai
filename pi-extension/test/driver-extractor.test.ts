@@ -10,6 +10,7 @@ import {
   isCriticalDriverPresent,
   loadDrivers,
   mergeDrivers,
+  normalizeDrivers,
   saveDrivers,
   validateDrivers,
 } from "../src/driver-extractor.js";
@@ -19,7 +20,7 @@ describe("driver-extractor", () => {
   it("getDriversPath returns correct path", () => {
     assert.strictEqual(
       getDriversPath("/fake"),
-      path.join("/fake", ".pi/orchestra/architectural-drivers.json"),
+      path.join("/fake", ".IDE_Plans/architect/architectural-drivers.json"),
     );
   });
 
@@ -88,3 +89,44 @@ describe("driver-extractor", () => {
     assert.deepStrictEqual(merged.uncertainties, ["U1", "U2"]);
   });
 });
+
+  it("normalizeDrivers converts legacy flat schema to standard schema", () => {
+    const legacy = {
+      version: 1,
+      drivers: [
+        { id: "FR-1", category: "functional", name: "Daily Trigger", description: "Run daily at 9 AM" },
+        { id: "QA-1", category: "performance", name: "Fast load", description: "Load in <2s" },
+        { id: "TC-1", category: "technical", name: "Web app", description: "Built as web app" },
+        { id: "C-1", category: "platform", name: "Google Sheets", description: "Must use Google Sheets" },
+      ],
+      uncertainties: ["Quota limits"],
+    };
+
+    const normalized = normalizeDrivers(legacy);
+    assert.ok(normalized);
+    assert.strictEqual(normalized!.functionalRequirements.length, 1);
+    assert.strictEqual(normalized!.qualityAttributes.length, 1);
+    assert.strictEqual(normalized!.technicalConcerns.length, 1);
+    assert.strictEqual(normalized!.constraints.length, 1);
+    assert.deepStrictEqual(normalized!.uncertainties, ["Quota limits"]);
+    assert.strictEqual(normalized!.functionalRequirements[0].id, "FR-1");
+    assert.strictEqual(normalized!.functionalRequirements[0].description, "Run daily at 9 AM");
+  });
+
+  it("loadDrivers tolerates legacy flat driver file", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-drivers-legacy-"));
+    const legacy = {
+      drivers: [
+        { id: "FR-1", category: "functional", name: "Daily Trigger", description: "Run daily" },
+      ],
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "architect", "architectural-drivers.json"), JSON.stringify(legacy), "utf8");
+
+    const loaded = loadDrivers(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.functionalRequirements.length, 1);
+    assert.strictEqual(loaded!.functionalRequirements[0].id, "FR-1");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
