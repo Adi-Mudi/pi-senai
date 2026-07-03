@@ -16,7 +16,13 @@ import {
   type OrchestraRole,
 } from "./agent-suggestions.js";
 import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
-import { discoverArchitectureLibrary, loadArchitectProfile, loadArchitectReport } from "./architect.js";
+import {
+  ARCHITECT_STAGES,
+  discoverArchitectureLibrary,
+  loadArchitectProfile,
+  loadArchitectReport,
+  slugify,
+} from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
 import { parseAgentFile } from "./agent-discovery.js";
 
@@ -673,6 +679,66 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
         status: malformedAgents > 0 ? "warning" : "ok",
         message: `Found ${foundAgents} generated architecture agents${malformedAgents > 0 ? `, ${malformedAgents} malformed` : ""}.`,
       });
+    }
+
+    const skillsDir = path.join(cwd, ".pi", "skills");
+    const expectedSkills = ARCHITECT_STAGES.map(
+      (stage) => `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`,
+    );
+    let foundSkills = 0;
+    for (const skillName of expectedSkills) {
+      const skillFile = path.join(skillsDir, skillName, "SKILL.md");
+      if (fs.existsSync(skillFile)) {
+        foundSkills++;
+      }
+    }
+    if (foundSkills === 0) {
+      items.push({
+        status: "warning",
+        message: "No generated architecture skills found in .pi/skills/.",
+      });
+    } else if (foundSkills < expectedSkills.length) {
+      items.push({
+        status: "warning",
+        message: `Found ${foundSkills} of ${expectedSkills.length} expected architecture skills in .pi/skills/.`,
+      });
+    } else {
+      items.push({
+        status: "ok",
+        message: `Found all ${expectedSkills.length} generated architecture skills in .pi/skills/.`,
+      });
+    }
+
+    const architecturePath = path.join(cwd, ".pi", "orchestra", "architecture.md");
+    if (fs.existsSync(architecturePath)) {
+      items.push({ status: "ok", message: "architecture.md found in .pi/orchestra/." });
+    } else {
+      items.push({
+        status: "warning",
+        message: "No architecture.md found in .pi/orchestra/.",
+      });
+    }
+
+    if (report && report.adrs.length > 0) {
+      const adrsDir = path.join(cwd, ".pi", "orchestra", "adrs");
+      let foundAdrs = 0;
+      for (const adr of report.adrs) {
+        const adrPath = path.join(adrsDir, `${adr.id}-${slugify(adr.title)}.md`);
+        if (fs.existsSync(adrPath)) {
+          foundAdrs++;
+        }
+      }
+      if (foundAdrs === report.adrs.length) {
+        items.push({
+          status: "ok",
+          message: `Found all ${report.adrs.length} ADRs in .pi/orchestra/adrs/.`,
+        });
+      } else {
+        items.push({
+          status: "warning",
+          message: `Found ${foundAdrs} of ${report.adrs.length} expected ADRs in .pi/orchestra/adrs/.`,
+        });
+      }
     }
   }
 

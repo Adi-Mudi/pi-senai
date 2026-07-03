@@ -167,7 +167,7 @@ Pi Orchestra can generate project-specific architecture agents and skills from y
    /orchestra-configure-architect-inputs
    ```
 
-   This command reuses the same file picker as `/orchestra-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, and any other documents that describe the architecture. You can also add additional constraints that are not in any file.
+   This command reuses the same file picker as `/orchestra-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, feasibility studies, and any other documents that describe the architecture. You can also add additional constraints that are not in any file.
 
    The selection is saved to `.pi/orchestra/architect-inputs.json`.
 
@@ -177,14 +177,20 @@ Pi Orchestra can generate project-specific architecture agents and skills from y
    /orchestra-generate-architect
    ```
 
-   This runs a Map-Reduce ingest over the selected documents: up to four subagents read documents in parallel, extract architectural drivers, and a reducer merges them into `.pi/orchestra/architectural-drivers.json`. The main agent then asks clarifying questions for any missing critical drivers, matches the drivers against the architecture library in `.pi/architecture-library/`, selects the best architecture, and writes:
+   This runs the **architecture factory**. It reads the selected documents in parallel (Map-Reduce), extracts architectural drivers, asks clarifying questions, matches the drivers against the architecture library, and produces a complete software architecture. It writes:
 
    The architecture library includes common patterns such as monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, Pi's own layered monorepo, and Google Apps Script spreadsheet automation.
 
    - `.pi/orchestra/architect-profile.json` — the chosen architecture and project profile.
-   - `.pi/orchestra/architect-report.json` — reasoning, confidence, feasibility, development order, recommended tech stack, atomic functions, and any missing resources.
+   - `.pi/orchestra/architect-report.json` — the full architecture report: components, interfaces, data flow, data model, deployment, tech stack, development order, atomic functions, feasibility, ADRs, and constraints.
+   - `.pi/orchestra/architecture.md` — the human-readable software architecture document.
+   - `.pi/orchestra/adrs/*.md` — architecture decision records.
    - `.pi/agents/<project>-<architecture>-<role>.md` — project-specific agents for planner, implementer, reviewer-correctness, reviewer-security, and reviewer-tests.
-   - `skills/<project>-<architecture>-<stage>.md` — project-specific skills for plan, implement, document, and deliver stages.
+   - `.pi/skills/<project>-<architecture>-<stage>/SKILL.md` — project-specific skills for plan, implement, document, and deliver stages.
+
+   The generated planner agent is used for architecture scouting (`scout-1`), and all generated agents instruct subagents to read `.pi/orchestra/architecture.md` and the relevant ADRs before acting.
+
+   If the input documents change, `/orchestra-generate-architect` detects it and asks whether to re-run the full architecture factory.
 
    If the architecture library lacks a matching pattern, the agent falls back to web search to gather relevant guidance before generating the agents.
 

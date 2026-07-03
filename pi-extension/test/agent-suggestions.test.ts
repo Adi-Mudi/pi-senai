@@ -24,6 +24,16 @@ describe("agent-suggestions", () => {
     assert.strictEqual(suggestAgentForRole("plan-overview", agents), "gas-planner");
   });
 
+  it("prefers generated architecture planner for planner, plan-overview, and scout-1", () => {
+    const agents = [
+      agent("gas-planner", "Planner agent"),
+      agent("inventory-app-modular-monolith-planner", "plans architecture-aware implementation"),
+    ];
+    assert.strictEqual(suggestAgentForRole("planner", agents), "inventory-app-modular-monolith-planner");
+    assert.strictEqual(suggestAgentForRole("plan-overview", agents), "inventory-app-modular-monolith-planner");
+    assert.strictEqual(suggestAgentForRole("scout-1", agents), "inventory-app-modular-monolith-planner");
+  });
+
   it("suggests architecture scouts for scout-1 and scout-2", () => {
     const agents = [agent("gas-scout-architecture", "Architecture scout")];
     assert.strictEqual(suggestAgentForRole("scout-1", agents), "gas-scout-architecture");
@@ -44,6 +54,14 @@ describe("agent-suggestions", () => {
     const agents = [agent("gas-code-reviewer", "Code reviewer for correctness and security")];
     assert.strictEqual(suggestAgentForRole("reviewer-correctness", agents), "gas-code-reviewer");
     assert.strictEqual(suggestAgentForRole("reviewer-security", agents), "gas-code-reviewer");
+  });
+
+  it("prefers generated architecture reviewer-correctness when available", () => {
+    const agents = [
+      agent("gas-code-reviewer", "Code reviewer for correctness and security"),
+      agent("inventory-app-modular-monolith-reviewer-correctness", "reviews correctness against architecture rules"),
+    ];
+    assert.strictEqual(suggestAgentForRole("reviewer-correctness", agents), "inventory-app-modular-monolith-reviewer-correctness");
   });
 
   it("suggests tester agent for test roles", () => {

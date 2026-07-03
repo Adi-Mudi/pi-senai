@@ -56,6 +56,7 @@ If architect inputs are missing, the command tells the user to run `/orchestra-c
 - `adr` — Architecture Decision Record
 - `readme` — README or project overview
 - `code` — Code paths
+- `feasibility` — Feasibility study or analysis
 
 ### Configuration file
 ```json
@@ -318,7 +319,31 @@ It writes a report to:
   "feasibility": "feasible",
   "feasibilityReasoning": "The selected architecture matches the drivers and available resources.",
   "techStack": ["TypeScript", "Node.js", "PostgreSQL"],
-  "atomicFunctions": ["create-order", "process-payment", "send-notification"]
+  "atomicFunctions": ["create-order", "process-payment", "send-notification"],
+  "systemOverview": "Small-team web inventory system.",
+  "components": [
+    { "name": "API", "responsibility": "Handle HTTP requests", "dependencies": ["Database"] },
+    { "name": "Database", "responsibility": "Persist data", "dependencies": [] }
+  ],
+  "interfaces": [
+    { "name": "REST API", "type": "external", "description": "HTTP JSON API for clients" }
+  ],
+  "dataFlow": "Client -> API -> Database",
+  "dataModel": "Orders, products, customers",
+  "deployment": "Single Node.js process with PostgreSQL",
+  "qualityAttributeMapping": [
+    { "qualityAttribute": "strong consistency", "decision": "Use ACID transactions in a single database" }
+  ],
+  "adrs": [
+    {
+      "id": "0001",
+      "title": "Use modular monolith",
+      "context": "Small team, fast time-to-market.",
+      "decision": "Start with a modular monolith.",
+      "consequences": "Simpler deployment; may split later."
+    }
+  ],
+  "constraints": ["Small team", "Fast time-to-market"]
 }
 ```
 
@@ -356,7 +381,18 @@ After the missing-resources loop completes, the main agent checks the report's `
 
 ---
 
-## Step 3 — Generate project agents and skills
+## Step 3 — Generate architecture documents
+
+After the report is accepted, the main agent generates the living architecture documents:
+
+```
+.pi/orchestra/architecture.md
+.pi/orchestra/adrs/0001-<decision-title>.md
+```
+
+`architecture.md` contains the full software architecture description: system overview, components, interfaces, data flow, data model, deployment, technology stack, development order, atomic functions, quality attribute mapping, constraints, and links to ADRs.
+
+## Step 4 — Generate project agents and skills
 
 ### Naming convention
 
@@ -366,8 +402,10 @@ After the missing-resources loop completes, the main agent checks the report's `
 
 Examples:
 - `inventory-modular-monolith-planner`
-- `factory-plc-scada-worker`
-- `ecommerce-microservices-reviewer`
+- `inventory-modular-monolith-implementer`
+- `inventory-modular-monolith-reviewer-correctness`
+
+The generated agents and skills instruct subagents to read `.pi/orchestra/architecture.md` and the relevant ADRs before acting.
 
 ### Generated files
 
@@ -382,10 +420,10 @@ Agents:
 
 Skills:
 ```
-skills/<project>-<architecture>-plan.md
-skills/<project>-<architecture>-implement.md
-skills/<project>-<architecture>-document.md
-skills/<project>-<architecture>-deliver.md
+.pi/skills/<project>-<architecture>-plan/SKILL.md
+.pi/skills/<project>-<architecture>-implement/SKILL.md
+.pi/skills/<project>-<architecture>-document/SKILL.md
+.pi/skills/<project>-<architecture>-deliver/SKILL.md
 ```
 
 ### Agent frontmatter
@@ -410,7 +448,7 @@ Follow these architecture rules:
 
 ---
 
-## Step 4 — Validation
+## Step 5 — Validation
 
 After generation, the system runs architecture-specific doctor checks.
 
@@ -419,6 +457,8 @@ Checks include:
 - Architect inputs config exists and selected files exist.
 - Architectural drivers file is valid JSON.
 - Architect report is valid JSON.
+- `architecture.md` exists in `.pi/orchestra/`.
+- ADRs in `.pi/orchestra/adrs/` match the report.
 - Generated agent files have valid frontmatter.
 - Generated skill files exist.
 
@@ -426,7 +466,7 @@ These checks are added to the existing `/orchestra-doctor` command.
 
 ---
 
-## Step 5 — User notification
+## Step 6 — User notification
 
 The command ends with a summary:
 
@@ -453,6 +493,9 @@ Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
   architectural-drivers.json     # merged drivers from all inputs
   architect-profile.json         # user answers to gap questions
   architect-report.json          # Doctor Architect recommendation
+  architecture.md                # full software architecture description
+  adrs/                          # architecture decision records
+    0001-<decision-title>.md
   architect-map/                 # per-document driver outputs
     <doc-id>.json
 
@@ -461,9 +504,9 @@ Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
   <project>-<architecture>-implementer.md
   ...
 
-skills/
-  <project>-<architecture>-plan.md
-  <project>-<architecture>-implement.md
+.pi/skills/
+  <project>-<architecture>-plan/SKILL.md
+  <project>-<architecture>-implement/SKILL.md
   ...
 
 .pi/architecture-library/
@@ -489,6 +532,7 @@ skills/
 | No architecture matches | Fall back to layered architecture and warn user. |
 | Missing resources reported | Main agent searches web, adds to library, re-runs Doctor. |
 | Feasibility is risky or not-feasible | Ask the user before continuing. |
+| Input documents changed since last run | Ask the user whether to re-run the full architecture factory. |
 | Generated agent validation fails | Report errors and stop before using generated agents. |
 
 ---

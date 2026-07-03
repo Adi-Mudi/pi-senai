@@ -14,6 +14,7 @@ export interface RolePickerOptions {
   items: RolePickerItem[];
   pageSize?: number;
   subtitle?: string;
+  initialSelectedId?: string;
 }
 
 export type RolePickerResult =
@@ -86,7 +87,12 @@ async function runCustomRolePicker(
       assigned: false,
     });
 
-    let selectedIndex = 0;
+    let selectedIndex = Math.max(
+      0,
+      options.initialSelectedId
+        ? items.findIndex((i) => i.id === options.initialSelectedId)
+        : 0,
+    );
     let scrollOffset = 0;
 
     function ensureVisible() {

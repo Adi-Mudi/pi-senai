@@ -77,6 +77,7 @@ import {
   type DriverGap,
 } from "./driver-extractor.js";
 import {
+  areDriversStale,
   buildArchitectPrompt,
   discoverArchitectureLibrary,
   generateAgentFiles,
@@ -1270,6 +1271,7 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
         adr: /adr|architecture.decision/i,
         readme: /readme/i,
         code: /src\/|app\/|lib\//i,
+        feasibility: /feasib/i,
       };
 
       const documentsByType: Partial<Record<ArchitectDocumentType, string[]>> = {};
@@ -1287,9 +1289,12 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
         adr: "ADR",
         readme: "README",
         code: "Code",
+        feasibility: "Feasibility",
       };
 
       const typeIds = Object.keys(typePatterns) as ArchitectDocumentType[];
+
+      let lastSelectedId: string | undefined;
 
       while (true) {
         const pickerItems: RolePickerItem[] = typeIds.map((docType) => {
@@ -1316,6 +1321,7 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
           title: "Configure architect inputs",
           subtitle: " Select a document type to configure, or Finish when done.",
           items: pickerItems,
+          initialSelectedId: lastSelectedId,
         });
 
         if (action.kind === "back") {
@@ -1326,6 +1332,8 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
         if (action.kind === "finish") {
           break;
         }
+
+        lastSelectedId = action.role;
 
         if (action.role === "additional-constraints") {
           const constraints = await ctx.ui.editor(
@@ -1348,6 +1356,7 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
         const current = config.documents.filter((d) => d.type === docType).map((d) => d.path);
         const done = await editArchitectDocumentType(ctx, docType, suggestions, current, excludedPaths);
         if (done === null) continue;
+        lastSelectedId = docType;
 
         config.documents = config.documents.filter((d) => d.type !== docType);
         for (const p of done) {
@@ -1452,6 +1461,22 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
 
       const selectedPaths = getSelectedInputPaths(inputsConfig);
       const drivers = loadDrivers(ctx.cwd);
+      const stale = areDriversStale(ctx.cwd, inputsConfig);
+      let changeNote = "";
+      if (stale) {
+        if (drivers) {
+          const proceed = await ctx.ui.confirm(
+            "Architecture inputs changed",
+            "Input documents are newer than the generated architecture. Re-run the full architecture factory?",
+          );
+          if (!proceed) {
+            ctx.ui.notify("Architecture generation cancelled. Update inputs or re-run when ready.", "info");
+            return;
+          }
+        }
+        changeNote =
+          "Input documents have changed. Regenerate architectural drivers, profile, report, architecture.md, ADRs, agents, and skills from scratch.";
+      }
 
       const prompt = [
         `<pi-orchestra-generate-architect>`,
@@ -1472,8 +1497,11 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
         `  - .pi/orchestra/architectural-drivers.json`,
         `  - .pi/orchestra/architect-profile.json`,
         `  - .pi/orchestra/architect-report.json`,
+        `  - .pi/orchestra/architecture.md`,
+        `  - .pi/orchestra/adrs/*.md`,
         `  - .pi/agents/<project>-<architecture>-<role>.md`,
-        `  - skills/<project>-<architecture>-<stage>.md`,
+        `  - .pi/skills/<project>-<architecture>-<stage>/SKILL.md`,
+        changeNote ? `Note: ${changeNote}` : "",
         ``,
         `</pi-orchestra-generate-architect>`,
         ``,
@@ -1497,10 +1525,12 @@ function defaultArchitectSkill(): string {
     `4. Check for missing critical drivers. Use AskUserQuestion to fill gaps.`,
     `5. Save the updated profile to .pi/orchestra/architect-profile.json.`,
     `6. Read .pi/architecture-library/ and select the best architecture.`,
-    `7. Write .pi/orchestra/architect-report.json with selectedArchitecture, confidence, missingResources, reasoning, skillProfile, developmentOrder, feasibility, feasibilityReasoning, techStack, and atomicFunctions.`,
+    `7. Write .pi/orchestra/architect-report.json with selectedArchitecture, confidence, missingResources, reasoning, skillProfile, developmentOrder, feasibility, feasibilityReasoning, techStack, atomicFunctions, systemOverview, components, interfaces, dataFlow, dataModel, deployment, qualityAttributeMapping, adrs, and constraints.`,
     `8. Evaluate feasibility. If not-feasible, stop and notify the user. If risky, ask before proceeding.`,
     `9. If missingResources is not empty, stop and ask the user whether to search the web for resources.`,
-    `10. Generate project agents in .pi/agents/ and skills in skills/.`,
-    `11. Notify the user of the results.`,
+    `10. Generate .pi/orchestra/architecture.md and .pi/orchestra/adrs/*.md from the report.`,
+    `11. Generate project agents in .pi/agents/ and skills in .pi/skills/<project>-<architecture>-<stage>/SKILL.md.`,
+    `12. Notify the user of the results.`,
+
   ].join("\n");
 }

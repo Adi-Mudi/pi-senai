@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
-import type { ArchitecturalDrivers } from "./driver-extractor.js";
+import { getDriversPath, type ArchitecturalDrivers } from "./driver-extractor.js";
 
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
 export const ARCHITECT_REPORT_FILE = "architect-report.json";
@@ -26,6 +26,31 @@ export interface ArchitectProfile {
   additionalConstraints: string[];
 }
 
+export interface ArchitectComponent {
+  name: string;
+  responsibility: string;
+  dependencies: string[];
+}
+
+export interface ArchitectInterface {
+  name: string;
+  type: "internal" | "external";
+  description: string;
+}
+
+export interface ArchitectAdr {
+  id: string;
+  title: string;
+  context: string;
+  decision: string;
+  consequences: string;
+}
+
+export interface ArchitectQualityMapping {
+  qualityAttribute: string;
+  decision: string;
+}
+
 export interface ArchitectReport {
   selectedArchitecture: string;
   confidence: "high" | "medium" | "low";
@@ -40,6 +65,15 @@ export interface ArchitectReport {
   feasibilityReasoning: string;
   techStack: string[];
   atomicFunctions: string[];
+  systemOverview: string;
+  components: ArchitectComponent[];
+  interfaces: ArchitectInterface[];
+  dataFlow: string;
+  dataModel: string;
+  deployment: string;
+  qualityAttributeMapping: ArchitectQualityMapping[];
+  adrs: ArchitectAdr[];
+  constraints: string[];
 }
 
 export const ARCHITECT_ROLES = [
@@ -178,14 +212,16 @@ export function generateSkillFiles(
   profile: ArchitectProfile,
   architecture: ArchitectureLibraryEntry,
 ): string[] {
-  const skillsDir = path.join(cwd, "skills");
+  const skillsDir = path.join(cwd, ".pi", "skills");
   fs.mkdirSync(skillsDir, { recursive: true });
 
   const created: string[] = [];
 
   for (const stage of ARCHITECT_STAGES) {
     const skillName = `${profile.projectSlug}-${architecture.name}-${stage}`;
-    const filePath = path.join(skillsDir, `${skillName}.md`);
+    const skillDir = path.join(skillsDir, skillName);
+    fs.mkdirSync(skillDir, { recursive: true });
+    const filePath = path.join(skillDir, "SKILL.md");
 
     const content = buildSkillMarkdown(skillName, stage, profile, architecture);
     fs.writeFileSync(filePath, content, "utf8");
@@ -219,10 +255,20 @@ export function buildArchitectPrompt(cwd: string, profile: ArchitectProfile): st
     "   - feasibilityReasoning",
     "   - techStack (recommended languages, frameworks, platforms)",
     "   - atomicFunctions (small, single-responsibility functions/modules)",
+    "   - systemOverview",
+    "   - components (name, responsibility, dependencies)",
+    "   - interfaces (internal/external APIs and communication patterns)",
+    "   - dataFlow",
+    "   - dataModel",
+    "   - deployment",
+    "   - qualityAttributeMapping",
+    "   - adrs (architecture decision records)",
+    "   - constraints",
     "4. Evaluate feasibility. If not-feasible, stop and notify the user. If risky, ask the user before proceeding.",
     "5. If resources are missing, set missingResources and stop for web search.",
-    "6. Generate project-specific agents in .pi/agents/.",
-    "7. Generate project-specific skills in skills/.",
+    "6. Generate .pi/orchestra/architecture.md and .pi/orchestra/adrs/*.md from the report.",
+    "7. Generate project-specific agents in .pi/agents/.",
+    "8. Generate project-specific skills in .pi/skills/<project>-<architecture>-<stage>/SKILL.md.",
     "",
     "Do not proceed to agent generation if confidence is low and missingResources is not empty.",
   ].join("\n");
@@ -232,12 +278,216 @@ export function isFeasible(report: ArchitectReport): boolean {
   return report.feasibility === "feasible";
 }
 
+export function areDriversStale(cwd: string, inputsConfig: ArchitectInputsConfig): boolean {
+  const driversPath = getDriversPath(cwd);
+  if (!fs.existsSync(driversPath)) {
+    return true;
+  }
+  const driversMtime = fs.statSync(driversPath).mtimeMs;
+  for (const doc of inputsConfig.documents) {
+    const docPath = path.resolve(cwd, doc.path);
+    if (fs.existsSync(docPath)) {
+      const docMtime = fs.statSync(docPath).mtimeMs;
+      if (docMtime > driversMtime) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function generateArchitectureDocs(
+  cwd: string,
+  profile: ArchitectProfile,
+  report: ArchitectReport,
+): string[] {
+  const docsDir = path.join(cwd, ".pi", "orchestra");
+  const adrsDir = path.join(docsDir, "adrs");
+  fs.mkdirSync(adrsDir, { recursive: true });
+
+  const created: string[] = [];
+
+  const architecturePath = path.join(docsDir, "architecture.md");
+  fs.writeFileSync(architecturePath, buildArchitectureMarkdown(profile, report), "utf8");
+  created.push(architecturePath);
+
+  for (const adr of report.adrs) {
+    const adrFileName = `${adr.id}-${slugify(adr.title)}.md`;
+    const adrPath = path.join(adrsDir, adrFileName);
+    fs.writeFileSync(adrPath, buildAdrMarkdown(adr), "utf8");
+    created.push(adrPath);
+  }
+
+  return created;
+}
+
 export function slugify(text: string): string {
   return text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "")
     .slice(0, 40);
+}
+
+function buildArchitectureMarkdown(profile: ArchitectProfile, report: ArchitectReport): string {
+  const lines: string[] = [
+    "# Software Architecture",
+    "",
+    `Project: ${profile.projectName}`,
+    `Selected architecture: ${report.selectedArchitecture}`,
+    `Confidence: ${report.confidence}`,
+    `Feasibility: ${report.feasibility}`,
+    "",
+    "## System overview",
+    "",
+    report.systemOverview || "Not provided.",
+    "",
+    "## Components",
+    "",
+  ];
+
+  if (report.components.length > 0) {
+    for (const component of report.components) {
+      lines.push(`### ${component.name}`);
+      lines.push("");
+      lines.push(`- Responsibility: ${component.responsibility}`);
+      if (component.dependencies.length > 0) {
+        lines.push(`- Dependencies: ${component.dependencies.join(", ")}`);
+      }
+      lines.push("");
+    }
+  } else {
+    lines.push("No components defined.");
+    lines.push("");
+  }
+
+  lines.push("## Interfaces");
+  lines.push("");
+  if (report.interfaces.length > 0) {
+    for (const iface of report.interfaces) {
+      lines.push(`- **${iface.name}** (${iface.type}): ${iface.description}`);
+    }
+  } else {
+    lines.push("No interfaces defined.");
+  }
+  lines.push("");
+
+  lines.push("## Data flow");
+  lines.push("");
+  lines.push(report.dataFlow || "Not provided.");
+  lines.push("");
+
+  lines.push("## Data model");
+  lines.push("");
+  lines.push(report.dataModel || "Not provided.");
+  lines.push("");
+
+  lines.push("## Deployment");
+  lines.push("");
+  lines.push(report.deployment || "Not provided.");
+  lines.push("");
+
+  lines.push("## Technology stack");
+  lines.push("");
+  if (report.techStack.length > 0) {
+    for (const tech of report.techStack) {
+      lines.push(`- ${tech}`);
+    }
+  } else {
+    lines.push("No technology stack defined.");
+  }
+  lines.push("");
+
+  lines.push("## Development order");
+  lines.push("");
+  if (report.developmentOrder.length > 0) {
+    for (let i = 0; i < report.developmentOrder.length; i++) {
+      lines.push(`${i + 1}. ${report.developmentOrder[i]}`);
+    }
+  } else {
+    lines.push("No development order defined.");
+  }
+  lines.push("");
+
+  lines.push("## Atomic functions");
+  lines.push("");
+  if (report.atomicFunctions.length > 0) {
+    for (const fn of report.atomicFunctions) {
+      lines.push(`- ${fn}`);
+    }
+  } else {
+    lines.push("No atomic functions defined.");
+  }
+  lines.push("");
+
+  lines.push("## Quality attribute mapping");
+  lines.push("");
+  if (report.qualityAttributeMapping.length > 0) {
+    for (const mapping of report.qualityAttributeMapping) {
+      lines.push(`- **${mapping.qualityAttribute}**: ${mapping.decision}`);
+    }
+  } else {
+    lines.push("No quality attribute mapping defined.");
+  }
+  lines.push("");
+
+  lines.push("## Constraints");
+  lines.push("");
+  if (report.constraints.length > 0) {
+    for (const constraint of report.constraints) {
+      lines.push(`- ${constraint}`);
+    }
+  } else {
+    lines.push("No constraints defined.");
+  }
+  lines.push("");
+
+  lines.push("## Architecture Decision Records");
+  lines.push("");
+  if (report.adrs.length > 0) {
+    for (const adr of report.adrs) {
+      lines.push(`- [${adr.id} ${adr.title}](adrs/${adr.id}-${slugify(adr.title)}.md)`);
+    }
+  } else {
+    lines.push("No ADRs defined.");
+  }
+  lines.push("");
+
+  lines.push("## Reasoning");
+  lines.push("");
+  lines.push(report.reasoning || "Not provided.");
+  lines.push("");
+
+  lines.push("## Feasibility reasoning");
+  lines.push("");
+  lines.push(report.feasibilityReasoning || "Not provided.");
+  lines.push("");
+
+  return lines.join("\n");
+}
+
+function buildAdrMarkdown(adr: ArchitectAdr): string {
+  return [
+    "---",
+    `name: ${adr.id}-${slugify(adr.title)}`,
+    `description: ${adr.title}`,
+    "---",
+    "",
+    `# ${adr.id}: ${adr.title}`,
+    "",
+    "## Context",
+    "",
+    adr.context || "Not provided.",
+    "",
+    "## Decision",
+    "",
+    adr.decision || "Not provided.",
+    "",
+    "## Consequences",
+    "",
+    adr.consequences || "Not provided.",
+    "",
+  ].join("\n");
 }
 
 function parseStringArray(value: unknown): string[] | undefined {
@@ -344,6 +594,11 @@ function buildAgentMarkdown(
   }
 
   lines.push("");
+  lines.push("## Architecture documents");
+  lines.push("");
+  lines.push("Before making decisions, read the full architecture description at `.pi/orchestra/architecture.md` and the relevant ADRs in `.pi/orchestra/adrs/`.");
+
+  lines.push("");
   lines.push("## Forbidden patterns");
   lines.push("");
   for (const forbidden of architecture.notForDrivers) {
@@ -382,6 +637,7 @@ function buildSkillMarkdown(
     "",
     `- Follow the ${architecture.name} architecture.`,
     `- Respect the project constraints and quality attributes in .pi/orchestra/architectural-drivers.json.`,
+    `- Read .pi/orchestra/architecture.md and relevant ADRs in .pi/orchestra/adrs/ before acting.`,
     `- Do not use patterns listed as forbidden in the architecture library.`,
   ].join("\n");
 }

@@ -137,7 +137,24 @@ The subagent writes `.pi/orchestra/architect-report.json`:
   "feasibility": "feasible|risky|not-feasible",
   "feasibilityReasoning": "...",
   "techStack": ["..."],
-  "atomicFunctions": ["..."]
+  "atomicFunctions": ["..."],
+  "systemOverview": "...",
+  "components": [
+    { "name": "...", "responsibility": "...", "dependencies": ["..."] }
+  ],
+  "interfaces": [
+    { "name": "...", "type": "internal|external", "description": "..." }
+  ],
+  "dataFlow": "...",
+  "dataModel": "...",
+  "deployment": "...",
+  "qualityAttributeMapping": [
+    { "qualityAttribute": "...", "decision": "..." }
+  ],
+  "adrs": [
+    { "id": "0001", "title": "...", "context": "...", "decision": "...", "consequences": "..." }
+  ],
+  "constraints": ["..."]
 }
 ```
 
@@ -164,7 +181,32 @@ Read `.pi/orchestra/architect-report.json`.
 
 Only proceed to agent/skill generation after the feasibility check passes.
 
-## Step 9 — Generate agents and skills
+## Step 9 — Generate architecture documents
+
+Read `.pi/orchestra/architect-report.json`.
+
+Generate the living architecture documents:
+
+```
+.pi/orchestra/architecture.md
+.pi/orchestra/adrs/0001-<decision-title>.md
+```
+
+`architecture.md` must include:
+- System overview
+- Components and responsibilities
+- Interfaces and communication patterns
+- Data flow
+- Data model
+- Deployment
+- Technology stack
+- Development order
+- Atomic functions
+- Quality attribute mapping
+- Constraints
+- Links to ADRs
+
+## Step 10 — Generate agents and skills
 
 Generate project-specific agents in `.pi/agents/`:
 
@@ -176,13 +218,13 @@ Generate project-specific agents in `.pi/agents/`:
 .pi/agents/<project-slug>-<architecture>-reviewer-tests.md
 ```
 
-Generate project-specific skills in `skills/`:
+Generate project-specific skills in `.pi/skills/`:
 
 ```
-skills/<project-slug>-<architecture>-plan.md
-skills/<project-slug>-<architecture>-implement.md
-skills/<project-slug>-<architecture>-document.md
-skills/<project-slug>-<architecture>-deliver.md
+.pi/skills/<project-slug>-<architecture>-plan/SKILL.md
+.pi/skills/<project-slug>-<architecture>-implement/SKILL.md
+.pi/skills/<project-slug>-<architecture>-document/SKILL.md
+.pi/skills/<project-slug>-<architecture>-deliver/SKILL.md
 ```
 
 Agent frontmatter must include:
@@ -196,8 +238,9 @@ Agent body must include:
 - Key architecture rules from the library.
 - Project context from drivers.
 - Forbidden patterns.
+- A reference to read `.pi/orchestra/architecture.md` and relevant ADRs before acting.
 
-## Step 10 — Notify user
+## Step 11 — Notify user
 
 End with a concise summary:
 

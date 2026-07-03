@@ -15,6 +15,7 @@ export const ARCHITECT_DOCUMENT_TYPES = [
   "adr",
   "readme",
   "code",
+  "feasibility",
 ] as const;
 
 export type ArchitectDocumentType = (typeof ARCHITECT_DOCUMENT_TYPES)[number];
