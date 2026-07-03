@@ -167,7 +167,7 @@ Pi Orchestra can generate project-specific architecture agents and skills from y
    /orchestra-configure-architect-inputs
    ```
 
-   This command reuses the same file picker as `/orchestra-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, and any other documents that describe the architecture. You can also add free-form requirements and pick a skill level (beginner, intermediate, advanced).
+   This command reuses the same file picker as `/orchestra-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, and any other documents that describe the architecture. You can also add additional constraints that are not in any file.
 
    The selection is saved to `.pi/orchestra/architect-inputs.json`.
 
@@ -182,7 +182,7 @@ Pi Orchestra can generate project-specific architecture agents and skills from y
    The architecture library includes common patterns such as monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, Pi's own layered monorepo, and Google Apps Script spreadsheet automation.
 
    - `.pi/orchestra/architect-profile.json` — the chosen architecture and project profile.
-   - `.pi/orchestra/architect-report.json` — reasoning, confidence, and any missing resources.
+   - `.pi/orchestra/architect-report.json` — reasoning, confidence, feasibility, development order, recommended tech stack, atomic functions, and any missing resources.
    - `.pi/agents/<project>-<architecture>-<role>.md` — project-specific agents for planner, implementer, reviewer-correctness, reviewer-security, and reviewer-tests.
    - `skills/<project>-<architecture>-<stage>.md` — project-specific skills for plan, implement, document, and deliver stages.
 

@@ -1,10 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
-import type {
-  ArchitectInputsConfig,
-  ArchitectSkillLevel,
-} from "./architect-inputs-config.js";
+import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
 import type { ArchitecturalDrivers } from "./driver-extractor.js";
 
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
@@ -25,9 +22,8 @@ export interface ArchitectProfile {
   projectName: string;
   projectSlug: string;
   selectedArchitecture: string;
-  skillLevel: ArchitectSkillLevel;
   drivers: ArchitecturalDrivers;
-  freeFormRequirements: string[];
+  additionalConstraints: string[];
 }
 
 export interface ArchitectReport {
@@ -39,6 +35,11 @@ export interface ArchitectReport {
     recommendedAgents: string[];
     forbiddenPatterns: string[];
   };
+  developmentOrder: string[];
+  feasibility: "feasible" | "risky" | "not-feasible";
+  feasibilityReasoning: string;
+  techStack: string[];
+  atomicFunctions: string[];
 }
 
 export const ARCHITECT_ROLES = [
@@ -129,7 +130,6 @@ export function discoverArchitectureLibrary(cwd: string): ArchitectureLibraryEnt
 export function selectArchitecture(
   drivers: ArchitecturalDrivers,
   library: ArchitectureLibraryEntry[],
-  skillLevel: ArchitectSkillLevel,
 ): ArchitectureLibraryEntry | null {
   if (library.length === 0) return null;
 
@@ -143,13 +143,6 @@ export function selectArchitecture(
     for (const driver of entry.notForDrivers) {
       if (driverText.includes(driver.toLowerCase())) score -= 2;
     }
-
-    // Prefer simpler architectures for beginners.
-    if (skillLevel === "beginner") {
-      if (entry.complexity.toLowerCase().includes("low")) score += 1;
-      if (entry.complexity.toLowerCase().includes("high")) score -= 1;
-    }
-
     return { entry, score };
   });
 
@@ -208,20 +201,35 @@ export function buildArchitectPrompt(cwd: string, profile: ArchitectProfile): st
     "",
     `Project: ${profile.projectName}`,
     `Architecture: ${profile.selectedArchitecture}`,
-    `Skill level: ${profile.skillLevel}`,
     "",
     `Read the architectural drivers from ${getArchitectProfilePath(cwd)}.`,
     "",
     "Follow these steps:",
     "1. Load the architecture library from .pi/architecture-library/.",
     "2. Confirm the selected architecture matches the drivers.",
-    "3. Write the architect report to .pi/orchestra/architect-report.json.",
-    "4. If resources are missing, set missingResources and stop for web search.",
-    "5. Generate project-specific agents in .pi/agents/.",
-    "6. Generate project-specific skills in skills/.",
+    "3. Write the architect report to .pi/orchestra/architect-report.json with these fields:",
+    "   - selectedArchitecture",
+    "   - confidence (high|medium|low)",
+    "   - missingResources",
+    "   - reasoning",
+    "   - skillProfile.recommendedAgents",
+    "   - skillProfile.forbiddenPatterns",
+    "   - developmentOrder (ordered list of implementation steps)",
+    "   - feasibility (feasible|risky|not-feasible)",
+    "   - feasibilityReasoning",
+    "   - techStack (recommended languages, frameworks, platforms)",
+    "   - atomicFunctions (small, single-responsibility functions/modules)",
+    "4. Evaluate feasibility. If not-feasible, stop and notify the user. If risky, ask the user before proceeding.",
+    "5. If resources are missing, set missingResources and stop for web search.",
+    "6. Generate project-specific agents in .pi/agents/.",
+    "7. Generate project-specific skills in skills/.",
     "",
     "Do not proceed to agent generation if confidence is low and missingResources is not empty.",
   ].join("\n");
+}
+
+export function isFeasible(report: ArchitectReport): boolean {
+  return report.feasibility === "feasible";
 }
 
 export function slugify(text: string): string {
@@ -321,18 +329,17 @@ function buildAgentMarkdown(
   lines.push("");
   lines.push("## Project context");
   lines.push("");
-  lines.push(`- Skill level: ${profile.skillLevel}`);
   lines.push(`- Functional requirements: ${profile.drivers.functionalRequirements.length} extracted`);
   lines.push(`- Quality attributes: ${profile.drivers.qualityAttributes.length} extracted`);
   lines.push(`- Constraints: ${profile.drivers.constraints.length} extracted`);
   lines.push(`- Technical concerns: ${profile.drivers.technicalConcerns.length} extracted`);
 
-  if (profile.freeFormRequirements.length > 0) {
+  if (profile.additionalConstraints.length > 0) {
     lines.push("");
-    lines.push("## Free-form requirements");
+    lines.push("## Additional constraints");
     lines.push("");
-    for (const req of profile.freeFormRequirements) {
-      lines.push(`- ${req}`);
+    for (const constraint of profile.additionalConstraints) {
+      lines.push(`- ${constraint}`);
     }
   }
 
@@ -375,7 +382,6 @@ function buildSkillMarkdown(
     "",
     `- Follow the ${architecture.name} architecture.`,
     `- Respect the project constraints and quality attributes in .pi/orchestra/architectural-drivers.json.`,
-    `- Keep the team's skill level (${profile.skillLevel}) in mind.`,
     `- Do not use patterns listed as forbidden in the architecture library.`,
   ].join("\n");
 }

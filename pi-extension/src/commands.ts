@@ -51,7 +51,6 @@ import {
 import {
   createDefaultArchitectInputsConfig,
   getSelectedInputPaths,
-  isArchitectSkillLevel,
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
   type ArchitectDocumentInput,
@@ -1290,47 +1289,51 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
         code: "Code",
       };
 
-      let editing = true;
-      while (editing) {
-        const menuOptions: string[] = [];
-        for (const docType of Object.keys(typePatterns) as ArchitectDocumentType[]) {
-          const count = config.documents.filter((d) => d.type === docType).length;
-          menuOptions.push(`Configure ${typeLabels[docType]} (${count} selected)`);
-        }
-        menuOptions.push(`Skill level: ${config.skillLevel}`);
-        menuOptions.push(`Free-form requirements (${config.freeFormRequirements.length})`);
-        menuOptions.push("Finish");
+      const typeIds = Object.keys(typePatterns) as ArchitectDocumentType[];
 
-        const choice = await ctx.ui.select("Configure architect inputs", menuOptions);
-        if (!choice) {
+      while (true) {
+        const pickerItems: RolePickerItem[] = typeIds.map((docType) => {
+          const count = config.documents.filter((d) => d.type === docType).length;
+          return {
+            id: docType,
+            label: typeLabels[docType],
+            agent: "",
+            summary: count > 0 ? `${count} selected` : "not set",
+            assigned: count > 0,
+          };
+        });
+        pickerItems.push({
+          id: "additional-constraints",
+          label: "Additional constraints",
+          agent: "",
+          summary: config.additionalConstraints.length > 0
+            ? `${config.additionalConstraints.length} entries`
+            : "not set",
+          assigned: config.additionalConstraints.length > 0,
+        });
+
+        const action = await runRolePicker(ctx, {
+          title: "Configure architect inputs",
+          subtitle: " Select a document type to configure, or Finish when done.",
+          items: pickerItems,
+        });
+
+        if (action.kind === "back") {
           ctx.ui.notify("Configuration cancelled.", "warning");
           return;
         }
 
-        if (choice === "Finish") {
-          editing = false;
-          continue;
+        if (action.kind === "finish") {
+          break;
         }
 
-        if (choice.startsWith("Skill level:")) {
-          const skillLevel = await ctx.ui.select("Select team skill level", [
-            "beginner",
-            "intermediate",
-            "advanced",
-          ]);
-          if (skillLevel && isArchitectSkillLevel(skillLevel)) {
-            config.skillLevel = skillLevel;
-          }
-          continue;
-        }
-
-        if (choice.startsWith("Free-form requirements")) {
-          const freeForm = await ctx.ui.editor(
-            "Enter free-form requirements (one per line)",
-            config.freeFormRequirements.join("\n"),
+        if (action.role === "additional-constraints") {
+          const constraints = await ctx.ui.editor(
+            "Enter additional constraints (one per line)",
+            config.additionalConstraints.join("\n"),
           );
-          if (freeForm !== undefined) {
-            config.freeFormRequirements = freeForm
+          if (constraints !== undefined) {
+            config.additionalConstraints = constraints
               .split("\n")
               .map((line) => line.trim())
               .filter((line) => line.length > 0);
@@ -1338,10 +1341,8 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
           continue;
         }
 
-        const docType = (Object.keys(typePatterns) as ArchitectDocumentType[]).find(
-          (t) => choice === `Configure ${typeLabels[t]} (${config.documents.filter((d) => d.type === t).length} selected)`,
-        );
-        if (!docType) continue;
+        const docType = action.role as ArchitectDocumentType;
+        if (!typeIds.includes(docType)) continue;
 
         const suggestions = documentsByType[docType] ?? [];
         const current = config.documents.filter((d) => d.type === docType).map((d) => d.path);
@@ -1356,7 +1357,7 @@ export function registerArchitectInputsCommands(pi: ExtensionAPI) {
 
       saveArchitectInputsConfig(ctx.cwd, config);
       ctx.ui.notify(
-        `Architect inputs saved. ${config.documents.length} documents, skill level: ${config.skillLevel}.`,
+        `Architect inputs saved. ${config.documents.length} documents configured.`,
         "info",
       );
     },
@@ -1460,11 +1461,9 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
         `Configured input documents:`,
         ...selectedPaths.map((p) => `  - ${p}`),
         ``,
-        `Free-form requirements:`,
-        ...inputsConfig.freeFormRequirements.map((r) => `  - ${r}`),
-        ``,
-        `Skill level: ${inputsConfig.skillLevel}`,
-        ``,
+        `Additional constraints:`,
+        ...inputsConfig.additionalConstraints.map((r) => `  - ${r}`),
+        ` `,
         drivers
           ? `Existing architectural drivers are available at .pi/orchestra/architectural-drivers.json. Re-run the full flow only if the user asks for it or the inputs changed.`
           : `No architectural drivers found. Run the full architect flow.`,
@@ -1498,9 +1497,10 @@ function defaultArchitectSkill(): string {
     `4. Check for missing critical drivers. Use AskUserQuestion to fill gaps.`,
     `5. Save the updated profile to .pi/orchestra/architect-profile.json.`,
     `6. Read .pi/architecture-library/ and select the best architecture.`,
-    `7. Write .pi/orchestra/architect-report.json with selectedArchitecture, confidence, missingResources, reasoning, and skillProfile.`,
-    `8. If missingResources is not empty, stop and ask the user whether to search the web for resources.`,
-    `9. Generate project agents in .pi/agents/ and skills in skills/.`,
-    `10. Notify the user of the results.`,
+    `7. Write .pi/orchestra/architect-report.json with selectedArchitecture, confidence, missingResources, reasoning, skillProfile, developmentOrder, feasibility, feasibilityReasoning, techStack, and atomicFunctions.`,
+    `8. Evaluate feasibility. If not-feasible, stop and notify the user. If risky, ask before proceeding.`,
+    `9. If missingResources is not empty, stop and ask the user whether to search the web for resources.`,
+    `10. Generate project agents in .pi/agents/ and skills in skills/.`,
+    `11. Notify the user of the results.`,
   ].join("\n");
 }

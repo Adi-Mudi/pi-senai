@@ -43,7 +43,7 @@ If architect inputs are missing, the command tells the user to run `/orchestra-c
 1. Scans the project for candidate documents using the existing `files-discovery.ts` scanner.
 2. Shows a categorized list editor (`ui/list-editor.ts`) with document type labels.
 3. Allows the user to select, deselect, and add custom paths.
-4. Allows free-form text input for requirements not in any file.
+4. Allows free-form text input for additional constraints not in any file.
 5. Saves the result to `.pi/orchestra/architect-inputs.json`.
 
 ### Document types detected
@@ -66,14 +66,11 @@ If architect inputs are missing, the command tells the user to run `/orchestra-c
     { "type": "nfr", "path": "docs/NFR.md" },
     { "type": "readme", "path": "README.md" }
   ],
-  "freeFormRequirements": [
+  "additionalConstraints": [
     "This is a junior developer learning project. Keep the architecture simple."
-  ],
-  "skillLevel": "beginner"
+  ]
 }
 ```
-
-`skillLevel` is one of: `beginner`, `intermediate`, `advanced`.
 
 ---
 
@@ -109,6 +106,9 @@ Read architect report
         │
         ▼
 If missing resources → SearchWeb/FetchURL
+        │
+        ▼
+Feasibility check
         │
         ▼
 Generate project agents and skills
@@ -225,8 +225,8 @@ The system loads `architectural-drivers.json` and checks for critical missing dr
 | Project type | web, mobile, desktop, API, PLC, IoT, AI/ML, game |
 | Scale | users, requests per second, data volume |
 | Deployment | cloud, on-premise, edge, offline |
-| Skill level | beginner, intermediate, advanced |
 | Constraints | budget, timeline, compliance, legacy systems |
+| Additional constraints | user-provided extra requirements |
 
 If any critical driver is missing, the main agent uses **AskUserQuestion** to ask the user.
 
@@ -235,7 +235,7 @@ Example questions:
 - "Is this a web app, mobile app, desktop app, PLC system, or something else?"
 - "What is the expected number of concurrent users?"
 - "Does this need to work offline?"
-- "What is the team's experience level?"
+- "What are the additional constraints or non-negotiable requirements?"
 
 Answers are merged into the driver file and saved as:
 ```
@@ -280,7 +280,7 @@ source: community
 2. Penalize each matched `not-for-drivers`.
 3. Filter by `team-size` and `domain`.
 4. Pick the highest-scoring architecture.
-5. If scores are close, prefer the simpler one for beginners.
+5. If scores are close, prefer the simpler architecture.
 
 ---
 
@@ -290,7 +290,7 @@ The Doctor Architect subagent receives:
 - The merged architectural drivers.
 - The selected architecture.
 - The architecture library entry.
-- The user's skill level.
+- The user's additional constraints.
 
 It writes a report to:
 ```
@@ -308,7 +308,17 @@ It writes a report to:
   "skillProfile": {
     "recommendedAgents": ["planner", "implementer", "reviewer-correctness"],
     "forbiddenPatterns": ["microservices", "distributed-transactions"]
-  }
+  },
+  "developmentOrder": [
+    "Define module boundaries",
+    "Set up shared database schema",
+    "Implement core domain",
+    "Add integration tests"
+  ],
+  "feasibility": "feasible",
+  "feasibilityReasoning": "The selected architecture matches the drivers and available resources.",
+  "techStack": ["TypeScript", "Node.js", "PostgreSQL"],
+  "atomicFunctions": ["create-order", "process-payment", "send-notification"]
 }
 ```
 
@@ -329,6 +339,14 @@ The Doctor subagent is read-only and does not have web access. If it reports mis
    - Summarize findings.
    - Save them to `.pi/architecture-library/<topic>.md`.
 3. Re-run the Doctor Architect subagent with the new resources.
+
+### Feasibility handling
+
+After the missing-resources loop completes, the main agent checks the report's `feasibility` field before generating agents:
+
+- **feasible:** continue with agent and skill generation.
+- **risky:** show `feasibilityReasoning` and ask the user whether to continue.
+- **not-feasible:** stop and tell the user the architecture cannot be implemented as described. Ask whether to reconfigure inputs or select a different architecture.
 
 ### Confidence handling
 
@@ -470,6 +488,7 @@ skills/
 | Map subagent fails | Retry once; if still failing, continue with partial results. |
 | No architecture matches | Fall back to layered architecture and warn user. |
 | Missing resources reported | Main agent searches web, adds to library, re-runs Doctor. |
+| Feasibility is risky or not-feasible | Ask the user before continuing. |
 | Generated agent validation fails | Report errors and stop before using generated agents. |
 
 ---

@@ -116,8 +116,7 @@ describe("document-ingest", () => {
         { type: "prd", path: "docs/PRD.md" },
         { type: "nfr", path: "docs/NFR.md" },
       ],
-      freeFormRequirements: [],
-      skillLevel: "intermediate",
+      additionalConstraints: [],
     };
     assert.deepStrictEqual(getConfiguredDocuments(config), config.documents);
   });

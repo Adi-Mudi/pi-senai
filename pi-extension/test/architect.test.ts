@@ -46,9 +46,8 @@ describe("architect", () => {
       projectName: "Inventory App",
       projectSlug: "inventory-app",
       selectedArchitecture: "modular-monolith",
-      skillLevel: "intermediate",
       drivers: createEmptyDrivers(),
-      freeFormRequirements: [],
+      additionalConstraints: [],
     };
     saveArchitectProfile(tmpDir, profile);
     const loaded = loadArchitectProfile(tmpDir);
@@ -64,6 +63,11 @@ describe("architect", () => {
       missingResources: [],
       reasoning: "Small team, simple deployment.",
       skillProfile: { recommendedAgents: ["planner"], forbiddenPatterns: ["microservices"] },
+      developmentOrder: ["Set up project"],
+      feasibility: "feasible" as const,
+      feasibilityReasoning: "Drivers are clear and the library entry matches.",
+      techStack: ["TypeScript", "Node.js"],
+      atomicFunctions: ["create-item"],
     };
     saveArchitectReport(tmpDir, report);
     const loaded = loadArchitectReport(tmpDir);
@@ -114,7 +118,7 @@ describe("architect", () => {
       },
     ];
 
-    const selected = selectArchitecture(drivers, library, "intermediate");
+    const selected = selectArchitecture(drivers, library);
     assert.strictEqual(selected?.name, "modular-monolith");
   });
 
@@ -124,9 +128,8 @@ describe("architect", () => {
       projectName: "Inventory App",
       projectSlug: "inventory-app",
       selectedArchitecture: "modular-monolith",
-      skillLevel: "intermediate",
       drivers: createEmptyDrivers(),
-      freeFormRequirements: [],
+      additionalConstraints: [],
     };
     const entry: ArchitectureLibraryEntry = {
       name: "modular-monolith",
@@ -150,9 +153,8 @@ describe("architect", () => {
       projectName: "Inventory App",
       projectSlug: "inventory-app",
       selectedArchitecture: "modular-monolith",
-      skillLevel: "intermediate",
       drivers: createEmptyDrivers(),
-      freeFormRequirements: [],
+      additionalConstraints: [],
     };
     const entry: ArchitectureLibraryEntry = {
       name: "modular-monolith",
@@ -176,14 +178,14 @@ describe("architect", () => {
       projectName: "Inventory App",
       projectSlug: "inventory-app",
       selectedArchitecture: "modular-monolith",
-      skillLevel: "intermediate",
       drivers: createEmptyDrivers(),
-      freeFormRequirements: [],
+      additionalConstraints: [],
     };
     const prompt = buildArchitectPrompt(tmpDir, profile);
     assert.match(prompt, /Inventory App/);
     assert.match(prompt, /modular-monolith/);
     assert.match(prompt, /Architect Generation Task/);
+    assert.match(prompt, /feasibility/);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

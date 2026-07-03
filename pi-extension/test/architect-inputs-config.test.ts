@@ -8,7 +8,6 @@ import {
   getArchitectInputsConfigPath,
   getSelectedInputPaths,
   isArchitectDocumentType,
-  isArchitectSkillLevel,
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
   validateArchitectInputsConfig,
@@ -19,8 +18,7 @@ function makeConfig(overrides?: Partial<ArchitectInputsConfig>): ArchitectInputs
   return {
     version: 1,
     documents: [],
-    freeFormRequirements: [],
-    skillLevel: "intermediate",
+    additionalConstraints: [],
     ...overrides,
   };
 }
@@ -46,7 +44,7 @@ describe("architect-inputs-config", () => {
         { type: "prd", path: "docs/PRD.md" },
         { type: "nfr", path: "docs/NFR.md" },
       ],
-      skillLevel: "beginner",
+
     });
     saveArchitectInputsConfig(tmpDir, config);
     const loaded = loadArchitectInputsConfig(tmpDir);
@@ -61,13 +59,6 @@ describe("architect-inputs-config", () => {
           makeConfig({ documents: [{ type: "unknown" as any, path: "x.md" }] }),
         ),
       /Unknown document type/,
-    );
-  });
-
-  it("validateArchitectInputsConfig rejects invalid skill level", () => {
-    assert.throws(
-      () => validateArchitectInputsConfig(makeConfig({ skillLevel: "expert" as any })),
-      /Invalid skillLevel/,
     );
   });
 
@@ -86,15 +77,10 @@ describe("architect-inputs-config", () => {
     assert.strictEqual(isArchitectDocumentType("invalid"), false);
   });
 
-  it("isArchitectSkillLevel validates known levels", () => {
-    assert.strictEqual(isArchitectSkillLevel("beginner"), true);
-    assert.strictEqual(isArchitectSkillLevel("expert"), false);
-  });
-
   it("createDefaultArchitectInputsConfig returns empty config", () => {
     const config = createDefaultArchitectInputsConfig();
     assert.strictEqual(config.version, 1);
     assert.deepStrictEqual(config.documents, []);
-    assert.strictEqual(config.skillLevel, "intermediate");
+    assert.deepStrictEqual(config.additionalConstraints, []);
   });
 });

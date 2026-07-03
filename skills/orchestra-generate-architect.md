@@ -18,8 +18,7 @@ Read `.pi/orchestra/architect-inputs.json`.
 
 Note:
 - `documents` — files the user selected.
-- `freeFormRequirements` — user-provided requirements not in files.
-- `skillLevel` — beginner, intermediate, or advanced.
+- `additionalConstraints` — user-provided requirements not in files.
 
 ## Step 2 — Map-Reduce document ingestion
 
@@ -94,9 +93,8 @@ Create `.pi/orchestra/architect-profile.json`:
   "projectName": "<human-readable project name>",
   "projectSlug": "<slug>",
   "selectedArchitecture": "<name>",
-  "skillLevel": "<beginner|intermediate|advanced>",
   "drivers": { ... },
-  "freeFormRequirements": [ ... ]
+  "additionalConstraints": [ ... ]
 }
 ```
 
@@ -109,7 +107,7 @@ Read all files in `.pi/architecture-library/`.
 Score each architecture by matching its `best-for-drivers` against the driver text.
 Penalize architectures whose `not-for-drivers` match.
 
-For beginners, prefer simpler architectures.
+Prefer simpler architectures when several choices score similarly.
 
 Pick the highest-scoring architecture.
 
@@ -121,7 +119,7 @@ Spawn a **doctor-architect** subagent with:
 - The merged drivers.
 - The selected architecture.
 - The architecture library entry.
-- The user's skill level.
+- The additional constraints from the user.
 
 The subagent writes `.pi/orchestra/architect-report.json`:
 
@@ -134,7 +132,12 @@ The subagent writes `.pi/orchestra/architect-report.json`:
   "skillProfile": {
     "recommendedAgents": ["planner", "implementer", "reviewer-correctness"],
     "forbiddenPatterns": ["..."]
-  }
+  },
+  "developmentOrder": ["..."],
+  "feasibility": "feasible|risky|not-feasible",
+  "feasibilityReasoning": "...",
+  "techStack": ["..."],
+  "atomicFunctions": ["..."]
 }
 ```
 
@@ -151,7 +154,17 @@ If `missingResources` is not empty:
 
 If confidence is `low`, ask the user for more context before generating agents.
 
-## Step 8 — Generate agents and skills
+## Step 8 — Feasibility check
+
+Read `.pi/orchestra/architect-report.json`.
+
+- If `feasibility` is `not-feasible`: stop and tell the user the architecture is not feasible. Summarize `feasibilityReasoning` and ask whether to reconfigure inputs.
+- If `feasibility` is `risky`: show `feasibilityReasoning` and use **AskUserQuestion** to ask if the user wants to continue anyway.
+- If `feasibility` is `feasible`: continue.
+
+Only proceed to agent/skill generation after the feasibility check passes.
+
+## Step 9 — Generate agents and skills
 
 Generate project-specific agents in `.pi/agents/`:
 
@@ -184,7 +197,7 @@ Agent body must include:
 - Project context from drivers.
 - Forbidden patterns.
 
-## Step 9 — Notify user
+## Step 10 — Notify user
 
 End with a concise summary:
 

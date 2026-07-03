@@ -984,10 +984,10 @@ describe("commands", () => {
 
     registerArchitectInputsCommands(makeApi());
     selectChoices.push(
-      "Configure PRD (0 selected)",
+      "⬜ prd: PRD — not set",
       "⬜ Suggest: docs/PRD.md",
       "Back",
-      "Finish",
+      "⬜ Finish",
     );
 
     await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
@@ -1002,12 +1002,12 @@ describe("commands", () => {
 
     registerArchitectInputsCommands(makeApi());
     selectChoices.push(
-      "Configure PRD (0 selected)",
+      "⬜ prd: PRD — not set",
       "Add custom path",
       "📂 docs/",
       "📄 PRD.md",
       "Back",
-      "Finish",
+      "⬜ Finish",
     );
 
     await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
@@ -1015,23 +1015,17 @@ describe("commands", () => {
     assert.ok(saved?.documents.some((d) => d.type === "prd" && d.path === "docs/PRD.md"));
   });
 
-  it("orchestra-configure-architect-inputs saves skill level", async () => {
-    registerArchitectInputsCommands(makeApi());
-    selectChoices.push("Skill level: intermediate", "beginner", "Finish");
-
-    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
-    const saved = loadArchitectInputsConfig(tmpDir);
-    assert.strictEqual(saved?.skillLevel, "beginner");
-  });
-
-  it("orchestra-configure-architect-inputs saves free-form requirements", async () => {
+  it("orchestra-configure-architect-inputs saves additional constraints", async () => {
     registerArchitectInputsCommands(makeApi());
     editorValues.push("Keep it simple");
-    selectChoices.push("Free-form requirements (0)", "Finish");
+    selectChoices.push(
+      "⬜ additional-constraints: Additional constraints — not set",
+      "⬜ Finish",
+    );
 
     await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
     const saved = loadArchitectInputsConfig(tmpDir);
-    assert.deepStrictEqual(saved?.freeFormRequirements, ["Keep it simple"]);
+    assert.deepStrictEqual(saved?.additionalConstraints, ["Keep it simple"]);
   });
 
   it("registerArchitectCommand warns when no architect inputs configured", async () => {
@@ -1046,13 +1040,13 @@ describe("commands", () => {
     saveArchitectInputsConfig(tmpDir, {
       version: 1,
       documents: [{ type: "prd", path: "docs/PRD.md" }],
-      freeFormRequirements: ["Keep it simple"],
-      skillLevel: "intermediate",
+      additionalConstraints: ["Keep it simple"],
     });
 
     registerArchitectCommand(makeApi());
     await commandHandlers["orchestra-generate-architect"]("", makeCtx());
     assert.ok(sentMessages.some((m) => m.includes("<pi-orchestra-generate-architect>")));
     assert.ok(sentMessages.some((m) => m.includes("docs/PRD.md")));
+    assert.ok(sentMessages.some((m) => m.includes("feasibility")));
   });
 });

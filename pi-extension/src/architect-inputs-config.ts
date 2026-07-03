@@ -19,10 +19,6 @@ export const ARCHITECT_DOCUMENT_TYPES = [
 
 export type ArchitectDocumentType = (typeof ARCHITECT_DOCUMENT_TYPES)[number];
 
-export const ARCHITECT_SKILL_LEVELS = ["beginner", "intermediate", "advanced"] as const;
-
-export type ArchitectSkillLevel = (typeof ARCHITECT_SKILL_LEVELS)[number];
-
 export interface ArchitectDocumentInput {
   type: ArchitectDocumentType;
   path: string;
@@ -31,8 +27,7 @@ export interface ArchitectDocumentInput {
 export interface ArchitectInputsConfig {
   version: 1;
   documents: ArchitectDocumentInput[];
-  freeFormRequirements: string[];
-  skillLevel: ArchitectSkillLevel;
+  additionalConstraints: string[];
 }
 
 export function getArchitectInputsConfigPath(cwd: string): string {
@@ -81,27 +76,18 @@ export function validateArchitectInputsConfig(config: ArchitectInputsConfig): vo
       throw new Error("Each document must have a non-empty 'path' field");
     }
   }
-  if (!Array.isArray(config.freeFormRequirements)) {
-    throw new Error("Missing or invalid 'freeFormRequirements' field");
+  if (!Array.isArray(config.additionalConstraints)) {
+    throw new Error("Missing or invalid 'additionalConstraints' field");
   }
-  for (const req of config.freeFormRequirements) {
-    if (typeof req !== "string") {
-      throw new Error("'freeFormRequirements' must contain only strings");
+  for (const constraint of config.additionalConstraints) {
+    if (typeof constraint !== "string") {
+      throw new Error("'additionalConstraints' must contain only strings");
     }
-  }
-  if (!isArchitectSkillLevel(config.skillLevel)) {
-    throw new Error(
-      `Invalid skillLevel: ${config.skillLevel}. Expected one of: ${ARCHITECT_SKILL_LEVELS.join(", ")}`,
-    );
   }
 }
 
 export function isArchitectDocumentType(value: string): value is ArchitectDocumentType {
   return ARCHITECT_DOCUMENT_TYPES.includes(value as ArchitectDocumentType);
-}
-
-export function isArchitectSkillLevel(value: string): value is ArchitectSkillLevel {
-  return ARCHITECT_SKILL_LEVELS.includes(value as ArchitectSkillLevel);
 }
 
 export function getSelectedInputPaths(config: ArchitectInputsConfig): string[] {
@@ -112,7 +98,6 @@ export function createDefaultArchitectInputsConfig(): ArchitectInputsConfig {
   return {
     version: 1,
     documents: [],
-    freeFormRequirements: [],
-    skillLevel: "intermediate",
+    additionalConstraints: [],
   };
 }
