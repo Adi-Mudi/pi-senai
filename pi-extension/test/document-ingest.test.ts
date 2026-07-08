@@ -35,7 +35,7 @@ describe("document-ingest", () => {
   it("getArchitectMapDir returns correct path", () => {
     assert.strictEqual(
       getArchitectMapDir("/fake"),
-      path.join("/fake", ".IDE_Plans/architect/architect-map"),
+      path.join("/fake", ".IDE_Plans/architect-map"),
     );
   });
 
@@ -47,16 +47,18 @@ describe("document-ingest", () => {
     assert.deepStrictEqual(batches[1], ["e", "f"]);
   });
 
-  it("saveDocumentManifest creates file", () => {
+  it("saveDocumentManifest creates file under .IDE_Plans/architect-map", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-ingest-"));
     const manifest = {
       version: 1 as const,
       documents: [{ type: "prd" as const, path: "docs/PRD.md" }],
-      mapOutputs: [".pi/orchestra/architect-map/docs-PRD.md.json"],
-      reducedDriversPath: ".pi/orchestra/architectural-drivers.json",
+      mapOutputs: [".IDE_Plans/architect-map/docs-PRD.md.json"],
+      reducedDriversPath: ".pi/architect/architectural-drivers.json",
     };
     saveDocumentManifest(tmpDir, manifest);
-    assert.ok(fs.existsSync(getDocumentManifestPath(tmpDir)));
+    const manifestPath = getDocumentManifestPath(tmpDir);
+    assert.ok(manifestPath.includes(".IDE_Plans/architect-map"));
+    assert.ok(fs.existsSync(manifestPath));
     const loaded = loadDocumentManifest(tmpDir);
     assert.deepStrictEqual(loaded, manifest);
     fs.rmSync(tmpDir, { recursive: true, force: true });

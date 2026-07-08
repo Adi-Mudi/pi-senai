@@ -21,12 +21,12 @@ describe("constants", () => {
     assert.strictEqual(getOrchestraDir(cwd), path.join(cwd, ".IDE_Plans/orchestra"));
   });
 
-  it("getArchitectStateDir returns .IDE_Plans/architect under cwd", () => {
-    assert.strictEqual(getArchitectStateDir(cwd), path.join(cwd, ".IDE_Plans/architect"));
+  it("getArchitectStateDir returns .pi/architect under cwd", () => {
+    assert.strictEqual(getArchitectStateDir(cwd), path.join(cwd, ".pi/architect"));
   });
 
-  it("getArchitectMapDir returns architect-map under architect state dir", () => {
-    assert.strictEqual(getArchitectMapDir(cwd), path.join(cwd, ".IDE_Plans/architect/architect-map"));
+  it("getArchitectMapDir returns .IDE_Plans/architect-map under cwd", () => {
+    assert.strictEqual(getArchitectMapDir(cwd), path.join(cwd, ".IDE_Plans/architect-map"));
   });
 
   it("getStatePath returns state.json under orchestra dir", () => {

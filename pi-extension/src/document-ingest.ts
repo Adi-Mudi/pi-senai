@@ -33,7 +33,7 @@ export interface ArchitectMapOutput {
 }
 
 export function getDocumentManifestPath(cwd: string): string {
-  return path.join(getArchitectStateDir(cwd), DOCUMENT_MANIFEST_FILE);
+  return path.join(getArchitectMapDir(cwd), DOCUMENT_MANIFEST_FILE);
 }
 
 export function buildMapOutputPath(cwd: string, docPath: string): string {

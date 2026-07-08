@@ -20,7 +20,7 @@ describe("driver-extractor", () => {
   it("getDriversPath returns correct path", () => {
     assert.strictEqual(
       getDriversPath("/fake"),
-      path.join("/fake", ".IDE_Plans/architect/architectural-drivers.json"),
+      path.join("/fake", ".pi/architect/architectural-drivers.json"),
     );
   });
 
@@ -120,8 +120,8 @@ describe("driver-extractor", () => {
         { id: "FR-1", category: "functional", name: "Daily Trigger", description: "Run daily" },
       ],
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "architect"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "architect", "architectural-drivers.json"), JSON.stringify(legacy), "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), JSON.stringify(legacy), "utf8");
 
     const loaded = loadDrivers(tmpDir);
     assert.ok(loaded);

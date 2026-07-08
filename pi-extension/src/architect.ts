@@ -130,6 +130,23 @@ export function saveArchitectReport(cwd: string, report: ArchitectReport): void 
   fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf8");
 }
 
+export function migrateLegacyArchitectState(cwd: string): string[] {
+  const legacyDir = path.join(cwd, ".IDE_Plans", "architect");
+  const targetDir = getArchitectStateDir(cwd);
+  const moved: string[] = [];
+  if (!fs.existsSync(legacyDir)) return moved;
+  if (fs.existsSync(targetDir)) return moved;
+  fs.mkdirSync(targetDir, { recursive: true });
+  for (const entry of fs.readdirSync(legacyDir)) {
+    if (entry === "architect-map") continue; // skip old temporary map dir
+    const src = path.join(legacyDir, entry);
+    const dest = path.join(targetDir, entry);
+    fs.renameSync(src, dest);
+    moved.push(path.relative(cwd, dest));
+  }
+  return moved;
+}
+
 export function discoverArchitectureLibrary(cwd: string): ArchitectureLibraryEntry[] {
   const libraryDir = path.join(cwd, ".pi", "architecture-library");
   if (!fs.existsSync(libraryDir)) return [];
@@ -642,7 +659,7 @@ function buildAgentMarkdown(
   lines.push("");
   lines.push("## Architecture documents");
   lines.push("");
-  lines.push("Before making decisions, read the full architecture description at `.IDE_Plans/architect/architecture.md` and the relevant ADRs in `.IDE_Plans/architect/adrs/`.");
+  lines.push("Before making decisions, read the full architecture description at `.pi/architect/architecture.md` and the relevant ADRs in `.pi/architect/adrs/`.");
 
   lines.push("");
   lines.push("## Forbidden patterns");
@@ -682,8 +699,8 @@ function buildSkillMarkdown(
     "## Rules",
     "",
     `- Follow the ${architecture.name} architecture.`,
-    `- Respect the project constraints and quality attributes in .IDE_Plans/architect/architectural-drivers.json.`,
-    `- Read .IDE_Plans/architect/architecture.md and relevant ADRs in .IDE_Plans/architect/adrs/ before acting.`,
+    `- Respect the project constraints and quality attributes in .pi/architect/architectural-drivers.json.`,
+    `- Read .pi/architect/architecture.md and relevant ADRs in .pi/architect/adrs/ before acting.`,
     `- Do not use patterns listed as forbidden in the architecture library.`,
   ].join("\n");
 }

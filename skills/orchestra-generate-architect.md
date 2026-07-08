@@ -46,7 +46,7 @@ Output JSON format:
 
 Write each map output to:
 ```
-.IDE_Plans/architect/architect-map/<sanitized-path>.json
+.pi/architect-map/<sanitized-path>.json
 ```
 
 Use `sanitizeDocumentPath` from the extension helpers.
@@ -57,7 +57,7 @@ Run up to **4** ingest subagents in parallel. If there are more than 4 documents
 
 ### Wait and merge
 
-Wait for all map subagents to complete. Then call the `orchestra_merge_architect_drivers` tool to merge the map outputs into `.IDE_Plans/architect/architectural-drivers.json`.
+Wait for all map subagents to complete. Then call the `orchestra_merge_architect_drivers` tool to merge the map outputs into `.pi/architect/architectural-drivers.json`.
 
 Do not write the merged file by hand. The tool:
 - Combines all driver categories.
@@ -67,7 +67,7 @@ Do not write the merged file by hand. The tool:
 
 ## Step 3 — Gap analysis
 
-Load `.IDE_Plans/architect/architectural-drivers.json`.
+Load `.pi/architect/architectural-drivers.json`.
 
 Check for missing critical drivers:
 - Functional requirements
@@ -87,7 +87,7 @@ After receiving answers, append them to the drivers file and save.
 
 ## Step 4 — Save profile
 
-Create `.IDE_Plans/architect/architect-profile.json`:
+Create `.pi/architect/architect-profile.json`:
 
 ```json
 {
@@ -122,7 +122,7 @@ Spawn a **doctor-architect** subagent with:
 - The architecture library entry.
 - The additional constraints from the user.
 
-The subagent writes `.IDE_Plans/architect/architect-report.json`:
+The subagent writes `.pi/architect/architect-report.json`:
 
 ```json
 {
@@ -161,7 +161,7 @@ The subagent writes `.IDE_Plans/architect/architect-report.json`:
 
 ## Step 7 — Missing resource fallback
 
-Read `.IDE_Plans/architect/architect-report.json`.
+Read `.pi/architect/architect-report.json`.
 
 If `missingResources` is not empty:
 1. Use `SearchWeb` to find official documentation for each missing resource.
@@ -174,7 +174,7 @@ If confidence is `low`, ask the user for more context before generating agents.
 
 ## Step 8 — Feasibility check
 
-Read `.IDE_Plans/architect/architect-report.json`.
+Read `.pi/architect/architect-report.json`.
 
 - If `feasibility` is `not-feasible`: stop and tell the user the architecture is not feasible. Summarize `feasibilityReasoning` and ask whether to reconfigure inputs.
 - If `feasibility` is `risky`: show `feasibilityReasoning` and use **AskUserQuestion** to ask if the user wants to continue anyway.
@@ -184,13 +184,13 @@ Only proceed to agent/skill generation after the feasibility check passes.
 
 ## Step 9 — Generate architecture documents
 
-Read `.IDE_Plans/architect/architect-report.json`.
+Read `.pi/architect/architect-report.json`.
 
 Generate the living architecture documents:
 
 ```
-.IDE_Plans/architect/architecture.md
-.IDE_Plans/architect/adrs/0001-<decision-title>.md
+.pi/architect/architecture.md
+.pi/architect/adrs/0001-<decision-title>.md
 ```
 
 `architecture.md` must include:
@@ -241,7 +241,7 @@ Agent body must include:
 - Key architecture rules from the library.
 - Project context from drivers.
 - Forbidden patterns.
-- A reference to read `.IDE_Plans/architect/architecture.md` and relevant ADRs before acting.
+- A reference to read `.pi/architect/architecture.md` and relevant ADRs before acting.
 
 ## Step 11 — Notify user
 

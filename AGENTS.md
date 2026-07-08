@@ -71,7 +71,7 @@ npm test
 ## Key design principles
 
 1. **No duplicate subagent engine.** Do not add subagent spawning logic here. The extension injects prompts; the LLM calls the `subagent` tool provided by `pi-interactive-subagents`.
-2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/orchestra/`. Architecture factory state lives under `.IDE_Plans/architect/.
+2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/orchestra/`. Architecture factory state lives under `.pi/architect/.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
 4. **Approve auto-runs the next stage.** `/orchestra-approve` advances the state and immediately sends the next stage prompt. Manual `/orchestra-XXX` commands remain available as overrides.
 5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.
@@ -100,7 +100,7 @@ The `/orchestra-generate-architect` command produces a one-time architecture for
 |---|---|---|
 | `architect-inputs.json` | `/orchestra-configure-architect-inputs` | Documents and constraints used to derive the architecture. |
 
-**Generated state and artifacts (live in `.IDE_Plans/architect/`):**
+**Generated state and artifacts (live in `.pi/architect/`):**
 
 | File | Purpose |
 |---|---|

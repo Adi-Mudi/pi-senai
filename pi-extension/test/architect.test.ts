@@ -14,6 +14,7 @@ import {
   getArchitectReportPath,
   loadArchitectProfile,
   loadArchitectReport,
+  migrateLegacyArchitectState,
   saveArchitectProfile,
   saveArchitectReport,
   selectArchitecture,
@@ -31,14 +32,14 @@ describe("architect", () => {
   it("getArchitectProfilePath returns correct path", () => {
     assert.strictEqual(
       getArchitectProfilePath("/fake"),
-      path.join("/fake", ".IDE_Plans/architect/architect-profile.json"),
+      path.join("/fake", ".pi/architect/architect-profile.json"),
     );
   });
 
   it("getArchitectReportPath returns correct path", () => {
     assert.strictEqual(
       getArchitectReportPath("/fake"),
-      path.join("/fake", ".IDE_Plans/architect/architect-report.json"),
+      path.join("/fake", ".pi/architect/architect-report.json"),
     );
   });
 
@@ -268,7 +269,7 @@ describe("architect", () => {
     assert.ok(created.some((p) => p.endsWith("architecture.md")));
     assert.ok(created.some((p) => p.includes("adrs/0001-use-modular-monolith.md")));
 
-    const architecturePath = path.join(tmpDir, ".IDE_Plans", "architect", "architecture.md");
+    const architecturePath = path.join(tmpDir, ".pi", "architect", "architecture.md");
     const architectureContent = fs.readFileSync(architecturePath, "utf8");
     assert.ok(architectureContent.includes("Software Architecture"));
     assert.ok(architectureContent.includes("Use modular monolith"));
@@ -319,7 +320,7 @@ describe("architect", () => {
   it("areDriversStale returns true when input is newer than drivers", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-"));
     const docsDir = path.join(tmpDir, "docs");
-    const driversDir = path.join(tmpDir, ".pi", "orchestra");
+    const driversDir = path.join(tmpDir, ".pi", "architect");
     fs.mkdirSync(docsDir, { recursive: true });
     fs.mkdirSync(driversDir, { recursive: true });
 
@@ -336,6 +337,21 @@ describe("architect", () => {
       additionalConstraints: [],
     };
     assert.strictEqual(areDriversStale(tmpDir, inputsConfig), true);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("migrateLegacyArchitectState moves files from .IDE_Plans/architect to .pi/architect", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-migrate-"));
+    const legacyDir = path.join(tmpDir, ".IDE_Plans", "architect");
+    const legacyMapDir = path.join(legacyDir, "architect-map");
+    const targetDir = path.join(tmpDir, ".pi", "architect");
+    fs.mkdirSync(legacyMapDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, "architecture.md"), "# Architecture", "utf8");
+    fs.writeFileSync(path.join(legacyMapDir, "map.json"), "{}", "utf8");
+    const moved = migrateLegacyArchitectState(tmpDir);
+    assert.strictEqual(moved.length, 1);
+    assert.ok(fs.existsSync(path.join(targetDir, "architecture.md")));
+    assert.ok(!fs.existsSync(path.join(targetDir, "architect-map")));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

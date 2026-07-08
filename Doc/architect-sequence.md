@@ -164,7 +164,7 @@ Output format:
 
 Each map subagent writes to:
 ```
-.IDE_Plans/architect/architect-map/<doc-id>.json
+.pi/architect-map/<doc-id>.json
 ```
 
 ### Reduce phase
@@ -178,7 +178,7 @@ description: Merges per-document architectural drivers into one file
 tools: read, write
 ---
 
-Read all files in .IDE_Plans/architect/architect-map/.
+Read all files in .pi/architect-map/.
 Merge them into one architectural-drivers.json file.
 Remove duplicates.
 Resolve conflicts by keeping the most specific statement.
@@ -187,7 +187,7 @@ List all uncertainties.
 
 Output:
 ```
-.IDE_Plans/architect/architectural-drivers.json
+.pi/architect/architectural-drivers.json
 ```
 
 > **Implementation note:** The extension provides the `orchestra_merge_architect_drivers` tool. The agent should call it instead of writing the merged file by hand. This guarantees the correct schema and cleans up stale intermediate files from `.pi/orchestra/`.
@@ -242,7 +242,7 @@ Example questions:
 
 Answers are merged into the driver file and saved as:
 ```
-.IDE_Plans/architect/architect-profile.json
+.pi/architect/architect-profile.json
 ```
 
 ---
@@ -297,7 +297,7 @@ The Doctor Architect subagent receives:
 
 It writes a report to:
 ```
-.IDE_Plans/architect/architect-report.json
+.pi/architect/architect-report.json
 ```
 
 ### Report format
@@ -388,8 +388,8 @@ After the missing-resources loop completes, the main agent checks the report's `
 After the report is accepted, the main agent generates the living architecture documents:
 
 ```
-.IDE_Plans/architect/architecture.md
-.IDE_Plans/architect/adrs/0001-<decision-title>.md
+.pi/architect/architecture.md
+.pi/architect/adrs/0001-<decision-title>.md
 ```
 
 `architecture.md` contains the full software architecture description: system overview, components, interfaces, data flow, data model, deployment, technology stack, development order, atomic functions, quality attribute mapping, constraints, and links to ADRs.
@@ -409,7 +409,7 @@ Examples:
 - `inventory-modular-monolith-implementer`
 - `inventory-modular-monolith-reviewer-correctness`
 
-The generated agents and skills instruct subagents to read `.IDE_Plans/architect/architecture.md` and the relevant ADRs before acting.
+The generated agents and skills instruct subagents to read `.pi/architect/architecture.md` and the relevant ADRs before acting.
 
 ### Generated files
 
@@ -462,7 +462,7 @@ Checks include:
 - Architectural drivers file is valid JSON.
 - Architect report is valid JSON.
 - `architecture.md` exists in `.pi/orchestra/`.
-- ADRs in `.IDE_Plans/architect/adrs/` match the report.
+- ADRs in `.pi/architect/adrs/` match the report.
 - Generated agent files have valid frontmatter.
 - Generated skill files exist.
 

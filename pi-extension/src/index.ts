@@ -10,12 +10,19 @@ import {
   registerFilesCommands,
 } from "./commands.js";
 import { loadState } from "./state.js";
+import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
 
 export default function piOrchestraExtension(pi: ExtensionAPI) {
   // Do not load inside subagent processes to avoid recursive orchestration.
   if (process.env.PI_SUBAGENT_NAME) {
     return;
+  }
+
+  // Migrate any architecture state created before the move to .pi/architect/.
+  const moved = migrateLegacyArchitectState(process.cwd());
+  if (moved.length > 0) {
+    console.log(`[pi-orchestra] Migrated ${moved.length} architecture file(s) to .pi/architect/.`);
   }
 
   registerCommands(pi);

@@ -185,21 +185,21 @@ Pi Orchestra can generate project-specific architecture agents and skills from y
 
    The architecture library includes common patterns such as monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, Pi's own layered monorepo, and Google Apps Script spreadsheet automation.
 
-   Generated state and artifacts (kept in `.IDE_Plans/architect/`):
+   Generated state and artifacts (kept in `.pi/architect/`):
 
-   - `.IDE_Plans/architect/architectural-drivers.json` — merged architectural drivers.
-   - `.IDE_Plans/architect/architect-profile.json` — the chosen architecture id and project profile.
-   - `.IDE_Plans/architect/architect-report.json` — the full architecture report.
-   - `.IDE_Plans/architect/architecture.md` — the human-readable software architecture document.
-   - `.IDE_Plans/architect/adrs/*.md` — architecture decision records.
-   - `.IDE_Plans/architect/architect-map/*.json` — intermediate per-document driver files.
+   - `.pi/architect/architectural-drivers.json` — merged architectural drivers.
+   - `.pi/architect/architect-profile.json` — the chosen architecture id and project profile.
+   - `.pi/architect/architect-report.json` — the full architecture report.
+   - `.pi/architect/architecture.md` — the human-readable software architecture document.
+   - `.pi/architect/adrs/*.md` — architecture decision records.
+   - `.pi/architect-map/*.json` — intermediate per-document driver files.
 
    Generated Pi-discoverable outputs:
 
    - `.pi/agents/<project>-<architecture-id>-<role>.md` — project-specific agents for planner, implementer, reviewer-correctness, reviewer-security, and reviewer-tests.
    - `.pi/skills/<project>-<architecture-id>-<stage>/SKILL.md` — project-specific skills for plan, implement, document, and deliver stages.
 
-   The generated planner agent is used for architecture scouting (`scout-1`), and all generated agents instruct subagents to read `.IDE_Plans/architect/architecture.md` and the relevant ADRs before acting.
+   The generated planner agent is used for architecture scouting (`scout-1`), and all generated agents instruct subagents to read `.pi/architect/architecture.md` and the relevant ADRs before acting.
 
    If the input documents change, `/orchestra-generate-architect` detects it and asks whether to re-run the full architecture factory.
 
@@ -233,7 +233,7 @@ Pi Orchestra can generate project-specific architecture agents and skills from y
         security-report.md
         deliver-summary.md
 
-.IDE_Plans/architect/        # one-time architecture factory output
+.pi/architect/        # one-time architecture factory output
   architectural-drivers.json
   architect-profile.json
   architect-report.json

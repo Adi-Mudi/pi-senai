@@ -623,7 +623,7 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
   } else {
     items.push({
       status: "ok",
-      message: `Architectural drivers file exists at .IDE_Plans/architect/architectural-drivers.json.`,
+      message: `Architectural drivers file exists at .pi/architect/architectural-drivers.json.`,
     });
   }
 
@@ -752,11 +752,11 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
 
     const architecturePath = path.join(architectStateDir, "architecture.md");
     if (fs.existsSync(architecturePath)) {
-      items.push({ status: "ok", message: "architecture.md found in .IDE_Plans/architect/." });
+      items.push({ status: "ok", message: "architecture.md found in .pi/architect/." });
     } else {
       items.push({
         status: "error",
-        message: "No architecture.md found in .IDE_Plans/architect/.",
+        message: "No architecture.md found in .pi/architect/.",
       });
     }
 
@@ -772,12 +772,12 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
       if (foundAdrs === report.adrs.length) {
         items.push({
           status: "ok",
-          message: `Found all ${report.adrs.length} ADRs in .IDE_Plans/architect/adrs/.`,
+          message: `Found all ${report.adrs.length} ADRs in .pi/architect/adrs/.`,
         });
       } else {
         items.push({
           status: "error",
-          message: `Found ${foundAdrs} of ${report.adrs.length} expected ADRs in .IDE_Plans/architect/adrs/.`,
+          message: `Found ${foundAdrs} of ${report.adrs.length} expected ADRs in .pi/architect/adrs/.`,
         });
       }
     }
