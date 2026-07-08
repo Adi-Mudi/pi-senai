@@ -2,6 +2,11 @@
 
 Stage-gated agent orchestration extension for Pi — **Plan → Implement → Document → Deliver**.
 
+## Project layout
+
+- `.pi/` — Pi's official project-local directory. Holds agents, skills, extensions, and the permanent architecture factory output (`architect/`).
+- `.IDE_Plans/` — A project-local folder used to keep temporary planning artifacts, run state, and draft documents out of the repo root. It is **not** a standard Pi directory; it is a convention used by this project for transient files.
+
 ## What it does
 
 Pi Orchestra splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/orchestra/runs/<run-id>/`, and requires user approval before the next stage starts.

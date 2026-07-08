@@ -2,6 +2,11 @@
 
 Agent-focused guidance for working on the `pi-orchestra` Pi extension.
 
+## Project layout
+
+- `.pi/` — Pi's official project-local directory. Holds agents, skills, extensions, and permanent architecture factory output.
+- `.IDE_Plans/` — A project-local folder for temporary planning artifacts and run state. Not a standard Pi directory; used by this project to keep the repo root clean.
+
 ## Project overview
 
 `pi-orchestra` is a local Pi extension that adds stage-gated orchestration slash commands:
@@ -71,7 +76,7 @@ npm test
 ## Key design principles
 
 1. **No duplicate subagent engine.** Do not add subagent spawning logic here. The extension injects prompts; the LLM calls the `subagent` tool provided by `pi-interactive-subagents`.
-2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/orchestra/`. Architecture factory state lives under `.pi/architect/.
+2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/orchestra/`. Architecture factory state lives under `.pi/architect/`.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
 4. **Approve auto-runs the next stage.** `/orchestra-approve` advances the state and immediately sends the next stage prompt. Manual `/orchestra-XXX` commands remain available as overrides.
 5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.

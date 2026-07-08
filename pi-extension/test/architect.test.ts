@@ -273,6 +273,11 @@ describe("architect", () => {
     const architectureContent = fs.readFileSync(architecturePath, "utf8");
     assert.ok(architectureContent.includes("Software Architecture"));
     assert.ok(architectureContent.includes("Use modular monolith"));
+    assert.ok(architectureContent.includes("## Architecture diagrams"));
+    assert.ok(architectureContent.includes("### System context"));
+    assert.ok(architectureContent.includes("### Containers and components"));
+    assert.ok(architectureContent.includes("### Typical interaction flow"));
+    assert.ok(architectureContent.includes("```mermaid"));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
