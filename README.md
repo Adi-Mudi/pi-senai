@@ -2,6 +2,10 @@
 
 Stage-gated agent orchestration extension for Pi — **Plan → Implement → Document → Deliver**.
 
+> **Note:** This extension and all its slash commands are branded as **Senai** (`/senai-*`). Pi loads it automatically from `package.json`.
+>
+> **Why "Senai"?** Senai (சேனை) is a Tamil word meaning "army," "troop," or "crowd." It describes a disciplined force where every member has a role, follows orders, and advances only when commanded. That matches how Senai works: agents are assigned roles, follow stage-gated slash commands, and obey system-prompt injections and approval gates before moving forward. "Orchestra" is a common English word with no built-in sense of command or discipline, so Senai gives the project a clearer identity.
+
 ## Project layout
 
 - `.pi/` — Pi's official project-local directory. Holds agents, skills, extensions, and the permanent architecture factory output (`architect/`).

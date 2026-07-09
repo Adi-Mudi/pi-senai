@@ -22,6 +22,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Renamed extension branding and all user-facing identifiers from Orchestra to Senai.
+  - Slash commands now use `/senai-*`.
+  - Runtime directories are `.IDE_Plans/senai` and `.pi/senai`.
+  - Skill files are `skills/senai-*.md`.
+  - Extension tools are `senai_merge_architect_drivers` and `senai_finalize_architecture`.
+  - The npm package was renamed from `pi-orchestra` to `pi-senai`.
 - `skills/senai-plan.md` rewritten to be concise and turn-budget aware, with explicit instructions to continue immediately between internal steps and a stronger fresh-scout rule. Now includes scout-4, concrete `max_turns` caps, and a clarified review-loop decision tree.
 - `skills/senai-deliver.md` final approval gate now highlights that the full **Plan → Implement → Document → Deliver** cycle is complete before asking the user to run `/senai-approve`.
 - `checkStageArtifact` now verifies both `security-report.md` and `deliver-summary.md` when checking Deliver artifacts, and verifies `plan.md` plus all four `scout-angle_*.md` files when checking Plan artifacts.
@@ -42,7 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/senai-status` now shows the next command for every stage.
 - Stage commands emit completion remarks that tell the user to run `/senai-approve` next.
 - Manual `/senai-XXX` commands remain available as an alternative to auto-advance.
-- Moved artifact directory from `.pi/senai/` to `.IDE_Plans/senai/` to align with the Senai spec.
+- Moved artifact directory from `.pi/orchestra/` to `.IDE_Plans/orchestra/` (later renamed to `.IDE_Plans/senai/` as part of the Senai rebrand).
 - Reorganized run artifacts into stage subfolders:
   - `plan/` with nested `scouts/` and `reviews/`
   - `implement/`
@@ -55,18 +61,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial `pi-senai` extension with stage-gated orchestration commands:
-  - `/senai-plan <mission>`
-  - `/senai-approve`
-  - `/senai-implement`
-  - `/senai-document`
-  - `/senai-deliver`
-  - `/senai-status`
-  - `/senai-reset`
-- State persistence under `.IDE_Plans/senai/state.json`.
-- Run-specific artifact directory under `.IDE_Plans/senai/runs/<run-id>/`.
+- Initial `pi-orchestra` extension with stage-gated orchestration commands:
+  - `/orchestra-plan <mission>`
+  - `/orchestra-approve`
+  - `/orchestra-implement`
+  - `/orchestra-document`
+  - `/orchestra-deliver`
+  - `/orchestra-status`
+  - `/orchestra-reset`
+- State persistence under `.IDE_Plans/orchestra/state.json`.
+- Run-specific artifact directory under `.IDE_Plans/orchestra/runs/<run-id>/`.
 - Stage skill prompts for Plan, Implement, Document, and Deliver.
-- System prompt injection showing active senai stage.
+- System prompt injection showing active orchestra stage.
 - Subagent-process guard to prevent recursive orchestration.
 - Unit tests covering constants, state, prompt, commands, and index modules.
 - TypeScript build setup with `npm run build` and `npm test`.
