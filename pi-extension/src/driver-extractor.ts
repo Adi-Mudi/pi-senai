@@ -32,6 +32,49 @@ export type DriverGap = {
   message: string;
 };
 
+export function normalizeDriverItem(item: unknown): DriverItem | null {
+  if (typeof item !== "object" || item === null) return null;
+  const obj = item as Record<string, unknown>;
+
+  const description = typeof obj.description === "string" ? obj.description.trim() : "";
+  if (!description) return null;
+
+  let id = typeof obj.id === "string" ? obj.id.trim() : "";
+  if (!id && typeof obj.driver === "string") {
+    id = obj.driver.trim();
+  }
+  if (!id && typeof obj.name === "string") {
+    id = obj.name.trim();
+  }
+  if (!id) return null;
+
+  const normalized: DriverItem = { id, description };
+  const source = typeof obj.source === "string" ? obj.source.trim() : "";
+  if (source) normalized.source = source;
+  return normalized;
+}
+
+export function normalizeQualityAttributeItem(item: unknown): QualityAttributeItem | null {
+  const base = normalizeDriverItem(item);
+  if (!base) return null;
+  const obj = item as Record<string, unknown>;
+  const category = typeof obj.category === "string" ? obj.category.trim() : "";
+  if (!category) return null;
+  const normalized: QualityAttributeItem = { ...base, category };
+  const target = typeof obj.target === "string" ? obj.target.trim() : "";
+  if (target) normalized.target = target;
+  return normalized;
+}
+
+export function normalizeConstraintItem(item: unknown): ConstraintItem | null {
+  const base = normalizeDriverItem(item);
+  if (!base) return null;
+  const obj = item as Record<string, unknown>;
+  const category = typeof obj.category === "string" ? obj.category.trim() : "";
+  if (!category) return null;
+  return { ...base, category };
+}
+
 export function getDriversPath(cwd: string): string {
   return path.join(getArchitectStateDir(cwd), DRIVERS_FILE);
 }
@@ -66,7 +109,21 @@ export function normalizeDrivers(value: unknown): ArchitecturalDrivers | null {
     Array.isArray(obj.technicalConcerns) &&
     Array.isArray(obj.uncertainties)
   ) {
-    return obj as unknown as ArchitecturalDrivers;
+    return {
+      functionalRequirements: obj.functionalRequirements
+        .map(normalizeDriverItem)
+        .filter((i): i is DriverItem => i !== null),
+      qualityAttributes: obj.qualityAttributes
+        .map(normalizeQualityAttributeItem)
+        .filter((i): i is QualityAttributeItem => i !== null),
+      constraints: obj.constraints
+        .map(normalizeConstraintItem)
+        .filter((i): i is ConstraintItem => i !== null),
+      technicalConcerns: obj.technicalConcerns
+        .map(normalizeDriverItem)
+        .filter((i): i is DriverItem => i !== null),
+      uncertainties: obj.uncertainties.filter((u): u is string => typeof u === "string" && u.trim() !== ""),
+    };
   }
 
   // Legacy flat schema used by some early runs: top-level "drivers" array.
@@ -129,13 +186,23 @@ export function validateDrivers(drivers: ArchitecturalDrivers): void {
     if (!Array.isArray(drivers[key])) {
       throw new Error(`Missing or invalid '${key}' field`);
     }
-    for (const item of drivers[key]) {
+    for (let i = 0; i < drivers[key].length; i++) {
+      const item = drivers[key][i];
       if (typeof item !== "string" && (!item || typeof item !== "object")) {
-        throw new Error(`'${key}' must contain only strings or objects`);
+        throw new Error(`'${key}[${i}]' must be a string or a valid driver object`);
       }
       if (typeof item === "object") {
-        if (typeof item.id !== "string" || typeof item.description !== "string") {
-          throw new Error(`Each driver item must have 'id' and 'description' strings`);
+        if (typeof item.id !== "string" || item.id.trim() === "") {
+          throw new Error(`'${key}[${i}]' is missing a valid 'id' string`);
+        }
+        if (typeof item.description !== "string" || item.description.trim() === "") {
+          throw new Error(`'${key}[${i}]' is missing a valid 'description' string`);
+        }
+        if (
+          (key === "qualityAttributes" || key === "constraints") &&
+          (typeof (item as any).category !== "string" || (item as any).category.trim() === "")
+        ) {
+          throw new Error(`'${key}[${i}]' is missing a valid 'category' string`);
         }
       }
     }

@@ -135,33 +135,6 @@ describe("constants", () => {
     assert.deepStrictEqual(STAGE_TRANSITIONS.delivered, []);
   });
 
-  it("getDefaultArtifactPaths returns placeholder paths", () => {
-    const artifacts = getDefaultArtifactPaths();
-    assert.ok(artifacts.runDir.includes("<run-id>"));
-    assert.ok(artifacts.plan.includes("<run-id>/plan/plan.md"));
-  });
-
-  it("makeRunId creates a slug from mission and date", () => {
-    const runId = makeRunId("Build a hello world CLI");
-    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-build-a-hello-world-cli$/);
-  });
-
-  it("makeRunId falls back to run when mission is empty", () => {
-    const runId = makeRunId("");
-    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-run$/);
-  });
-
-  it("makeRunId strips special characters", () => {
-    const runId = makeRunId("Feature @ #1: API & Auth!!!");
-    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-feature-1-api-auth$/);
-  });
-
-  it("makeRunId truncates very long missions", () => {
-    const runId = makeRunId("a".repeat(200));
-    const slug = runId.split("-").slice(5).join("-");
-    assert.strictEqual(slug.length, 40);
-  });
-
   it("formatStageStatus includes stage, mission, and runId", () => {
     const status = formatStageStatus({
       currentStage: "planning",

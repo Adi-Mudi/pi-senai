@@ -12,6 +12,7 @@ import {
   generateSkillFiles,
   getArchitectProfilePath,
   getArchitectReportPath,
+  isFeasible,
   loadArchitectProfile,
   loadArchitectReport,
   migrateLegacyArchitectState,
@@ -20,7 +21,8 @@ import {
   selectArchitecture,
   slugify,
 } from "../src/architect.js";
-import type { ArchitectProfile, ArchitectureLibraryEntry } from "../src/architect.js";
+import type { ArchitectProfile, ArchitectReport, ArchitectureLibraryEntry } from "../src/architect.js";
+import type { ArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { createEmptyDrivers } from "../src/driver-extractor.js";
 
 describe("architect", () => {
@@ -58,6 +60,71 @@ describe("architect", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("loadArchitectProfile normalizes projectSlug from project field", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-prof-legacy-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-profile.json"),
+      JSON.stringify({
+        projectName: "Nifty App",
+        project: "nifty-app",
+        selectedArchitecture: "gas-monolith",
+      }),
+      "utf8",
+    );
+    const loaded = loadArchitectProfile(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.projectSlug, "nifty-app");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectProfile derives projectSlug from projectName when missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-prof-slug-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-profile.json"),
+      JSON.stringify({
+        projectName: "Nifty App",
+        selectedArchitecture: "gas-monolith",
+      }),
+      "utf8",
+    );
+    const loaded = loadArchitectProfile(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.projectSlug, "nifty-app");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectProfile returns null when file is missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-prof-missing-"));
+    assert.strictEqual(loadArchitectProfile(tmpDir), null);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectProfile throws on malformed JSON", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-prof-bad-json-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-profile.json"),
+      "{ not valid",
+      "utf8",
+    );
+    assert.throws(() => loadArchitectProfile(tmpDir), /Invalid architect profile/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectProfile throws on missing required fields", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-prof-bad-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-profile.json"),
+      JSON.stringify({ projectName: "Nifty App" }),
+      "utf8",
+    );
+    assert.throws(() => loadArchitectProfile(tmpDir), /missing projectName, projectSlug, or selectedArchitecture/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("saveArchitectReport and loadArchitectReport round-trip", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-rep-"));
     const report = {
@@ -84,6 +151,224 @@ describe("architect", () => {
     saveArchitectReport(tmpDir, report);
     const loaded = loadArchitectReport(tmpDir);
     assert.deepStrictEqual(loaded, report);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport returns null when file is missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-rep-missing-"));
+    assert.strictEqual(loadArchitectReport(tmpDir), null);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport throws on malformed JSON", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-rep-bad-json-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-report.json"),
+      "{ not valid",
+      "utf8",
+    );
+    assert.throws(() => loadArchitectReport(tmpDir), /Invalid architect report/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport normalizes object ADRs with missing fields", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-rep-adr-obj-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-report.json"),
+      JSON.stringify({
+        selectedArchitecture: "modular-monolith",
+        confidence: "high",
+        missingResources: [],
+        reasoning: "Small team.",
+        skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+        developmentOrder: [],
+        feasibility: "feasible",
+        feasibilityReasoning: "Clear.",
+        techStack: [],
+        atomicFunctions: [],
+        systemOverview: "",
+        components: [],
+        interfaces: [],
+        dataFlow: "",
+        dataModel: "",
+        deployment: "",
+        qualityAttributeMapping: [],
+        adrs: [
+          { id: "0001", title: "Use modular monolith" },
+          { title: "Missing id" },
+          { id: "0002", title: "" },
+        ],
+        constraints: [],
+      }),
+      "utf8",
+    );
+    const loaded = loadArchitectReport(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.adrs.length, 1);
+    assert.strictEqual(loaded!.adrs[0].id, "0001");
+    assert.strictEqual(loaded!.adrs[0].context, "");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport normalizes string ADRs", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-rep-strings-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-report.json"),
+      JSON.stringify({
+        selectedArchitecture: "modular-monolith",
+        confidence: "high",
+        missingResources: [],
+        reasoning: "Small team.",
+        skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+        developmentOrder: [],
+        feasibility: "feasible",
+        feasibilityReasoning: "Clear.",
+        techStack: [],
+        atomicFunctions: [],
+        systemOverview: "",
+        components: [],
+        interfaces: [],
+        dataFlow: "",
+        dataModel: "",
+        deployment: "",
+        qualityAttributeMapping: [],
+        adrs: ["ADR-001: Use modular monolith", "Plain title without id"],
+        constraints: [],
+      }),
+      "utf8",
+    );
+    const loaded = loadArchitectReport(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.adrs.length, 2);
+    assert.strictEqual(loaded!.adrs[0].id, "ADR-001");
+    assert.strictEqual(loaded!.adrs[0].title, "Use modular monolith");
+    assert.strictEqual(loaded!.adrs[1].title, "Plain title without id");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("isFeasible returns true only for feasible reports", () => {
+    const feasibleReport = { feasibility: "feasible" } as any;
+    const riskyReport = { feasibility: "risky" } as any;
+    const notFeasibleReport = { feasibility: "not-feasible" } as any;
+    assert.strictEqual(isFeasible(feasibleReport), true);
+    assert.strictEqual(isFeasible(riskyReport), false);
+    assert.strictEqual(isFeasible(notFeasibleReport), false);
+  });
+
+  it("selectArchitecture returns null for empty library", () => {
+    const drivers = createEmptyDrivers();
+    drivers.functionalRequirements.push({ id: "FR-1", description: "Small team" });
+    assert.strictEqual(selectArchitecture(drivers, []), null);
+  });
+
+  it("selectArchitecture picks highest scoring entry", () => {
+    const drivers = createEmptyDrivers();
+    drivers.functionalRequirements.push({ id: "FR-1", description: "Small team web app" });
+    const library: ArchitectureLibraryEntry[] = [
+      {
+        id: "modular-monolith",
+        name: "Modular Monolith",
+        filePath: "",
+        domain: ["web"],
+        teamSize: "small",
+        complexity: "low",
+        bestForDrivers: ["small team"],
+        notForDrivers: [],
+        content: "",
+      },
+      {
+        id: "microservices",
+        name: "Microservices",
+        filePath: "",
+        domain: ["web"],
+        teamSize: "large",
+        complexity: "high",
+        bestForDrivers: ["large team"],
+        notForDrivers: [],
+        content: "",
+      },
+    ];
+    const selected = selectArchitecture(drivers, library);
+    assert.ok(selected);
+    assert.strictEqual(selected!.id, "modular-monolith");
+  });
+
+  it("selectArchitecture penalizes not-for drivers", () => {
+    const drivers = createEmptyDrivers();
+    drivers.functionalRequirements.push({ id: "FR-1", description: "Small team" });
+    const library: ArchitectureLibraryEntry[] = [
+      {
+        id: "modular-monolith",
+        name: "Modular Monolith",
+        filePath: "",
+        domain: [],
+        teamSize: "",
+        complexity: "",
+        bestForDrivers: ["small team"],
+        notForDrivers: [],
+        content: "",
+      },
+      {
+        id: "microservices",
+        name: "Microservices",
+        filePath: "",
+        domain: [],
+        teamSize: "",
+        complexity: "",
+        bestForDrivers: ["small team", "distributed"],
+        notForDrivers: ["small team"],
+        content: "",
+      },
+    ];
+    const selected = selectArchitecture(drivers, library);
+    assert.ok(selected);
+    assert.strictEqual(selected!.id, "modular-monolith");
+  });
+
+  it("areDriversStale returns true when drivers are missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-missing-"));
+    const config: ArchitectInputsConfig = {
+      version: 1,
+      documents: [{ type: "readme", path: "README.md" }],
+      additionalConstraints: [],
+    };
+    assert.strictEqual(areDriversStale(tmpDir, config), true);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns true when input is newer", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-newer-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    fs.writeFileSync(path.join(tmpDir, "README.md"), "# readme", "utf8");
+    // Ensure README is newer.
+    const now = Date.now();
+    fs.utimesSync(path.join(tmpDir, "README.md"), now / 1000, (now + 1000) / 1000);
+    const config: ArchitectInputsConfig = {
+      version: 1,
+      documents: [{ type: "readme", path: "README.md" }],
+      additionalConstraints: [],
+    };
+    assert.strictEqual(areDriversStale(tmpDir, config), true);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns false when drivers are newer", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-ok-"));
+    fs.writeFileSync(path.join(tmpDir, "README.md"), "# readme", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    const now = Date.now();
+    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), now / 1000, (now + 1000) / 1000);
+    const config: ArchitectInputsConfig = {
+      version: 1,
+      documents: [{ type: "readme", path: "README.md" }],
+      additionalConstraints: [],
+    };
+    assert.strictEqual(areDriversStale(tmpDir, config), false);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -128,6 +413,36 @@ describe("architect", () => {
     assert.strictEqual(entries[0].id, "gas-sheets-monolith");
     assert.strictEqual(entries[0].name, "Google Apps Script + Google Sheets Monolith");
     assert.ok(entries[0].content.includes("Google Workspace"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discoverArchitectureLibrary skips malformed files and falls back id from name", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-lib-malformed-"));
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "valid.md"),
+      "---\nname: Valid Arch\ncomplexity: low\n---\n# Valid\n",
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(libDir, "no-name.md"),
+      "---\ncomplexity: low\n---\n# No Name\n",
+      "utf8",
+    );
+    fs.writeFileSync(path.join(libDir, "bad.json"), "{ not valid", "utf8");
+
+    const entries = discoverArchitectureLibrary(tmpDir);
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].name, "Valid Arch");
+    assert.strictEqual(entries[0].id, "valid-arch");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discoverArchitectureLibrary returns empty array when library dir is missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-lib-missing-"));
+    const entries = discoverArchitectureLibrary(tmpDir);
+    assert.deepStrictEqual(entries, []);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

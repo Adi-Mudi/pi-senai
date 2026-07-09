@@ -91,6 +91,102 @@ describe("document-ingest", () => {
     assert.deepStrictEqual(merged.uncertainties, ["U1", "U2"]);
   });
 
+  it("mergeMapOutputs drops items missing id or description", () => {
+    const outputs: ArchitectMapOutput[] = [
+      {
+        document: "docs/PRD.md",
+        documentType: "prd",
+        functionalRequirements: [
+          { id: "FR-1", description: "Valid" },
+          { id: "", description: "Missing id" } as any,
+          { id: "FR-2", description: "" } as any,
+          { description: "Missing id too" } as any,
+        ],
+        qualityAttributes: [],
+        constraints: [],
+        technicalConcerns: [],
+        uncertainties: ["", "Real uncertainty"],
+      },
+    ];
+    const merged = mergeMapOutputs(outputs);
+    assert.strictEqual(merged.functionalRequirements.length, 1);
+    assert.strictEqual(merged.functionalRequirements[0].id, "FR-1");
+    assert.deepStrictEqual(merged.uncertainties, ["Real uncertainty"]);
+  });
+
+  it("mergeMapOutputs drops quality attributes and constraints missing category", () => {
+    const outputs: ArchitectMapOutput[] = [
+      {
+        document: "docs/NFR.md",
+        documentType: "nfr",
+        functionalRequirements: [],
+        qualityAttributes: [
+          { id: "QA-1", category: "scalability", description: "Scale" },
+          { id: "QA-2", description: "No category" } as any,
+        ],
+        constraints: [
+          { id: "C-1", category: "platform", description: "Cloud" },
+          { id: "C-2", description: "No category" } as any,
+        ],
+        technicalConcerns: [],
+        uncertainties: [],
+      },
+    ];
+    const merged = mergeMapOutputs(outputs);
+    assert.strictEqual(merged.qualityAttributes.length, 1);
+    assert.strictEqual(merged.qualityAttributes[0].id, "QA-1");
+    assert.strictEqual(merged.constraints.length, 1);
+    assert.strictEqual(merged.constraints[0].id, "C-1");
+  });
+
+  it("mergeMapOutputs handles empty outputs and all-invalid items", () => {
+    assert.deepStrictEqual(mergeMapOutputs([]), {
+      functionalRequirements: [],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    });
+
+    const outputs: ArchitectMapOutput[] = [
+      {
+        document: "docs/PRD.md",
+        documentType: "prd",
+        functionalRequirements: [{ description: "Missing id" } as any],
+        qualityAttributes: [{ id: "QA-1", description: "No category" } as any],
+        constraints: [{ id: "C-1", category: "platform", description: "" } as any],
+        technicalConcerns: [{ id: "", description: "Empty id" } as any],
+        uncertainties: ["", 123 as any],
+      },
+    ];
+    const merged = mergeMapOutputs(outputs);
+    assert.strictEqual(merged.functionalRequirements.length, 0);
+    assert.strictEqual(merged.qualityAttributes.length, 0);
+    assert.strictEqual(merged.constraints.length, 0);
+    assert.strictEqual(merged.technicalConcerns.length, 0);
+    assert.deepStrictEqual(merged.uncertainties, []);
+  });
+
+  it("mergeMapOutputs maps driver field to id", () => {
+    const outputs: ArchitectMapOutput[] = [
+      {
+        document: "docs/PRD.md",
+        documentType: "prd",
+        functionalRequirements: [{ driver: "FR-1", description: "Do X" } as any],
+        qualityAttributes: [{ driver: "QA-1", category: "scalability", description: "Scale" } as any],
+        constraints: [{ driver: "C-1", category: "platform", description: "Cloud" } as any],
+        technicalConcerns: [{ driver: "TC-1", description: "Web" } as any],
+        uncertainties: [],
+      },
+    ];
+    const merged = mergeMapOutputs(outputs);
+    assert.strictEqual(merged.functionalRequirements.length, 1);
+    assert.strictEqual(merged.functionalRequirements[0].id, "FR-1");
+    assert.strictEqual(merged.qualityAttributes[0].id, "QA-1");
+    assert.strictEqual(merged.constraints[0].id, "C-1");
+    assert.strictEqual(merged.technicalConcerns[0].id, "TC-1");
+  });
+
   it("readMapOutputs reads valid map files", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-ingest-"));
     const mapDir = getArchitectMapDir(tmpDir);

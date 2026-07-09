@@ -11,6 +11,11 @@ import type {
   QualityAttributeItem,
   ConstraintItem,
 } from "./driver-extractor.js";
+import {
+  normalizeDriverItem,
+  normalizeQualityAttributeItem,
+  normalizeConstraintItem,
+} from "./driver-extractor.js";
 import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
 
 export const DOCUMENT_MANIFEST_FILE = "architect-documents.json";
@@ -112,31 +117,35 @@ export function mergeMapOutputs(mapOutputs: ArchitectMapOutput[]): Architectural
 
   for (const output of mapOutputs) {
     for (const item of output.functionalRequirements) {
-      if (!seenIds.has(item.id)) {
-        seenIds.add(item.id);
-        merged.functionalRequirements.push(item);
+      const normalized = normalizeDriverItem(item);
+      if (normalized && !seenIds.has(normalized.id)) {
+        seenIds.add(normalized.id);
+        merged.functionalRequirements.push(normalized);
       }
     }
     for (const item of output.qualityAttributes) {
-      if (!seenIds.has(item.id)) {
-        seenIds.add(item.id);
-        merged.qualityAttributes.push(item);
+      const normalized = normalizeQualityAttributeItem(item);
+      if (normalized && !seenIds.has(normalized.id)) {
+        seenIds.add(normalized.id);
+        merged.qualityAttributes.push(normalized);
       }
     }
     for (const item of output.constraints) {
-      if (!seenIds.has(item.id)) {
-        seenIds.add(item.id);
-        merged.constraints.push(item);
+      const normalized = normalizeConstraintItem(item);
+      if (normalized && !seenIds.has(normalized.id)) {
+        seenIds.add(normalized.id);
+        merged.constraints.push(normalized);
       }
     }
     for (const item of output.technicalConcerns) {
-      if (!seenIds.has(item.id)) {
-        seenIds.add(item.id);
-        merged.technicalConcerns.push(item);
+      const normalized = normalizeDriverItem(item);
+      if (normalized && !seenIds.has(normalized.id)) {
+        seenIds.add(normalized.id);
+        merged.technicalConcerns.push(normalized);
       }
     }
     for (const uncertainty of output.uncertainties) {
-      if (!merged.uncertainties.includes(uncertainty)) {
+      if (typeof uncertainty === "string" && uncertainty.trim() !== "" && !merged.uncertainties.includes(uncertainty)) {
         merged.uncertainties.push(uncertainty);
       }
     }

@@ -23,6 +23,8 @@ import {
   loadArchitectProfile,
   loadArchitectReport,
   slugify,
+  type ArchitectProfile,
+  type ArchitectReport,
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
 import { parseAgentFile } from "./agent-discovery.js";
@@ -614,16 +616,24 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     }
   }
 
-  const drivers = loadDrivers(cwd);
-  if (!drivers) {
+  try {
+    const drivers = loadDrivers(cwd);
+    if (!drivers) {
+      items.push({
+        status: "info",
+        message: "No architectural drivers generated yet. Run /orchestra-generate-architect.",
+      });
+    } else {
+      items.push({
+        status: "ok",
+        message: `Architectural drivers file exists at .pi/architect/architectural-drivers.json.`,
+      });
+    }
+  } catch (err: any) {
     items.push({
-      status: "info",
-      message: "No architectural drivers generated yet. Run /orchestra-generate-architect.",
-    });
-  } else {
-    items.push({
-      status: "ok",
-      message: `Architectural drivers file exists at .pi/architect/architectural-drivers.json.`,
+      status: "error",
+      message: `Invalid architectural drivers at .pi/architect/architectural-drivers.json: ${err.message}`,
+      details: ["Run /orchestra-generate-architect to regenerate the drivers, or fix the JSON manually."],
     });
   }
 
@@ -640,29 +650,47 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     }
   }
 
-  const profile = loadArchitectProfile(cwd);
-  if (!profile) {
+  let profile: ArchitectProfile | null = null;
+  try {
+    profile = loadArchitectProfile(cwd);
+    if (!profile) {
+      items.push({
+        status: "info",
+        message: "No architect profile generated yet.",
+      });
+    } else {
+      items.push({
+        status: "ok",
+        message: `Architect profile exists: ${profile.projectName} → ${profile.selectedArchitecture}.`,
+      });
+    }
+  } catch (err: any) {
     items.push({
-      status: "info",
-      message: "No architect profile generated yet.",
-    });
-  } else {
-    items.push({
-      status: "ok",
-      message: `Architect profile exists: ${profile.projectName} → ${profile.selectedArchitecture}.`,
+      status: "error",
+      message: `Invalid architect profile at .pi/architect/architect-profile.json: ${err.message}`,
+      details: ["Run /orchestra-generate-architect to regenerate the profile, or fix the JSON manually."],
     });
   }
 
-  const report = loadArchitectReport(cwd);
-  if (!report) {
+  let report: ArchitectReport | null = null;
+  try {
+    report = loadArchitectReport(cwd);
+    if (!report) {
+      items.push({
+        status: "info",
+        message: "No architect report generated yet.",
+      });
+    } else {
+      items.push({
+        status: report.confidence === "high" ? "ok" : "warning",
+        message: `Architect report exists with ${report.confidence} confidence for ${report.selectedArchitecture}.`,
+      });
+    }
+  } catch (err: any) {
     items.push({
-      status: "info",
-      message: "No architect report generated yet.",
-    });
-  } else {
-    items.push({
-      status: report.confidence === "high" ? "ok" : "warning",
-      message: `Architect report exists with ${report.confidence} confidence for ${report.selectedArchitecture}.`,
+      status: "error",
+      message: `Invalid architect report at .pi/architect/architect-report.json: ${err.message}`,
+      details: ["Run /orchestra-generate-architect to regenerate the report, or fix the JSON manually."],
     });
   }
 
@@ -763,21 +791,31 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     if (report && report.adrs.length > 0) {
       const adrsDir = path.join(architectStateDir, "adrs");
       let foundAdrs = 0;
+      let checkedAdrs = 0;
       for (const adr of report.adrs) {
+        if (!adr || typeof adr.id !== "string" || typeof adr.title !== "string" || !adr.title.trim()) {
+          continue;
+        }
+        checkedAdrs++;
         const adrPath = path.join(adrsDir, `${adr.id}-${slugify(adr.title)}.md`);
         if (fs.existsSync(adrPath)) {
           foundAdrs++;
         }
       }
-      if (foundAdrs === report.adrs.length) {
+      if (checkedAdrs === 0) {
+        items.push({
+          status: "warning",
+          message: "Architect report contains ADRs, but none have a valid id and title.",
+        });
+      } else if (foundAdrs === checkedAdrs) {
         items.push({
           status: "ok",
-          message: `Found all ${report.adrs.length} ADRs in .pi/architect/adrs/.`,
+          message: `Found all ${checkedAdrs} ADRs in .pi/architect/adrs/.`,
         });
       } else {
         items.push({
           status: "error",
-          message: `Found ${foundAdrs} of ${report.adrs.length} expected ADRs in .pi/architect/adrs/.`,
+          message: `Found ${foundAdrs} of ${checkedAdrs} expected ADRs in .pi/architect/adrs/.`,
         });
       }
     }

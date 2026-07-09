@@ -100,7 +100,29 @@ export function loadArchitectProfile(cwd: string): ArchitectProfile | null {
   const profilePath = getArchitectProfilePath(cwd);
   try {
     const raw = fs.readFileSync(profilePath, "utf8");
-    return JSON.parse(raw) as ArchitectProfile;
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+
+    const projectName = typeof parsed.projectName === "string" ? parsed.projectName : "";
+    let projectSlug = typeof parsed.projectSlug === "string" ? parsed.projectSlug : "";
+    if (!projectSlug && typeof parsed.project === "string") {
+      projectSlug = parsed.project;
+    }
+    if (!projectSlug && projectName) {
+      projectSlug = slugify(projectName);
+    }
+
+    const selectedArchitecture = typeof parsed.selectedArchitecture === "string" ? parsed.selectedArchitecture : "";
+
+    if (!projectName || !projectSlug || !selectedArchitecture) {
+      throw new Error("profile is missing projectName, projectSlug, or selectedArchitecture");
+    }
+
+    return {
+      ...parsed,
+      projectName,
+      projectSlug,
+      selectedArchitecture,
+    } as ArchitectProfile;
   } catch (err: any) {
     if (err.code === "ENOENT") return null;
     throw new Error(`Invalid architect profile at ${profilePath}: ${err.message}`);
@@ -117,7 +139,54 @@ export function loadArchitectReport(cwd: string): ArchitectReport | null {
   const reportPath = getArchitectReportPath(cwd);
   try {
     const raw = fs.readFileSync(reportPath, "utf8");
-    return JSON.parse(raw) as ArchitectReport;
+    const parsed = JSON.parse(raw) as unknown;
+    const record = typeof parsed === "object" && parsed !== null ? (parsed as Record<string, unknown>) : {};
+
+    const normalized = { ...record } as unknown as ArchitectReport;
+
+    if (Array.isArray(record.adrs)) {
+      normalized.adrs = record.adrs
+        .map((adr: unknown): ArchitectAdr | null => {
+          if (typeof adr === "string") {
+            const trimmed = adr.trim();
+            if (!trimmed) return null;
+            const match = trimmed.match(/^(ADR-\d+)[:\s]+(.+)$/);
+            if (match) {
+              return {
+                id: match[1],
+                title: match[2].trim(),
+                context: "",
+                decision: "",
+                consequences: "",
+              };
+            }
+            return {
+              id: "ADR-000",
+              title: trimmed,
+              context: "",
+              decision: "",
+              consequences: "",
+            };
+          }
+          if (adr && typeof adr === "object") {
+            const obj = adr as Record<string, unknown>;
+            const id = typeof obj.id === "string" && obj.id.trim() !== "" ? obj.id.trim() : "";
+            const title = typeof obj.title === "string" && obj.title.trim() !== "" ? obj.title.trim() : "";
+            if (!id || !title) return null;
+            return {
+              id,
+              title,
+              context: typeof obj.context === "string" ? obj.context : "",
+              decision: typeof obj.decision === "string" ? obj.decision : "",
+              consequences: typeof obj.consequences === "string" ? obj.consequences : "",
+            };
+          }
+          return null;
+        })
+        .filter((adr): adr is ArchitectAdr => adr !== null);
+    }
+
+    return normalized;
   } catch (err: any) {
     if (err.code === "ENOENT") return null;
     throw new Error(`Invalid architect report at ${reportPath}: ${err.message}`);

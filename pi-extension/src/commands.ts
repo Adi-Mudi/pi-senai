@@ -764,7 +764,7 @@ function buildDocumentCandidates(
   return Array.from(candidates).sort((a, b) => a.localeCompare(b));
 }
 
-function buildCategoryItems(
+export function buildCategoryItems(
   suggestions: string[],
   current: string[],
   otherPaths: string[],
@@ -836,9 +836,9 @@ async function editCategory(
   }
 }
 
-function matchesFilter(path: string, query: string): boolean {
+export function matchesFilter(path: string, query: string): boolean {
   if (!query) return true;
-  return path.toLowerCase().includes(query);
+  return path.toLowerCase().includes(query.toLowerCase());
 }
 
 async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Promise<void> {
@@ -877,12 +877,12 @@ function getAllSelectedPaths(config: FilesConfig): string[] {
   return [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
 }
 
-function normalizePath(input: string): string {
+export function normalizePath(input: string): string {
   // Keep trailing slash if the user included it; otherwise treat as file.
   return input.replace(/\\/g, "/");
 }
 
-function isPathConflict(path: string, current: string[], other: string[]): boolean {
+export function isPathConflict(path: string, current: string[], other: string[]): boolean {
   // Within the same category, a folder blocks any file inside it,
   // and a file inside blocks the folder.
   for (const existing of current) {
@@ -901,7 +901,7 @@ function isPathConflict(path: string, current: string[], other: string[]): boole
   return false;
 }
 
-function isFolderLike(dir: string, entry: fs.Dirent): boolean {
+export function isFolderLike(dir: string, entry: fs.Dirent): boolean {
   if (entry.isDirectory()) return true;
   if (entry.isSymbolicLink()) {
     try {
@@ -1513,7 +1513,7 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
   });
 }
 
-function defaultArchitectSkill(): string {
+export function defaultArchitectSkill(): string {
   return [
     `# Architect Generation`,
     ``,
