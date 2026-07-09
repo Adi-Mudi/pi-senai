@@ -33,7 +33,7 @@ export interface FilesConfig {
 }
 
 export function getFilesConfigPath(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", FILES_CONFIG_FILE);
+  return path.join(cwd, ".pi", "senai", FILES_CONFIG_FILE);
 }
 
 export function loadFilesConfig(cwd: string): FilesConfig | null {
@@ -61,7 +61,7 @@ export function saveFilesConfig(cwd: string, config: FilesConfig): void {
 export function validateFilesConfig(config: FilesConfig): void {
   if (config.version !== CURRENT_FILES_CONFIG_VERSION) {
     throw new Error(
-      `Unsupported files.json version: ${config.version}. Expected version: ${CURRENT_FILES_CONFIG_VERSION}. Run /orchestra-configure-files to recreate.`,
+      `Unsupported files.json version: ${config.version}. Expected version: ${CURRENT_FILES_CONFIG_VERSION}. Run /senai-configure-files to recreate.`,
     );
   }
   const arrays = ["codePaths", "inputDocuments", "testPaths", "excludedPaths"] as const;

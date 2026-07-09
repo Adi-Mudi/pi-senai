@@ -1,4 +1,4 @@
-# Pi Orchestra
+# Pi Senai
 
 Stage-gated agent orchestration extension for Pi — **Plan → Implement → Document → Deliver**.
 
@@ -9,7 +9,7 @@ Stage-gated agent orchestration extension for Pi — **Plan → Implement → Do
 
 ## What it does
 
-Pi Orchestra splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/orchestra/runs/<run-id>/`, and requires user approval before the next stage starts.
+Pi Senai splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/senai/runs/<run-id>/`, and requires user approval before the next stage starts.
 
 - **Plan** — Spawn four scout agents, interview the user, write an approved `plan.md`.
 - **Implement** — Build and test the feature according to the plan.
@@ -27,78 +27,78 @@ npm test
 
 ## Before your first run
 
-Pi Orchestra requires three configuration files before any stage command will run:
+Pi Senai requires three configuration files before any stage command will run:
 
-1. **Agent configuration** — map each Orchestra role to a subagent name:
-
-   ```
-   /orchestra-configure-agents
-   ```
-
-2. **Project file configuration** — tell Orchestra which code, input documents, and tests to include:
+1. **Agent configuration** — map each Senai role to a subagent name:
 
    ```
-   /orchestra-configure-files
+   /senai-configure-agents
+   ```
+
+2. **Project file configuration** — tell Senai which code, input documents, and tests to include:
+
+   ```
+   /senai-configure-files
    ```
 
 3. **Agent document assignments** — assign truth and comparison documents to each role:
 
    ```
-   /orchestra-configure-agents-files
+   /senai-configure-agents-files
    ```
 
-You can check the current settings with `/orchestra-agents`, `/orchestra-files`, and `/orchestra-agents-files`.
+You can check the current settings with `/senai-agents`, `/senai-files`, and `/senai-agents-files`.
 
 After configuring, run a full diagnostic:
 
 ```
-/orchestra-doctor
+/senai-doctor
 ```
 
-This checks that all config files exist, every mapped agent is found in the right place, each agent has the right tools for its Orchestra role, file scopes are valid, truth documents exist, and you are running inside a supported terminal multiplexer.
+This checks that all config files exist, every mapped agent is found in the right place, each agent has the right tools for its Senai role, file scopes are valid, truth documents exist, and you are running inside a supported terminal multiplexer.
 
 ## Usage
 
 Start a new run:
 
 ```
-/orchestra-plan <mission>
+/senai-plan <mission>
 ```
 
 The agent will run the Plan stage. When the plan is ready, approve it:
 
 ```
-/orchestra-approve
+/senai-approve
 ```
 
-`/orchestra-approve` marks the current stage complete and automatically starts the next stage. You can also run stages manually when the previous stage is already approved:
+`/senai-approve` marks the current stage complete and automatically starts the next stage. You can also run stages manually when the previous stage is already approved:
 
 ```
-/orchestra-implement
-/orchestra-document
-/orchestra-deliver
+/senai-implement
+/senai-document
+/senai-deliver
 ```
 
 Check status at any time:
 
 ```
-/orchestra-status
+/senai-status
 ```
 
 Reset the current run:
 
 ```
-/orchestra-reset
+/senai-reset
 ```
 
 ## Agent configuration
 
-Before running any stage, Pi Orchestra needs three valid configuration files under `.pi/orchestra/`: `agents.json`, `files.json`, and `agents_files.json`.
+Before running any stage, Pi Senai needs three valid configuration files under `.pi/senai/`: `agents.json`, `files.json`, and `agents_files.json`.
 
 Create the configuration interactively:
 
 ```
-/orchestra-configure-agents
+/senai-configure-agents
 ```
 
 This discovers agents from:
@@ -107,27 +107,27 @@ This discovers agents from:
 2. Your user agents directory (via Pi's `getAgentDir()`).
 3. Built-in defaults: `scout`, `planner`, `worker`, `reviewer`, `security-auditor`.
 
-For each Orchestra role you can accept a suggested agent, choose a different one, or fall back to the default.
+For each Senai role you can accept a suggested agent, choose a different one, or fall back to the default.
 
 Check the current mapping and validation status:
 
 ```
-/orchestra-agents
+/senai-agents
 ```
 
-Stage commands (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will warn and stop if any of these configs is missing, invalid, or maps a custom agent that cannot be found.
+Stage commands (`/senai-plan`, `/senai-implement`, `/senai-document`, `/senai-deliver`) will warn and stop if any of these configs is missing, invalid, or maps a custom agent that cannot be found.
 
 ## Document scope configuration
 
-You can control which documents each subagent reads. Pi Orchestra uses three config files:
+You can control which documents each subagent reads. Pi Senai uses three config files:
 
-- `.pi/orchestra/files.json` — categorized project context (code paths, input documents, test paths).
-- `.pi/orchestra/agents_files.json` — per-role truth document and comparison documents.
+- `.pi/senai/files.json` — categorized project context (code paths, input documents, test paths).
+- `.pi/senai/agents_files.json` — per-role truth document and comparison documents.
 
 Configure the project context:
 
 ```
-/orchestra-configure-files
+/senai-configure-files
 ```
 
 This command deep-scans your project and suggests real files and folders. It splits selections into three categories:
@@ -141,10 +141,10 @@ The scanner recognizes both standard folder names (like `src/`, `docs/`, `tests/
 Configure document assignments for each role:
 
 ```
-/orchestra-configure-agents-files
+/senai-configure-agents-files
 ```
 
-This command shows every Orchestra role in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Selecting a role opens the same custom list editor used by `/orchestra-configure-files`, pre-filled with documents from `/orchestra-configure-files` (the `inputDocuments` pool plus discovered markdown files).
+This command shows every Senai role in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Selecting a role opens the same custom list editor used by `/senai-configure-files`, pre-filled with documents from `/senai-configure-files` (the `inputDocuments` pool plus discovered markdown files).
 
 Each role can have:
 
@@ -158,35 +158,35 @@ If a role has no assignment, it falls back to the relevant project context categ
 Check the current settings:
 
 ```
-/orchestra-files
-/orchestra-agents-files
+/senai-files
+/senai-agents-files
 ```
 
 ## Architecture generation
 
-Pi Orchestra can generate project-specific architecture agents and skills from your requirements documents.
+Pi Senai can generate project-specific architecture agents and skills from your requirements documents.
 
 1. **Choose the input documents** the architect should read:
 
    ```
-   /orchestra-configure-architect-inputs
+   /senai-configure-architect-inputs
    ```
 
-   This command reuses the same file picker as `/orchestra-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, feasibility studies, and any other documents that describe the architecture. You can also add additional constraints that are not in any file.
+   This command reuses the same file picker as `/senai-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, feasibility studies, and any other documents that describe the architecture. You can also add additional constraints that are not in any file.
 
-   The selection is saved to `.pi/orchestra/architect-inputs.json`.
+   The selection is saved to `.pi/senai/architect-inputs.json`.
 
 2. **Generate the architecture agents and skills**:
 
    ```
-   /orchestra-generate-architect
+   /senai-generate-architect
    ```
 
    This runs the **architecture factory**. It reads the selected documents in parallel (Map-Reduce), extracts architectural drivers, asks clarifying questions, matches the drivers against the architecture library, and produces a complete software architecture.
 
    The factory uses two deterministic extension tools to avoid LLM drift:
-   - `orchestra_merge_architect_drivers` — merges per-document map outputs into the final drivers file.
-   - `orchestra_finalize_architecture` — generates docs, agents, and skills with exact names.
+   - `senai_merge_architect_drivers` — merges per-document map outputs into the final drivers file.
+   - `senai_finalize_architecture` — generates docs, agents, and skills with exact names.
 
    The architecture library includes common patterns such as monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, Pi's own layered monorepo, and Google Apps Script spreadsheet automation.
 
@@ -206,16 +206,16 @@ Pi Orchestra can generate project-specific architecture agents and skills from y
 
    The generated planner agent is used for architecture scouting (`scout-1`), and all generated agents instruct subagents to read `.pi/architect/architecture.md` and the relevant ADRs before acting.
 
-   If the input documents change, `/orchestra-generate-architect` detects it and asks whether to re-run the full architecture factory.
+   If the input documents change, `/senai-generate-architect` detects it and asks whether to re-run the full architecture factory.
 
    If the architecture library lacks a matching pattern, the agent falls back to web search to gather relevant guidance before generating the agents.
 
-   After generation, `/orchestra-doctor` also validates the architecture setup.
+   After generation, `/senai-doctor` also validates the architecture setup.
 
 ## Artifact layout
 
 ```
-.IDE_Plans/orchestra/
+.IDE_Plans/senai/
   state.json
   runs/
     YYYY-MM-DD-HH-MM-<mission-slug>/
@@ -267,7 +267,7 @@ Tests are in `pi-extension/test/` and use Node's built-in test runner.
 
 ## See also
 
-- [`Doc/orchestra-sequence.md`](Doc/orchestra-sequence.md) — high-level stage flow.
+- [`Doc/senai-sequence.md`](Doc/senai-sequence.md) — high-level stage flow.
 - [`Doc/senai-full-sequence.md`](Doc/senai-full-sequence.md) — full sequence specification.
 - [`Doc/step-by-step-guide.md`](Doc/step-by-step-guide.md) — detailed walkthrough.
 - [`AGENTS.md`](AGENTS.md) — contributor / agent notes.

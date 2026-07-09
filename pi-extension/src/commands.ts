@@ -21,15 +21,15 @@ import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig
 import { buildAgentRegistryBlock } from "./agent-registry.js";
 import {
   DEFAULT_AGENTS,
-  ORCHESTRA_ROLES,
+  SENAI_ROLES,
   ROLE_LABELS,
-  type OrchestraRole,
+  type SenaiRole,
   buildSuggestionMap,
 } from "./agent-suggestions.js";
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
 import {
   formatDiagnosticReport,
-  runOrchestraDiagnostic,
+  runSenaiDiagnostic,
 } from "./doctor.js";
 import { buildStagePrompt } from "./prompt.js";
 import {
@@ -46,7 +46,7 @@ import {
   loadState,
   resetState,
   startRun,
-  type OrchestraState,
+  type SenaiState,
 } from "./state.js";
 import {
   createDefaultArchitectInputsConfig,
@@ -94,14 +94,14 @@ import {
 } from "./architect.js";
 
 const NEXT_COMMAND: Record<string, string> = {
-  planning: "/orchestra-approve",
-  planned: "/orchestra-implement",
-  implementing: "/orchestra-approve",
-  implemented: "/orchestra-document",
-  documenting: "/orchestra-approve",
-  documented: "/orchestra-deliver",
-  delivering: "/orchestra-approve",
-  delivered: "/orchestra-status",
+  planning: "/senai-approve",
+  planned: "/senai-implement",
+  implementing: "/senai-approve",
+  implemented: "/senai-document",
+  documenting: "/senai-approve",
+  documented: "/senai-deliver",
+  delivering: "/senai-approve",
+  delivered: "/senai-status",
 };
 
 const STAGE_COMMANDS: Record<string, Stage> = {
@@ -123,13 +123,13 @@ const STAGE_COMMAND_NAME: Record<"planned" | "implemented" | "documented", strin
 };
 
 export function registerCommands(pi: ExtensionAPI) {
-  pi.registerCommand("orchestra-plan", {
-    description: "Start the Plan stage: /orchestra-plan <mission>",
+  pi.registerCommand("senai-plan", {
+    description: "Start the Plan stage: /senai-plan <mission>",
     handler: async (args, ctx) => {
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
       const mission = args.trim();
       if (!mission) {
-        ctx.ui.notify("Usage: /orchestra-plan <mission>", "warning");
+        ctx.ui.notify("Usage: /senai-plan <mission>", "warning");
         return;
       }
 
@@ -142,7 +142,7 @@ export function registerCommands(pi: ExtensionAPI) {
 
       ctx.ui.notify(
         `Plan stage started for: ${mission}\n` +
-          `When the plan is ready and you approve it, run /orchestra-approve to continue.`,
+          `When the plan is ready and you approve it, run /senai-approve to continue.`,
         "info",
       );
 
@@ -151,7 +151,7 @@ export function registerCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-implement", {
+  pi.registerCommand("senai-implement", {
     description: "Start the Implement stage (requires approved plan)",
     handler: async (_args, ctx) => {
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
@@ -173,7 +173,7 @@ export function registerCommands(pi: ExtensionAPI) {
 
       ctx.ui.notify(
         `Implement stage started.\n` +
-          `When implementation and tests are complete and you approve, run /orchestra-approve to continue.`,
+          `When implementation and tests are complete and you approve, run /senai-approve to continue.`,
         "info",
       );
 
@@ -182,7 +182,7 @@ export function registerCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-document", {
+  pi.registerCommand("senai-document", {
     description: "Start the Document stage (requires implemented code)",
     handler: async (_args, ctx) => {
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
@@ -204,7 +204,7 @@ export function registerCommands(pi: ExtensionAPI) {
 
       ctx.ui.notify(
         `Document stage started.\n` +
-          `When documentation is complete and you approve, run /orchestra-approve to continue.`,
+          `When documentation is complete and you approve, run /senai-approve to continue.`,
         "info",
       );
 
@@ -213,7 +213,7 @@ export function registerCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-deliver", {
+  pi.registerCommand("senai-deliver", {
     description: "Start the Deliver stage (requires documentation)",
     handler: async (_args, ctx) => {
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
@@ -235,7 +235,7 @@ export function registerCommands(pi: ExtensionAPI) {
 
       ctx.ui.notify(
         `Deliver stage started.\n` +
-          `When security audit and packaging are complete and you approve, run /orchestra-approve to finish.`,
+          `When security audit and packaging are complete and you approve, run /senai-approve to finish.`,
         "info",
       );
 
@@ -244,12 +244,12 @@ export function registerCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-status", {
-    description: "Show current orchestra stage and artifact paths",
+  pi.registerCommand("senai-status", {
+    description: "Show current senai stage and artifact paths",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
       if (state.currentStage === "none") {
-        ctx.ui.notify("No active orchestra run. Use /orchestra-plan <mission> to start.", "info");
+        ctx.ui.notify("No active senai run. Use /senai-plan <mission> to start.", "info");
         return;
       }
 
@@ -288,12 +288,12 @@ export function registerCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-approve", {
+  pi.registerCommand("senai-approve", {
     description: "Approve the current stage and run the next stage automatically",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
       if (state.currentStage === "none") {
-        ctx.ui.notify("No active orchestra run. Start with /orchestra-plan <mission>", "warning");
+        ctx.ui.notify("No active senai run. Start with /senai-plan <mission>", "warning");
         return;
       }
       if (state.currentStage === "delivered") {
@@ -352,21 +352,21 @@ export function registerCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-reset", {
-    description: "Clear the current orchestra run state",
+  pi.registerCommand("senai-reset", {
+    description: "Clear the current senai run state",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
       if (state.currentStage === "none") {
-        ctx.ui.notify("No active orchestra run to reset.", "info");
+        ctx.ui.notify("No active senai run to reset.", "info");
         return;
       }
       const confirmed = await ctx.ui.confirm(
-        "Reset orchestra run",
+        "Reset senai run",
         `Reset run "${state.mission}"? This only deletes the state file; artifacts are preserved.`,
       );
       if (!confirmed) return;
       resetState(ctx.cwd);
-      ctx.ui.notify("Orchestra state reset.", "info");
+      ctx.ui.notify("Senai state reset.", "info");
     },
   });
 }
@@ -382,9 +382,9 @@ const REQUIRED_STAGE_FOR_MANUAL_COMMAND: Record<
 
 function ensureStage(
   _cwd: string,
-  state: OrchestraState,
+  state: SenaiState,
   targetStage: "planned" | "implemented" | "documented",
-): { ok: true; state: OrchestraState } | { ok: false; reason: string } {
+): { ok: true; state: SenaiState } | { ok: false; reason: string } {
   const required = REQUIRED_STAGE_FOR_MANUAL_COMMAND[targetStage];
   if (state.currentStage === required) {
     return { ok: true, state };
@@ -392,27 +392,27 @@ function ensureStage(
   if (state.currentStage === "none") {
     return {
       ok: false,
-      reason: "No active run. Start with /orchestra-plan <mission>.",
+      reason: "No active run. Start with /senai-plan <mission>.",
     };
   }
   return {
     ok: false,
-    reason: `Manual '/orchestra-${STAGE_COMMAND_NAME[targetStage]}' can only run from '${required}'. Current stage is '${state.currentStage}'. Run /orchestra-status to see the next step.`,
+    reason: `Manual '/senai-${STAGE_COMMAND_NAME[targetStage]}' can only run from '${required}'. Current stage is '${state.currentStage}'. Run /senai-status to see the next step.`,
   };
 }
 
 export function checkStageArtifact(
-  state: OrchestraState,
+  state: SenaiState,
   stage: "plan" | "implement" | "document" | "deliver",
   ctx: ExtensionContext,
 ): { ok: true } | { ok: false } {
   if (state.currentStage === "none") {
-    ctx.ui.notify("No active run. Start with /orchestra-plan <mission>", "warning");
+    ctx.ui.notify("No active run. Start with /senai-plan <mission>", "warning");
     return { ok: false };
   }
 
   if (!state.runId) {
-    ctx.ui.notify("Run ID is missing. Start a new run with /orchestra-plan.", "error");
+    ctx.ui.notify("Run ID is missing. Start a new run with /senai-plan.", "error");
     return { ok: false };
   }
 
@@ -493,7 +493,7 @@ function validateTruthDocuments(
 ): string[] {
   const errors: string[] = [];
   if (!config) return errors;
-  for (const role of ORCHESTRA_ROLES) {
+  for (const role of SENAI_ROLES) {
     const docs = config.documents[role];
     if (!docs?.primary) continue;
     const fullPath = path.resolve(cwd, docs.primary);
@@ -510,7 +510,7 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
   const config = loadAgentConfig(cwd);
   if (!config) {
     ctx.ui.notify(
-      "No Pi Orchestra agent configuration found. Please run /orchestra-configure-agents first.",
+      "No Pi Senai agent configuration found. Please run /senai-configure-agents first.",
       "warning",
     );
     return false;
@@ -520,7 +520,7 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
   const filesConfig = loadFilesConfig(cwd);
   if (!filesConfig) {
     errors.push(
-      "No project files configured. Please run /orchestra-configure-files first.",
+      "No project files configured. Please run /senai-configure-files first.",
     );
   } else {
     try {
@@ -533,7 +533,7 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
   const agentsFilesConfig = loadAgentsFilesConfig(cwd);
   if (!agentsFilesConfig) {
     errors.push(
-      "No agent document assignments configured. Please run /orchestra-configure-agents-files first.",
+      "No agent document assignments configured. Please run /senai-configure-agents-files first.",
     );
   } else {
     try {
@@ -552,21 +552,21 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
 }
 
 export function registerAgentCommands(pi: ExtensionAPI) {
-  pi.registerCommand("orchestra-agents", {
+  pi.registerCommand("senai-agents", {
     description: "Show current agent mapping and validation status",
     handler: async (_args, ctx) => {
       const config = loadAgentConfig(ctx.cwd);
       if (!config) {
         ctx.ui.notify(
-          "No agent configuration found. Run /orchestra-configure-agents first.",
+          "No agent configuration found. Run /senai-configure-agents first.",
           "warning",
         );
         return;
       }
 
       const errors = validateMappedAgents(ctx.cwd, config);
-      const lines = ["Pi Orchestra Agent Registry", ""];
-      for (const role of ORCHESTRA_ROLES) {
+      const lines = ["Pi Senai Agent Registry", ""];
+      for (const role of SENAI_ROLES) {
         const agentName = config.agents[role] ?? DEFAULT_AGENTS[role];
         lines.push(`  ${ROLE_LABELS[role]} (${role}) → ${agentName}`);
       }
@@ -581,17 +581,17 @@ export function registerAgentCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-configure-agents", {
+  pi.registerCommand("senai-configure-agents", {
     description: "Interactively configure subagents for this project",
     handler: async (_args, ctx) => {
       const agents = discoverAgents(ctx.cwd);
       const suggestions = buildSuggestionMap(agents);
       const existing = loadAgentConfig(ctx.cwd);
-      const mapping: Partial<Record<OrchestraRole, string>> = {};
+      const mapping: Partial<Record<SenaiRole, string>> = {};
       let i = 0;
 
-      while (i < ORCHESTRA_ROLES.length) {
-        const role = ORCHESTRA_ROLES[i];
+      while (i < SENAI_ROLES.length) {
+        const role = SENAI_ROLES[i];
         const existingValue = existing?.agents?.[role];
         const suggested = suggestions[role] ?? DEFAULT_AGENTS[role];
         const current = mapping[role] ?? existingValue ?? suggested;
@@ -608,7 +608,7 @@ export function registerAgentCommands(pi: ExtensionAPI) {
         if (i > 0) {
           options.push("← Back");
         }
-        if (i < ORCHESTRA_ROLES.length - 1) {
+        if (i < SENAI_ROLES.length - 1) {
           options.push("Next →");
         } else {
           options.push("Finish");
@@ -646,14 +646,14 @@ export function registerAgentCommands(pi: ExtensionAPI) {
         }
       }
 
-      const finalMapping: Partial<Record<OrchestraRole, string>> = {};
-      for (const role of ORCHESTRA_ROLES) {
+      const finalMapping: Partial<Record<SenaiRole, string>> = {};
+      for (const role of SENAI_ROLES) {
         finalMapping[role] = mapping[role] ?? existing?.agents?.[role] ?? DEFAULT_AGENTS[role];
       }
 
       const config = { version: 1, agents: finalMapping };
       saveAgentConfig(ctx.cwd, config);
-      ctx.ui.notify("Agent configuration saved to .pi/orchestra/agents.json", "info");
+      ctx.ui.notify("Agent configuration saved to .pi/senai/agents.json", "info");
     },
   });
 }
@@ -661,15 +661,15 @@ export function registerAgentCommands(pi: ExtensionAPI) {
 
 
 export function registerFilesCommands(pi: ExtensionAPI) {
-  pi.registerCommand("orchestra-files", {
+  pi.registerCommand("senai-files", {
     description: "Show the configured project file list",
     handler: async (_args, ctx) => {
       const config = loadFilesConfig(ctx.cwd);
       if (!config || getAllSelectedPaths(config).length === 0) {
-        ctx.ui.notify("No project files configured. Run /orchestra-configure-files first.", "info");
+        ctx.ui.notify("No project files configured. Run /senai-configure-files first.", "info");
         return;
       }
-      const lines = ["Pi Orchestra Project Files", ""];
+      const lines = ["Pi Senai Project Files", ""];
       if (config.codePaths.length > 0) {
         lines.push("Code paths:");
         for (const f of config.codePaths) lines.push(`  ${f}`);
@@ -689,7 +689,7 @@ export function registerFilesCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-configure-files", {
+  pi.registerCommand("senai-configure-files", {
     description: "Configure important project files and folders",
     handler: async (_args, ctx) => {
       const existing = loadFilesConfig(ctx.cwd);
@@ -739,7 +739,7 @@ export function registerFilesCommands(pi: ExtensionAPI) {
       }
 
       saveFilesConfig(ctx.cwd, config);
-      ctx.ui.notify("Project files saved to .pi/orchestra/files.json", "info");
+      ctx.ui.notify("Project files saved to .pi/senai/files.json", "info");
     },
   });
 }
@@ -980,19 +980,19 @@ async function browsePath(
 }
 
 export function registerAgentsFilesCommands(pi: ExtensionAPI) {
-  pi.registerCommand("orchestra-agents-files", {
+  pi.registerCommand("senai-agents-files", {
     description: "Show configured document assignments per role",
     handler: async (_args, ctx) => {
       const config = loadAgentsFilesConfig(ctx.cwd);
       if (!config || Object.keys(config.documents).length === 0) {
         ctx.ui.notify(
-          "No agent document assignments configured. Run /orchestra-configure-agents-files first.",
+          "No agent document assignments configured. Run /senai-configure-agents-files first.",
           "info",
         );
         return;
       }
-      const lines = ["Pi Orchestra Agent Document Assignments", ""];
-      for (const role of ORCHESTRA_ROLES) {
+      const lines = ["Pi Senai Agent Document Assignments", ""];
+      for (const role of SENAI_ROLES) {
         const docs = config.documents[role];
         if (!docs) continue;
         const parts: string[] = [];
@@ -1009,7 +1009,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
     },
   });
 
-  pi.registerCommand("orchestra-configure-agents-files", {
+  pi.registerCommand("senai-configure-agents-files", {
     description: "Configure truth and comparison documents for each role",
     handler: async (_args, ctx) => {
       const existing = loadAgentsFilesConfig(ctx.cwd);
@@ -1018,7 +1018,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       const filesConfig = loadFilesConfig(ctx.cwd);
       const candidates = buildDocumentCandidates(ctx.cwd, filesConfig);
 
-      const pickerItems: RolePickerItem[] = ORCHESTRA_ROLES.map((role) => {
+      const pickerItems: RolePickerItem[] = SENAI_ROLES.map((role) => {
         const agent = resolveAgentName(agentConfig, role);
         const docs = config.documents[role];
         let summary: string;
@@ -1053,13 +1053,13 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
         } else {
           await editRoleDocuments(
             ctx,
-            action.role as OrchestraRole,
+            action.role as SenaiRole,
             config,
             candidates,
             filesConfig?.excludedPaths ?? [],
           );
           // Refresh the summary/assigned state for the selected role.
-          const docs = config.documents[action.role as OrchestraRole];
+          const docs = config.documents[action.role as SenaiRole];
           const item = pickerItems.find((i) => i.id === action.role);
           if (item) {
             if (docs?.primary) {
@@ -1077,14 +1077,14 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       }
 
       saveAgentsFilesConfig(ctx.cwd, config);
-      ctx.ui.notify("Agent document assignments saved to .pi/orchestra/agents_files.json", "info");
+      ctx.ui.notify("Agent document assignments saved to .pi/senai/agents_files.json", "info");
     },
   });
 }
 
 async function editRoleDocuments(
   ctx: ExtensionContext,
-  role: OrchestraRole,
+  role: SenaiRole,
   config: AgentsFilesConfig,
   candidates: string[],
   excludedPaths: string[],
@@ -1185,7 +1185,7 @@ function buildRoleDocumentItems(
 
 function updateRoleDocs(
   config: AgentsFilesConfig,
-  role: OrchestraRole,
+  role: SenaiRole,
   primary: string | undefined,
   reads: string[],
 ): void {
@@ -1219,10 +1219,10 @@ async function pickTruthDocument(
 
 
 export function registerDoctorCommand(pi: ExtensionAPI) {
-  pi.registerCommand("orchestra-doctor", {
-    description: "Run a full diagnostic check on Orchestra configuration",
+  pi.registerCommand("senai-doctor", {
+    description: "Run a full diagnostic check on Senai configuration",
     handler: async (_args, ctx) => {
-      const report = runOrchestraDiagnostic(ctx.cwd);
+      const report = runSenaiDiagnostic(ctx.cwd);
       const text = formatDiagnosticReport(report);
       pi.sendUserMessage(text);
     },
@@ -1230,7 +1230,7 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
 }
 
 export function registerArchitectInputsCommands(pi: ExtensionAPI) {
-  pi.registerCommand("orchestra-configure-architect-inputs", {
+  pi.registerCommand("senai-configure-architect-inputs", {
     description: "Select documents the architect agent reads",
     handler: async (_args, ctx) => {
       const existing = loadArchitectInputsConfig(ctx.cwd);
@@ -1437,13 +1437,13 @@ function buildArchitectDocumentItems(suggestions: string[], current: string[]): 
 }
 
 export function registerArchitectCommand(pi: ExtensionAPI) {
-  pi.registerCommand("orchestra-generate-architect", {
+  pi.registerCommand("senai-generate-architect", {
     description: "Generate a project-specific architecture agent and skills",
     handler: async (_args, ctx) => {
       const inputsConfig = loadArchitectInputsConfig(ctx.cwd);
       if (!inputsConfig) {
         ctx.ui.notify(
-          "No architect inputs configured. Run /orchestra-configure-architect-inputs first.",
+          "No architect inputs configured. Run /senai-configure-architect-inputs first.",
           "warning",
         );
         return;
@@ -1451,7 +1451,7 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
 
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
 
-      const skillPath = path.resolve(ctx.cwd, "skills", "orchestra-generate-architect.md");
+      const skillPath = path.resolve(ctx.cwd, "skills", "senai-generate-architect.md");
       let skill = "";
       try {
         skill = fs.readFileSync(skillPath, "utf8").replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
@@ -1479,7 +1479,7 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
       }
 
       const prompt = [
-        `<pi-orchestra-generate-architect>`,
+        `<pi-senai-generate-architect>`,
         ``,
         `Generate a project-specific architecture agent and skills.`,
         ``,
@@ -1503,7 +1503,7 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
         `  - .pi/skills/<project>-<architecture-id>-<stage>/SKILL.md`,
         changeNote ? `Note: ${changeNote}` : "",
         ``,
-        `</pi-orchestra-generate-architect>`,
+        `</pi-senai-generate-architect>`,
         ``,
         skill,
       ].join("\n");
@@ -1519,17 +1519,17 @@ export function defaultArchitectSkill(): string {
     ``,
     `Follow the sequence in Doc/architect-sequence.md.`,
     ``,
-    `1. Read .pi/orchestra/architect-inputs.json.`,
+    `1. Read .pi/senai/architect-inputs.json.`,
     `2. For each configured document, spawn an architect-document-ingest subagent to extract architectural drivers. Run up to 4 subagents in parallel.`,
     `3. Each subagent must write its output to .IDE_Plans/architect-map/<sanitized-path>.json and nowhere else.`,
-    `4. Call the orchestra_merge_architect_drivers tool to merge map outputs into .pi/architect/architectural-drivers.json.`,
+    `4. Call the senai_merge_architect_drivers tool to merge map outputs into .pi/architect/architectural-drivers.json.`,
     `5. Check for missing critical drivers. Use AskUserQuestion to fill gaps.`,
     `6. Save the updated profile to .pi/architect/architect-profile.json. Use the architecture id (not the long name) as selectedArchitecture.`,
     `7. Read .pi/architecture-library/ and select the best architecture.`,
     `8. Write .pi/architect/architect-report.json with selectedArchitecture (the architecture id), confidence, missingResources, reasoning, skillProfile, developmentOrder, feasibility, feasibilityReasoning, techStack, atomicFunctions, systemOverview, components, interfaces, dataFlow, dataModel, deployment, qualityAttributeMapping, adrs, and constraints.`,
     `9. Evaluate feasibility. If not-feasible, stop and notify the user. If risky, ask before proceeding.`,
     `10. If missingResources is not empty, stop and ask the user whether to search the web for resources.`,
-    `11. Call the orchestra_finalize_architecture tool to generate .pi/architect/architecture.md, .pi/architect/adrs/*.md, .pi/agents/<project>-<architecture-id>-<role>.md, and .pi/skills/<project>-<architecture-id>-<stage>/SKILL.md.`,
+    `11. Call the senai_finalize_architecture tool to generate .pi/architect/architecture.md, .pi/architect/adrs/*.md, .pi/agents/<project>-<architecture-id>-<role>.md, and .pi/skills/<project>-<architecture-id>-<stage>/SKILL.md.`,
     `12. Notify the user of the results.`,
 
   ].join("\n");

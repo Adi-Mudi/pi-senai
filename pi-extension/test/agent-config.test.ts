@@ -14,9 +14,9 @@ import {
 import type { AgentConfig } from "../src/agent-config.js";
 
 describe("agent-config", () => {
-  it("getConfigPath returns .pi/orchestra/agents.json under cwd", () => {
+  it("getConfigPath returns .pi/senai/agents.json under cwd", () => {
     const cwd = "/fake/project";
-    assert.strictEqual(getConfigPath(cwd), path.join(cwd, ".pi/orchestra/agents.json"));
+    assert.strictEqual(getConfigPath(cwd), path.join(cwd, ".pi/senai/agents.json"));
   });
 
   it("loadAgentConfig returns null when config is missing", () => {
@@ -30,7 +30,7 @@ describe("agent-config", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
     const config: AgentConfig = {
       version: 1,
-      agents: { discussion: "orchestra-discussion", implementer: "gas-coder" },
+      agents: { discussion: "senai-discussion", implementer: "gas-coder" },
     };
     saveAgentConfig(tmpDir, config);
 
@@ -42,8 +42,8 @@ describe("agent-config", () => {
 
   it("loadAgentConfig throws on invalid JSON", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
-    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".pi", "orchestra", "agents.json"), "not json", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "not json", "utf8");
 
     assert.throws(() => loadAgentConfig(tmpDir), /Invalid agent config/);
 

@@ -1,6 +1,6 @@
 ---
-name: orchestra-plan
-description: Pi Orchestra Plan stage — research, interview, plan, review
+name: senai-plan
+description: Pi Senai Plan stage — research, interview, plan, review
 ---
 
 # Plan Stage
@@ -17,7 +17,7 @@ scout-1, scout-2, scout-3, scout-4 (parallel) → discussion → AskUserQuestion
 - Spawn fresh scouts every run. Do NOT reuse or read scout reports from any previous run folder.
 - Do not edit source files in this stage.
 - Do not wait for user input except at the AskUserQuestion step and the final approval gate.
-- The extension requires valid `.pi/orchestra/agents.json`, `.pi/orchestra/files.json`, and `.pi/orchestra/agents_files.json` before this command runs; if any are missing, tell the user to run the matching `/orchestra-configure-*` command.
+- The extension requires valid `.pi/senai/agents.json`, `.pi/senai/files.json`, and `.pi/senai/agents_files.json` before this command runs; if any are missing, tell the user to run the matching `/senai-configure-*` command.
 
 ## Subagent conventions
 
@@ -105,4 +105,4 @@ Present the plan, overview, and reviews to the user:
 
 > Plan: `<plan>`. Overview: `<planOverview>`. Reviews: correctness `<reviewCorrectness>`, security `<reviewSecurity>`, tests `<reviewTests>`. Approve to move to Implement?
 
-Do NOT start Implement until the user approves. Once approved, tell the user to run `/orchestra-approve`, which will mark the plan approved and automatically start the Implement stage.
+Do NOT start Implement until the user approves. Once approved, tell the user to run `/senai-approve`, which will mark the plan approved and automatically start the Implement stage.

@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import {
   getArtifactPaths,
-  getOrchestraDir,
+  getSenaiDir,
   getRunDir,
   getStatePath,
   makeRunId,
@@ -10,7 +10,7 @@ import {
   type Stage,
 } from "./constants.js";
 
-export interface OrchestraState {
+export interface SenaiState {
   version: number;
   mission: string;
   runId: string;
@@ -22,7 +22,7 @@ export interface OrchestraState {
 
 const CURRENT_VERSION = 1;
 
-export function defaultState(): OrchestraState {
+export function defaultState(): SenaiState {
   return {
     version: CURRENT_VERSION,
     mission: "",
@@ -34,11 +34,11 @@ export function defaultState(): OrchestraState {
   };
 }
 
-export function loadState(cwd: string): OrchestraState {
+export function loadState(cwd: string): SenaiState {
   const statePath = getStatePath(cwd);
   try {
     const raw = fs.readFileSync(statePath, "utf8");
-    const parsed = JSON.parse(raw) as OrchestraState;
+    const parsed = JSON.parse(raw) as SenaiState;
     if (parsed.version !== CURRENT_VERSION) {
       return migrateState(parsed);
     }
@@ -51,16 +51,16 @@ export function loadState(cwd: string): OrchestraState {
   }
 }
 
-export function saveState(cwd: string, state: OrchestraState): void {
+export function saveState(cwd: string, state: SenaiState): void {
   const statePath = getStatePath(cwd);
   fs.mkdirSync(path.dirname(statePath), { recursive: true });
   fs.writeFileSync(statePath, JSON.stringify(state, null, 2), "utf8");
 }
 
-export function startRun(cwd: string, mission: string): OrchestraState {
+export function startRun(cwd: string, mission: string): SenaiState {
   const runId = makeRunId(mission);
   const now = new Date().toISOString();
-  const state: OrchestraState = {
+  const state: SenaiState = {
     version: CURRENT_VERSION,
     mission,
     runId,
@@ -81,9 +81,9 @@ export function startRun(cwd: string, mission: string): OrchestraState {
 
 export function advanceStage(
   cwd: string,
-  state: OrchestraState,
+  state: SenaiState,
   nextStage: Stage,
-): { ok: true; state: OrchestraState } | { ok: false; reason: string } {
+): { ok: true; state: SenaiState } | { ok: false; reason: string } {
   const allowed = STAGE_TRANSITIONS[state.currentStage];
   if (!allowed.includes(nextStage)) {
     return {
@@ -91,7 +91,7 @@ export function advanceStage(
       reason: `Cannot move from '${state.currentStage}' to '${nextStage}'. Valid next stages: ${allowed.join(", ") || "(none)"}.`,
     };
   }
-  const nextState: OrchestraState = {
+  const nextState: SenaiState = {
     ...state,
     currentStage: nextStage,
     updatedAt: new Date().toISOString(),
@@ -109,7 +109,7 @@ export function resetState(cwd: string): void {
   }
 }
 
-function migrateState(old: any): OrchestraState {
+function migrateState(old: any): SenaiState {
   const fresh = defaultState();
   if (old && typeof old === "object") {
     if (typeof old.mission === "string") fresh.mission = old.mission;

@@ -12,8 +12,9 @@ import {
 import { loadState } from "./state.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
+import { migrateLegacyOrchestraDirs } from "./migrate.js";
 
-export default function piOrchestraExtension(pi: ExtensionAPI) {
+export default function piSenaiExtension(pi: ExtensionAPI) {
   // Do not load inside subagent processes to avoid recursive orchestration.
   if (process.env.PI_SUBAGENT_NAME) {
     return;
@@ -22,7 +23,13 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
   // Migrate any architecture state created before the move to .pi/architect/.
   const moved = migrateLegacyArchitectState(process.cwd());
   if (moved.length > 0) {
-    console.log(`[pi-orchestra] Migrated ${moved.length} architecture file(s) to .pi/architect/.`);
+    console.log(`[pi-senai] Migrated ${moved.length} architecture file(s) to .pi/architect/.`);
+  }
+
+  // Migrate legacy Orchestra directories to Senai directories.
+  const migratedDirs = migrateLegacyOrchestraDirs(process.cwd());
+  if (migratedDirs.length > 0) {
+    console.log(`[pi-senai] Migrated legacy directories: ${migratedDirs.join(", ")}`);
   }
 
   registerCommands(pi);
@@ -34,7 +41,7 @@ export default function piOrchestraExtension(pi: ExtensionAPI) {
   registerArchitectCommand(pi);
   registerArchitectTools(pi);
 
-  // Inject orchestra status into the system prompt when a run is active.
+  // Inject senai status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {
     const state = loadState(ctx.cwd);
     if (state.currentStage === "none") {

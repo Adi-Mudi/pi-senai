@@ -1,11 +1,11 @@
 ---
-name: orchestra-implement
-description: Pi Orchestra Implement stage — build and test the approved plan
+name: senai-implement
+description: Pi Senai Implement stage — build and test the approved plan
 ---
 
 # Implement Stage
 
-You are the orchestrator running the **Implement** stage of Pi Orchestra.
+You are the orchestrator running the **Implement** stage of Pi Senai.
 
 ## Goal
 
@@ -76,7 +76,7 @@ After all checks pass, present a summary to the user:
 
 > Implement stage complete. Tests: [pass/fail]. Code review: [path]. Ready to move to Document?
 
-Wait for user approval. Once approved, tell the user to run `/orchestra-approve`. Running `/orchestra-approve` will mark implementation complete and automatically start the Document stage.
+Wait for user approval. Once approved, tell the user to run `/senai-approve`. Running `/senai-approve` will mark implementation complete and automatically start the Document stage.
 
 ## Constraints
 

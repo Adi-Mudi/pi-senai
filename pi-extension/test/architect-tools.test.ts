@@ -36,8 +36,8 @@ describe("architect-tools", () => {
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
     assert.strictEqual(tools.size, 2);
-    assert.ok(tools.has("orchestra_merge_architect_drivers"));
-    assert.ok(tools.has("orchestra_finalize_architecture"));
+    assert.ok(tools.has("senai_merge_architect_drivers"));
+    assert.ok(tools.has("senai_finalize_architecture"));
   });
 
   it("merge tool merges map outputs", async () => {
@@ -68,7 +68,7 @@ describe("architect-tools", () => {
 
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
-    const result = await tools.get("orchestra_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
 
     assert.ok(result.details);
     assert.strictEqual(result.details.functionalRequirements, 2);
@@ -80,7 +80,7 @@ describe("architect-tools", () => {
 
   it("merge tool ingests legacy driver files and deletes them", async () => {
     const tmpDir = makeTmpDir("arch-tools-legacy-");
-    const legacyDir = path.join(tmpDir, ".pi", "orchestra");
+    const legacyDir = path.join(tmpDir, ".pi", "senai");
     fs.mkdirSync(legacyDir, { recursive: true });
 
     const legacyDrivers = {
@@ -94,7 +94,7 @@ describe("architect-tools", () => {
 
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
-    const result = await tools.get("orchestra_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
 
     assert.strictEqual(result.details.functionalRequirements, 1);
     assert.strictEqual(result.details.deletedLegacy.length, 1);
@@ -105,14 +105,14 @@ describe("architect-tools", () => {
 
   it("merge tool ignores malformed legacy files", async () => {
     const tmpDir = makeTmpDir("arch-tools-bad-legacy-");
-    const legacyDir = path.join(tmpDir, ".pi", "orchestra");
+    const legacyDir = path.join(tmpDir, ".pi", "senai");
     fs.mkdirSync(legacyDir, { recursive: true });
 
     fs.writeFileSync(path.join(legacyDir, "drivers-bad.json"), "{ not valid", "utf8");
 
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
-    const result = await tools.get("orchestra_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
 
     assert.strictEqual(result.details.functionalRequirements, 0);
     assert.strictEqual(result.details.deletedLegacy.length, 1);
@@ -124,7 +124,7 @@ describe("architect-tools", () => {
     const tmpDir = makeTmpDir("arch-tools-no-profile-");
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
-    const result = await tools.get("orchestra_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
 
     assert.strictEqual(result.details.error, "missing profile");
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -142,7 +142,7 @@ describe("architect-tools", () => {
 
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
-    const result = await tools.get("orchestra_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
 
     assert.strictEqual(result.details.error, "missing report");
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -181,7 +181,7 @@ describe("architect-tools", () => {
 
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
-    const result = await tools.get("orchestra_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
 
     assert.strictEqual(result.details.error, "architecture not found");
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -228,7 +228,7 @@ describe("architect-tools", () => {
 
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
-    const result = await tools.get("orchestra_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
 
     assert.ok(result.details.docs.length > 0);
     assert.ok(result.details.agents.length > 0);

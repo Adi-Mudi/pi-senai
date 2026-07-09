@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { runOrchestraDiagnostic, formatDiagnosticReport } from "../src/doctor.js";
+import { runSenaiDiagnostic, formatDiagnosticReport } from "../src/doctor.js";
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
@@ -42,7 +42,7 @@ function writeFile(cwd: string, relPath: string, content = ""): void {
 describe("doctor", () => {
   it("reports missing config files", () => {
     const tmpDir = makeTmpDir("doctor-missing-");
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, false);
     const configSection = report.sections.find((s) => s.title === "Configuration files");
@@ -73,7 +73,7 @@ describe("doctor", () => {
     writeFile(tmpDir, "README.md");
     writeFile(tmpDir, "tests/index.test.ts");
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, true);
     const configSection = report.sections.find((s) => s.title === "Configuration files");
@@ -89,9 +89,9 @@ describe("doctor", () => {
 
   it("reports files.json version mismatch instead of crashing", () => {
     const tmpDir = makeTmpDir("doctor-version-mismatch-");
-    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
     fs.writeFileSync(
-      path.join(tmpDir, ".pi", "orchestra", "files.json"),
+      path.join(tmpDir, ".pi", "senai", "files.json"),
       JSON.stringify({
         version: 3,
         codePaths: ["src/"],
@@ -104,7 +104,7 @@ describe("doctor", () => {
     saveAgentConfig(tmpDir, { version: 1, agents: {} });
     saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, false);
     const configSection = report.sections.find((s) => s.title === "Configuration files");
@@ -133,7 +133,7 @@ describe("doctor", () => {
     });
     saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, false);
     const mappingSection = report.sections.find((s) => s.title === "Agent mapping sources");
@@ -168,7 +168,7 @@ describe("doctor", () => {
     });
     saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, false);
     const capabilitySection = report.sections.find((s) => s.title === "Agent-role capability fit");
@@ -204,7 +204,7 @@ describe("doctor", () => {
     });
     saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, false);
     const capabilitySection = report.sections.find((s) => s.title === "Agent-role capability fit");
@@ -236,7 +236,7 @@ describe("doctor", () => {
     writeFile(tmpDir, "README.md");
     writeFile(tmpDir, "tests/index.test.ts");
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, false);
     const fileScopeSection = report.sections.find((s) => s.title === "Project file scope");
@@ -266,7 +266,7 @@ describe("doctor", () => {
       },
     });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
 
     assert.strictEqual(report.ok, false);
     const docSection = report.sections.find((s) => s.title === "Agent document assignments");
@@ -294,10 +294,10 @@ describe("doctor", () => {
     writeFile(tmpDir, "README.md");
     writeFile(tmpDir, "tests/index.test.ts");
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const text = formatDiagnosticReport(report);
 
-    assert.ok(text.includes("Pi Orchestra Diagnostic Report"));
+    assert.ok(text.includes("Pi Senai Diagnostic Report"));
     assert.ok(text.includes("Configuration files"));
     assert.ok(text.includes("Agent mapping sources"));
     assert.ok(text.includes("Agent-role capability fit"));
@@ -332,7 +332,7 @@ describe("doctor", () => {
       "utf8",
     );
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const archSection = report.sections.find((s) => s.title === "Architecture setup");
     assert.ok(archSection);
 
@@ -366,7 +366,7 @@ describe("doctor", () => {
       "utf8",
     );
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const archSection = report.sections.find((s) => s.title === "Architecture setup");
     assert.ok(archSection);
 
@@ -400,7 +400,7 @@ describe("doctor", () => {
       "utf8",
     );
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const archSection = report.sections.find((s) => s.title === "Architecture setup");
     assert.ok(archSection);
 
@@ -464,7 +464,7 @@ describe("doctor", () => {
       constraints: [],
     });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const archSection = report.sections.find((s) => s.title === "Architecture setup");
     assert.ok(archSection);
 
@@ -506,7 +506,7 @@ describe("doctor", () => {
       output: "single",
     });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const roleSection = report.sections.find((s) => s.title === "Agent-role capability fit");
     assert.ok(roleSection);
 
@@ -532,10 +532,10 @@ describe("doctor", () => {
     writeFile(tmpDir, "README.md");
     writeFile(tmpDir, "tests/index.test.ts");
 
-    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".pi", "orchestra", "drivers-prd.json"), "{}", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "drivers-prd.json"), "{}", "utf8");
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const archSection = report.sections.find((s) => s.title === "Architecture setup");
     assert.ok(archSection);
 
@@ -596,7 +596,7 @@ describe("doctor", () => {
       constraints: [],
     });
 
-    const report = runOrchestraDiagnostic(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
     const archSection = report.sections.find((s) => s.title === "Architecture setup");
     assert.ok(archSection);
 

@@ -25,7 +25,7 @@ function makeV2Config(overrides?: Partial<FilesConfig>): FilesConfig {
 
 describe("files-config", () => {
   it("getFilesConfigPath returns correct path", () => {
-    assert.strictEqual(getFilesConfigPath("/fake"), path.join("/fake", ".pi/orchestra/files.json"));
+    assert.strictEqual(getFilesConfigPath("/fake"), path.join("/fake", ".pi/senai/files.json"));
   });
 
   it("loadFilesConfig returns null when missing", () => {
@@ -49,9 +49,9 @@ describe("files-config", () => {
 
   it("loadFilesConfig migrates v1 config automatically", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
-    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
     fs.writeFileSync(
-      path.join(tmpDir, ".pi", "orchestra", "files.json"),
+      path.join(tmpDir, ".pi", "senai", "files.json"),
       JSON.stringify({ version: 1, files: ["src/"] }),
       "utf8",
     );
@@ -63,8 +63,8 @@ describe("files-config", () => {
 
   it("loadFilesConfig throws on invalid JSON", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
-    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".pi", "orchestra", "files.json"), "not json", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "files.json"), "not json", "utf8");
     assert.throws(() => loadFilesConfig(tmpDir), /Invalid files config/);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -99,7 +99,7 @@ describe("files-config", () => {
   it("saveFilesConfig creates directories if needed", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
     saveFilesConfig(tmpDir, makeV2Config({ codePaths: ["x"] }));
-    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "orchestra", "files.json")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai", "files.json")));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

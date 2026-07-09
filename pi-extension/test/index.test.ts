@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import piOrchestraExtension from "../src/index.js";
+import piSenaiExtension from "../src/index.js";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 describe("index", () => {
@@ -12,7 +12,7 @@ describe("index", () => {
   let eventHandlers: Record<string, (event: any, ctx: ExtensionContext) => any>;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-index-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-index-test-"));
     registeredCommands = [];
     eventHandlers = {};
   });
@@ -45,14 +45,14 @@ describe("index", () => {
   }
 
   it("registers all slash commands", () => {
-    piOrchestraExtension(makeApi());
-    assert.ok(registeredCommands.includes("orchestra-plan"));
-    assert.ok(registeredCommands.includes("orchestra-status"));
+    piSenaiExtension(makeApi());
+    assert.ok(registeredCommands.includes("senai-plan"));
+    assert.ok(registeredCommands.includes("senai-status"));
   });
 
   it("injects status block when a run is active", async () => {
     const api = makeApi();
-    piOrchestraExtension(api);
+    piSenaiExtension(api);
 
     // Simulate starting a run through commands by writing state directly.
     const state = {
@@ -64,8 +64,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/orchestra"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/orchestra/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },
@@ -79,7 +79,7 @@ describe("index", () => {
 
   it("does not inject status block when no run is active", async () => {
     const api = makeApi();
-    piOrchestraExtension(api);
+    piSenaiExtension(api);
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },
@@ -91,7 +91,7 @@ describe("index", () => {
 
   it("injects Plan stage scout rule during planning", async () => {
     const api = makeApi();
-    piOrchestraExtension(api);
+    piSenaiExtension(api);
 
     const state = {
       version: 1,
@@ -102,8 +102,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/orchestra"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/orchestra/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },
@@ -116,7 +116,7 @@ describe("index", () => {
 
   it("does not inject Plan stage scout rule outside planning", async () => {
     const api = makeApi();
-    piOrchestraExtension(api);
+    piSenaiExtension(api);
 
     const state = {
       version: 1,
@@ -127,8 +127,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/orchestra"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/orchestra/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },
@@ -141,7 +141,7 @@ describe("index", () => {
 
   it("does not load inside subagent processes", () => {
     process.env.PI_SUBAGENT_NAME = "worker";
-    piOrchestraExtension(makeApi());
+    piSenaiExtension(makeApi());
     assert.strictEqual(registeredCommands.length, 0);
     delete process.env.PI_SUBAGENT_NAME;
   });

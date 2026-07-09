@@ -1,6 +1,6 @@
 import type { DiscoveredAgent } from "./agent-discovery.js";
 
-export const ORCHESTRA_ROLES = [
+export const SENAI_ROLES = [
   "scout-1",
   "scout-2",
   "scout-3",
@@ -24,9 +24,9 @@ export const ORCHESTRA_ROLES = [
   "archive",
 ] as const;
 
-export type OrchestraRole = (typeof ORCHESTRA_ROLES)[number];
+export type SenaiRole = (typeof SENAI_ROLES)[number];
 
-export const DEFAULT_AGENTS: Record<OrchestraRole, string> = {
+export const DEFAULT_AGENTS: Record<SenaiRole, string> = {
   "scout-1": "scout",
   "scout-2": "scout",
   "scout-3": "scout",
@@ -50,7 +50,7 @@ export const DEFAULT_AGENTS: Record<OrchestraRole, string> = {
   archive: "worker",
 };
 
-export const ROLE_LABELS: Record<OrchestraRole, string> = {
+export const ROLE_LABELS: Record<SenaiRole, string> = {
   "scout-1": "Scout 1 — Architecture / big-picture",
   "scout-2": "Scout 2 — Coder Search",
   "scout-3": "Scout 3 — Code Risk / dependency audit",
@@ -75,7 +75,7 @@ export const ROLE_LABELS: Record<OrchestraRole, string> = {
 };
 
 export function suggestAgentForRole(
-  role: OrchestraRole,
+  role: SenaiRole,
   agents: DiscoveredAgent[],
 ): string | undefined {
   // First pass: prefer project-specific generated architecture agents.
@@ -170,9 +170,9 @@ export function suggestAgentForRole(
 
 export function buildSuggestionMap(
   agents: DiscoveredAgent[],
-): Partial<Record<OrchestraRole, string>> {
-  const map: Partial<Record<OrchestraRole, string>> = {};
-  for (const role of ORCHESTRA_ROLES) {
+): Partial<Record<SenaiRole, string>> {
+  const map: Partial<Record<SenaiRole, string>> = {};
+  for (const role of SENAI_ROLES) {
     const suggestion = suggestAgentForRole(role, agents);
     if (suggestion) map[role] = suggestion;
   }

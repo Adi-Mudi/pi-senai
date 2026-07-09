@@ -32,7 +32,7 @@ export interface ArchitectInputsConfig {
 }
 
 export function getArchitectInputsConfigPath(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", ARCHITECT_INPUTS_CONFIG_FILE);
+  return path.join(cwd, ".pi", "senai", ARCHITECT_INPUTS_CONFIG_FILE);
 }
 
 export function loadArchitectInputsConfig(cwd: string): ArchitectInputsConfig | null {
@@ -60,7 +60,7 @@ export function saveArchitectInputsConfig(
 export function validateArchitectInputsConfig(config: ArchitectInputsConfig): void {
   if (config.version !== CURRENT_ARCHITECT_INPUTS_CONFIG_VERSION) {
     throw new Error(
-      `Unsupported architect-inputs.json version: ${config.version}. Expected version: ${CURRENT_ARCHITECT_INPUTS_CONFIG_VERSION}. Run /orchestra-configure-architect-inputs to recreate.`,
+      `Unsupported architect-inputs.json version: ${config.version}. Expected version: ${CURRENT_ARCHITECT_INPUTS_CONFIG_VERSION}. Run /senai-configure-architect-inputs to recreate.`,
     );
   }
   if (!Array.isArray(config.documents)) {

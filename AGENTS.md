@@ -1,6 +1,6 @@
-# AGENTS.md — Pi Orchestra
+# AGENTS.md — Pi Senai
 
-Agent-focused guidance for working on the `pi-orchestra` Pi extension.
+Agent-focused guidance for working on the `pi-senai` Pi extension.
 
 ## Project layout
 
@@ -9,7 +9,7 @@ Agent-focused guidance for working on the `pi-orchestra` Pi extension.
 
 ## Project overview
 
-`pi-orchestra` is a local Pi extension that adds stage-gated orchestration slash commands:
+`pi-senai` is a local Pi extension that adds stage-gated orchestration slash commands:
 
 ```
 Plan → Implement → Document → Deliver
@@ -52,23 +52,23 @@ npm test
 │   ├── index.ts         # entry point: register commands, hooks, guards, tools
 │   ├── commands.ts      # slash command handlers
 │   ├── architect-tools.ts # deterministic tools for the architecture factory
-│   ├── state.ts         # read/write .IDE_Plans/orchestra/state.json
+│   ├── state.ts         # read/write .IDE_Plans/senai/state.json
 │   ├── prompt.ts        # load stage skills and build prompts
 │   ├── constants.ts     # paths, stage enum, transitions, helpers
 │   ├── agent-discovery.ts   # discover project/user/built-in agents
-│   ├── agent-suggestions.ts # suggest agents per Orchestra role
-│   ├── agent-config.ts           # load/save/validate .pi/orchestra/agents.json
+│   ├── agent-suggestions.ts # suggest agents per Senai role
+│   ├── agent-config.ts           # load/save/validate .pi/senai/agents.json
 │   ├── agent-registry.ts         # build agent registry prompt block
-│   ├── files-config.ts           # load/save/validate .pi/orchestra/files.json
-│   └── agents-files-config.ts    # load/save/validate .pi/orchestra/agents_files.json
+│   ├── files-config.ts           # load/save/validate .pi/senai/files.json
+│   └── agents-files-config.ts    # load/save/validate .pi/senai/agents_files.json
 ├── pi-extension/test/   # unit tests
 ├── skills/              # stage skill markdown files
-│   ├── orchestra-plan.md
-│   ├── orchestra-implement.md
-│   ├── orchestra-document.md
-│   └── orchestra-deliver.md
+│   ├── senai-plan.md
+│   ├── senai-implement.md
+│   ├── senai-document.md
+│   └── senai-deliver.md
 └── Doc/                 # human-facing design docs
-    ├── orchestra-sequence.md
+    ├── senai-sequence.md
     ├── senai-full-sequence.md
     └── step-by-step-guide.md
 ```
@@ -76,34 +76,34 @@ npm test
 ## Key design principles
 
 1. **No duplicate subagent engine.** Do not add subagent spawning logic here. The extension injects prompts; the LLM calls the `subagent` tool provided by `pi-interactive-subagents`.
-2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/orchestra/`. Architecture factory state lives under `.pi/architect/`.
+2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/senai/`. Architecture factory state lives under `.pi/architect/`.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
-4. **Approve auto-runs the next stage.** `/orchestra-approve` advances the state and immediately sends the next stage prompt. Manual `/orchestra-XXX` commands remain available as overrides.
+4. **Approve auto-runs the next stage.** `/senai-approve` advances the state and immediately sends the next stage prompt. Manual `/senai-XXX` commands remain available as overrides.
 5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.
 
 ## Document scope configuration
 
-Three config files live under `.pi/orchestra/`:
+Three config files live under `.pi/senai/`:
 
 | File | Command | Purpose |
 |---|---|---|
-| `agents.json` | `/orchestra-configure-agents` | Maps each Orchestra role to a subagent name. Roles are shown with friendly labels (e.g., `Scout 1 — Architecture / big-picture`). |
-| `files.json` | `/orchestra-configure-files` | Categorized project context: code paths, input documents, and test paths. |
-| `agents_files.json` | `/orchestra-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. The custom role picker highlights roles that already have assignments. |
+| `agents.json` | `/senai-configure-agents` | Maps each Senai role to a subagent name. Roles are shown with friendly labels (e.g., `Scout 1 — Architecture / big-picture`). |
+| `files.json` | `/senai-configure-files` | Categorized project context: code paths, input documents, and test paths. |
+| `agents_files.json` | `/senai-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. The custom role picker highlights roles that already have assignments. |
 
-All three files are required before any stage command (`/orchestra-plan`, `/orchestra-implement`, `/orchestra-document`, `/orchestra-deliver`) will run. Run the corresponding `/orchestra-configure-*` command for each missing file.
+All three files are required before any stage command (`/senai-plan`, `/senai-implement`, `/senai-document`, `/senai-deliver`) will run. Run the corresponding `/senai-configure-*` command for each missing file.
 
-Use `/orchestra-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Orchestra role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs.
+Use `/senai-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs.
 
 ## Architecture factory layout
 
-The `/orchestra-generate-architect` command produces a one-time architecture for the project.
+The `/senai-generate-architect` command produces a one-time architecture for the project.
 
-**Input config (stays in `.pi/orchestra/`):**
+**Input config (stays in `.pi/senai/`):**
 
 | File | Command | Purpose |
 |---|---|---|
-| `architect-inputs.json` | `/orchestra-configure-architect-inputs` | Documents and constraints used to derive the architecture. |
+| `architect-inputs.json` | `/senai-configure-architect-inputs` | Documents and constraints used to derive the architecture. |
 
 **Generated state and artifacts (live in `.pi/architect/`):**
 
@@ -125,8 +125,8 @@ The `/orchestra-generate-architect` command produces a one-time architecture for
 
 The factory uses two deterministic tools to avoid LLM drift:
 
-- `orchestra_merge_architect_drivers` — merges map outputs and cleans stale root files.
-- `orchestra_finalize_architecture` — generates docs, agents, and skills with exact names.
+- `senai_merge_architect_drivers` — merges map outputs and cleans stale root files.
+- `senai_finalize_architecture` — generates docs, agents, and skills with exact names.
 
 ### `files.json` schema (version 2)
 
@@ -145,7 +145,7 @@ The factory uses two deterministic tools to avoid LLM drift:
 - `testPaths` — folders or files that contain tests.
 - `excludedPaths` — folders the scanner should ignore.
 
-The `/orchestra-configure-files` command deep-scans the project and suggests items for each category. It recognizes standard names like `src/`, `docs/`, and `tests/`, and also detects custom folder names by looking at the file types inside them. Selecting a folder blocks selection of any file inside it, and vice versa, to prevent overlap.
+The `/senai-configure-files` command deep-scans the project and suggests items for each category. It recognizes standard names like `src/`, `docs/`, and `tests/`, and also detects custom folder names by looking at the file types inside them. Selecting a folder blocks selection of any file inside it, and vice versa, to prevent overlap.
 
 The Document Scope block in stage prompts shows:
 
@@ -160,13 +160,13 @@ Validation checks JSON shape and known role names. It does not require files to 
 State file:
 
 ```text
-.IDE_Plans/orchestra/state.json
+.IDE_Plans/senai/state.json
 ```
 
 Run artifacts:
 
 ```text
-.IDE_Plans/orchestra/runs/<run-id>/
+.IDE_Plans/senai/runs/<run-id>/
 ├── plan/
 │   ├── plan.md
 │   ├── plan-overview.md
@@ -197,14 +197,14 @@ YYYY-MM-DD-HH-MM-<mission-slug>
 
 | Stage transition | Command that triggers it |
 |---|---|
-| `none` → `planning` | `/orchestra-plan <mission>` |
-| `planning` → `planned` → `implementing` | `/orchestra-approve` |
-| `planned` → `implementing` | `/orchestra-implement` (manual override) |
-| `implementing` → `implemented` → `documenting` | `/orchestra-approve` |
-| `implemented` → `documenting` | `/orchestra-document` (manual override) |
-| `documenting` → `documented` → `delivering` | `/orchestra-approve` |
-| `documented` → `delivering` | `/orchestra-deliver` (manual override) |
-| `delivering` → `delivered` | `/orchestra-approve` |
+| `none` → `planning` | `/senai-plan <mission>` |
+| `planning` → `planned` → `implementing` | `/senai-approve` |
+| `planned` → `implementing` | `/senai-implement` (manual override) |
+| `implementing` → `implemented` → `documenting` | `/senai-approve` |
+| `implemented` → `documenting` | `/senai-document` (manual override) |
+| `documenting` → `documented` → `delivering` | `/senai-approve` |
+| `documented` → `delivering` | `/senai-deliver` (manual override) |
+| `delivering` → `delivered` | `/senai-approve` |
 
 Stage transitions are defined in `constants.ts` as `STAGE_TRANSITIONS`.
 
@@ -239,7 +239,7 @@ Do not remove this guard.
 For local testing, the extension can be symlinked into Pi:
 
 ```bash
-ln -sf /mnt/Just_Do_It/02_Devp_Soft/pi-senai/Pi-Orchestra_v4 ~/.pi/agent/extensions/pi-orchestra
+ln -sf /mnt/Just_Do_It/02_Devp_Soft/pi-senai/Pi-Senai_v4 ~/.pi/agent/extensions/pi-senai
 ```
 
 After code changes, run `npm run build` and restart Pi or run `/reload`.
@@ -250,13 +250,13 @@ When changing behavior, update both code-facing docs (`README.md`, `CHANGELOG.md
 
 ### Doc map
 
-- `Doc/orchestra-sequence.md` — high-level stage flow and artifact layout.
+- `Doc/senai-sequence.md` — high-level stage flow and artifact layout.
 - `Doc/senai-full-sequence.md` — full sequence specification with agents and contexts.
 - `Doc/step-by-step-guide.md` — hands-on walkthrough for running a full cycle.
 
 ## Agent configuration
 
-Pi Orchestra supports project-specific and user-specific agent definitions in `.pi/agents/*.md` files with YAML frontmatter. The extension discovers them and maps each Orchestra role to an agent name.
+Pi Senai supports project-specific and user-specific agent definitions in `.pi/agents/*.md` files with YAML frontmatter. The extension discovers them and maps each Senai role to an agent name.
 
 ### Discovery order
 
@@ -285,7 +285,7 @@ Files missing `name` or `description` are skipped. Only `.md` files are consider
 
 ### Configuration file
 
-The interactive `/orchestra-configure-agents` command writes `.pi/orchestra/agents.json`:
+The interactive `/senai-configure-agents` command writes `.pi/senai/agents.json`:
 
 ```json
 {

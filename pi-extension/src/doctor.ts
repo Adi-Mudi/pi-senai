@@ -11,9 +11,9 @@ import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { loadAgentsFilesConfig, type AgentsFilesConfig } from "./agents-files-config.js";
 import {
   DEFAULT_AGENTS,
-  ORCHESTRA_ROLES,
+  SENAI_ROLES,
   ROLE_LABELS,
-  type OrchestraRole,
+  type SenaiRole,
 } from "./agent-suggestions.js";
 import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
 import {
@@ -59,7 +59,7 @@ interface ResolvedAgent {
 
 const BUILTIN_AGENT_NAMES = Array.from(new Set(Object.values(DEFAULT_AGENTS)));
 
-const ROLE_REQUIRED_TOOLS: Partial<Record<OrchestraRole, string[]>> = {
+const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
   "scout-1": ["read"],
   "scout-2": ["read"],
   "scout-3": ["read"],
@@ -83,7 +83,7 @@ const ROLE_REQUIRED_TOOLS: Partial<Record<OrchestraRole, string[]>> = {
   archive: ["read", "write", "bash"],
 };
 
-const READONLY_ROLES: OrchestraRole[] = [
+const READONLY_ROLES: SenaiRole[] = [
   "scout-1",
   "scout-2",
   "scout-3",
@@ -107,7 +107,7 @@ const CONFLICTING_READONLY_PATTERNS = [
   { pattern: /only reviews/i, reason: "Agent is review-only" },
 ];
 
-export function runOrchestraDiagnostic(cwd: string): DiagnosticReport {
+export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const sections: DiagnosticSection[] = [];
 
   const agentConfig = loadAgentConfig(cwd);
@@ -163,7 +163,7 @@ function checkConfigFiles(
 ): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
-  const agentPath = path.join(cwd, ".pi", "orchestra", "agents.json");
+  const agentPath = path.join(cwd, ".pi", "senai", "agents.json");
   if (agentConfig) {
     items.push({ status: "ok", message: `agents.json found and valid at ${agentPath}` });
     if (agentConfig.version !== 1) {
@@ -176,16 +176,16 @@ function checkConfigFiles(
     items.push({
       status: "error",
       message: `agents.json missing or invalid at ${agentPath}`,
-      details: ["Run /orchestra-configure-agents to create it."],
+      details: ["Run /senai-configure-agents to create it."],
     });
   }
 
-  const filesPath = path.join(cwd, ".pi", "orchestra", "files.json");
+  const filesPath = path.join(cwd, ".pi", "senai", "files.json");
   if (filesConfigError) {
     items.push({
       status: "error",
       message: filesConfigError,
-      details: ["Run /orchestra-configure-files to recreate the file."],
+      details: ["Run /senai-configure-files to recreate the file."],
     });
   } else if (filesConfig) {
     items.push({ status: "ok", message: `files.json found and valid at ${filesPath}` });
@@ -193,11 +193,11 @@ function checkConfigFiles(
     items.push({
       status: "error",
       message: `files.json missing or invalid at ${filesPath}`,
-      details: ["Run /orchestra-configure-files to create it."],
+      details: ["Run /senai-configure-files to create it."],
     });
   }
 
-  const agentsFilesPath = path.join(cwd, ".pi", "orchestra", "agents_files.json");
+  const agentsFilesPath = path.join(cwd, ".pi", "senai", "agents_files.json");
   if (agentsFilesConfig) {
     items.push({
       status: "ok",
@@ -213,7 +213,7 @@ function checkConfigFiles(
     items.push({
       status: "error",
       message: `agents_files.json missing or invalid at ${agentsFilesPath}`,
-      details: ["Run /orchestra-configure-agents-files to create it."],
+      details: ["Run /senai-configure-agents-files to create it."],
     });
   }
 
@@ -223,13 +223,13 @@ function checkConfigFiles(
 function resolveAllAgents(
   cwd: string,
   agentConfig: AgentConfig | null,
-): Record<OrchestraRole, ResolvedAgent> {
-  const result = {} as Record<OrchestraRole, ResolvedAgent>;
+): Record<SenaiRole, ResolvedAgent> {
+  const result = {} as Record<SenaiRole, ResolvedAgent>;
 
   const projectDir = findNearestProjectAgentsDir(cwd);
   const userDir = getUserAgentsDir();
 
-  for (const role of ORCHESTRA_ROLES) {
+  for (const role of SENAI_ROLES) {
     const name = resolveAgentName(agentConfig, role);
 
     const projectPath = projectDir ? path.join(projectDir, `${name}.md`) : null;
@@ -265,10 +265,10 @@ function resolveAllAgents(
   return result;
 }
 
-function checkAgentMappings(resolved: Record<OrchestraRole, ResolvedAgent>): DiagnosticSection {
+function checkAgentMappings(resolved: Record<SenaiRole, ResolvedAgent>): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
-  for (const role of ORCHESTRA_ROLES) {
+  for (const role of SENAI_ROLES) {
     const agent = resolved[role];
     const label = ROLE_LABELS[role];
 
@@ -322,10 +322,10 @@ function checkAgentMappings(resolved: Record<OrchestraRole, ResolvedAgent>): Dia
   return { title: "Agent mapping sources", items };
 }
 
-function checkAgentCapabilities(resolved: Record<OrchestraRole, ResolvedAgent>): DiagnosticSection {
+function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
-  for (const role of ORCHESTRA_ROLES) {
+  for (const role of SENAI_ROLES) {
     const agent = resolved[role];
     const label = ROLE_LABELS[role];
 
@@ -396,8 +396,8 @@ function checkAgentCapabilities(resolved: Record<OrchestraRole, ResolvedAgent>):
         status: "warning",
         message: `${label} (${role}) → ${agent.name}: has output="${agent.frontmatter.output}"`,
         details: [
-          "The agent may write to its preferred output path instead of the Orchestra artifact path.",
-          "Make sure the agent task explicitly overrides this with the Orchestra artifact path.",
+          "The agent may write to its preferred output path instead of the Senai artifact path.",
+          "Make sure the agent task explicitly overrides this with the Senai artifact path.",
         ],
       });
     }
@@ -489,7 +489,7 @@ function checkAgentsFiles(
     for (const p of filesConfig.inputDocuments) allConfiguredDocs.add(path.resolve(cwd, p));
   }
 
-  for (const role of ORCHESTRA_ROLES) {
+  for (const role of SENAI_ROLES) {
     const docs = config.documents[role];
     if (!docs) continue;
     const label = ROLE_LABELS[role];
@@ -555,7 +555,7 @@ function checkEnvironment(): DiagnosticSection {
       message: "Not running inside tmux or Zellij.",
       details: [
         "pi-interactive-subagents needs a terminal multiplexer to spawn subagent panes.",
-        "Start Pi inside tmux or Zellij before running Orchestra stages.",
+        "Start Pi inside tmux or Zellij before running Senai stages.",
       ],
     });
   }
@@ -592,7 +592,7 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
   if (!inputsConfig) {
     items.push({
       status: "info",
-      message: "No architect inputs configured. Run /orchestra-configure-architect-inputs to set them.",
+      message: "No architect inputs configured. Run /senai-configure-architect-inputs to set them.",
     });
   } else {
     const missingFiles: string[] = [];
@@ -621,7 +621,7 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     if (!drivers) {
       items.push({
         status: "info",
-        message: "No architectural drivers generated yet. Run /orchestra-generate-architect.",
+        message: "No architectural drivers generated yet. Run /senai-generate-architect.",
       });
     } else {
       items.push({
@@ -633,19 +633,19 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     items.push({
       status: "error",
       message: `Invalid architectural drivers at .pi/architect/architectural-drivers.json: ${err.message}`,
-      details: ["Run /orchestra-generate-architect to regenerate the drivers, or fix the JSON manually."],
+      details: ["Run /senai-generate-architect to regenerate the drivers, or fix the JSON manually."],
     });
   }
 
   // Warn about stale intermediate driver files in the old root location.
-  const oldRootDrivers = path.join(cwd, ".pi", "orchestra");
+  const oldRootDrivers = path.join(cwd, ".pi", "senai");
   if (fs.existsSync(oldRootDrivers)) {
     const stale = fs.readdirSync(oldRootDrivers).filter((f) => f.startsWith("drivers-") && f.endsWith(".json"));
     if (stale.length > 0) {
       items.push({
         status: "warning",
-        message: `${stale.length} stale intermediate driver files found in .pi/orchestra/.`,
-        details: stale.map((f) => `.pi/orchestra/${f} — move or delete this file`),
+        message: `${stale.length} stale intermediate driver files found in .pi/senai/.`,
+        details: stale.map((f) => `.pi/senai/${f} — move or delete this file`),
       });
     }
   }
@@ -668,7 +668,7 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     items.push({
       status: "error",
       message: `Invalid architect profile at .pi/architect/architect-profile.json: ${err.message}`,
-      details: ["Run /orchestra-generate-architect to regenerate the profile, or fix the JSON manually."],
+      details: ["Run /senai-generate-architect to regenerate the profile, or fix the JSON manually."],
     });
   }
 
@@ -690,7 +690,7 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     items.push({
       status: "error",
       message: `Invalid architect report at .pi/architect/architect-report.json: ${err.message}`,
-      details: ["Run /orchestra-generate-architect to regenerate the report, or fix the JSON manually."],
+      details: ["Run /senai-generate-architect to regenerate the report, or fix the JSON manually."],
     });
   }
 
@@ -826,13 +826,13 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {
   const lines: string[] = [];
-  lines.push("# Pi Orchestra Diagnostic Report");
+  lines.push("# Pi Senai Diagnostic Report");
   lines.push("");
   lines.push(
     `Summary: ${report.summary.ok} OK, ${report.summary.warning} warnings, ${report.summary.error} errors, ${report.summary.info} info`,
   );
   lines.push("");
-  lines.push(report.ok ? "✅ Configuration looks good." : "❌ Please fix the errors above before running Orchestra stages.");
+  lines.push(report.ok ? "✅ Configuration looks good." : "❌ Please fix the errors above before running Senai stages.");
   lines.push("");
 
   for (const section of report.sections) {

@@ -20,7 +20,7 @@ import {
   defaultArchitectSkill,
 } from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
-import type { OrchestraState } from "../src/state.js";
+import type { SenaiState } from "../src/state.js";
 import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { saveAgentConfig } from "../src/agent-config.js";
@@ -30,7 +30,7 @@ import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
 } from "../src/architect-inputs-config.js";
-import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
   let tmpDir: string;
@@ -45,7 +45,7 @@ describe("commands", () => {
   let editorIndex: number;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-cmd-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-cmd-test-"));
     notifications = [];
     sentMessages = [];
     commandHandlers = {};
@@ -111,40 +111,40 @@ describe("commands", () => {
     saveAgentsFilesConfig(cwd, { version: 2, documents: {} });
   }
 
-  function advanceTo(cwd: string, state: OrchestraState, stage: Stage): OrchestraState {
+  function advanceTo(cwd: string, state: SenaiState, stage: Stage): SenaiState {
     const result = advanceStage(cwd, state, stage);
     if (!result.ok) throw new Error(result.reason);
     return result.state;
   }
 
-  it("registerCommands registers all orchestra commands", () => {
+  it("registerCommands registers all senai commands", () => {
     registerCommands(makeApi());
 
     [
-      "orchestra-plan",
-      "orchestra-implement",
-      "orchestra-document",
-      "orchestra-deliver",
-      "orchestra-status",
-      "orchestra-approve",
-      "orchestra-reset",
+      "senai-plan",
+      "senai-implement",
+      "senai-document",
+      "senai-deliver",
+      "senai-status",
+      "senai-approve",
+      "senai-reset",
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
   });
 
   it("blocks stage commands when files.json is missing", async () => {
-    fs.rmSync(path.join(tmpDir, ".pi", "orchestra", "files.json"));
+    fs.rmSync(path.join(tmpDir, ".pi", "senai", "files.json"));
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    await commandHandlers["senai-plan"]("Build CLI", makeCtx());
     assert.ok(notifications[0].message.includes("Agent configuration errors"));
-    assert.ok(notifications[0].message.includes("/orchestra-configure-files"));
+    assert.ok(notifications[0].message.includes("/senai-configure-files"));
   });
 
   it("blocks stage commands when agents_files.json is missing", async () => {
-    fs.rmSync(path.join(tmpDir, ".pi", "orchestra", "agents_files.json"));
+    fs.rmSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"));
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    await commandHandlers["senai-plan"]("Build CLI", makeCtx());
     assert.ok(notifications[0].message.includes("Agent configuration errors"));
-    assert.ok(notifications[0].message.includes("/orchestra-configure-agents-files"));
+    assert.ok(notifications[0].message.includes("/senai-configure-agents-files"));
   });
 
   it("blocks stage commands when a truth document is missing", async () => {
@@ -153,7 +153,7 @@ describe("commands", () => {
       documents: { "scout-1": { primary: "missing-doc.md" } },
     });
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Build CLI", makeCtx());
+    await commandHandlers["senai-plan"]("Build CLI", makeCtx());
     assert.ok(notifications[0].message.includes("Agent configuration errors"));
     assert.ok(notifications[0].message.includes("Truth document"));
   });
@@ -161,14 +161,14 @@ describe("commands", () => {
   it("registerAgentCommands registers agent commands", () => {
     registerAgentCommands(makeApi());
 
-    ["orchestra-agents", "orchestra-configure-agents"].forEach((cmd) =>
+    ["senai-agents", "senai-configure-agents"].forEach((cmd) =>
       assert.ok(commandHandlers[cmd], `missing ${cmd}`),
     );
   });
 
-  it("orchestra-plan initializes a run and sends a prompt", async () => {
+  it("senai-plan initializes a run and sends a prompt", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Build a CLI", makeCtx());
+    await commandHandlers["senai-plan"]("Build a CLI", makeCtx());
 
     const state = loadState(tmpDir);
     assert.strictEqual(state.mission, "Build a CLI");
@@ -180,67 +180,67 @@ describe("commands", () => {
     assert.ok(sentMessages[0].includes("scout-angle_4.md"));
   });
 
-  it("orchestra-plan warns when mission is empty", async () => {
+  it("senai-plan warns when mission is empty", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("", makeCtx());
+    await commandHandlers["senai-plan"]("", makeCtx());
     assert.strictEqual(sentMessages.length, 0);
     assert.ok(notifications[0].message.includes("Usage"));
   });
 
-  it("orchestra-plan blocks when agent config is missing", async () => {
+  it("senai-plan blocks when agent config is missing", async () => {
     fs.rmSync(path.join(tmpDir, ".pi"), { recursive: true, force: true });
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
     assert.strictEqual(sentMessages.length, 0);
-    assert.ok(notifications[0].message.includes("No Pi Orchestra agent configuration found"));
+    assert.ok(notifications[0].message.includes("No Pi Senai agent configuration found"));
   });
 
-  it("orchestra-implement blocks when agent config maps a missing custom agent", async () => {
+  it("senai-implement blocks when agent config maps a missing custom agent", async () => {
     saveAgentConfig(tmpDir, { version: 1, agents: { implementer: "missing-agent" } });
     registerCommands(makeApi());
-    await commandHandlers["orchestra-implement"]("", makeCtx());
+    await commandHandlers["senai-implement"]("", makeCtx());
     assert.strictEqual(sentMessages.length, 0);
     assert.ok(notifications[0].message.includes("Agent configuration errors"));
     assert.ok(notifications[0].message.includes("missing-agent"));
   });
 
-  it("orchestra-agents shows the current registry", async () => {
+  it("senai-agents shows the current registry", async () => {
     registerAgentCommands(makeApi());
-    await commandHandlers["orchestra-agents"]("", makeCtx());
-    assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
+    await commandHandlers["senai-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Senai Agent Registry"));
     assert.ok(notifications[0].message.includes("Planner (planner) → planner"));
     assert.ok(notifications[0].message.includes("All mapped agents are available"));
   });
 
-  it("orchestra-agents reports errors for invalid custom agents", async () => {
+  it("senai-agents reports errors for invalid custom agents", async () => {
     saveAgentConfig(tmpDir, { version: 1, agents: { implementer: "missing-agent" } });
     registerAgentCommands(makeApi());
-    await commandHandlers["orchestra-agents"]("", makeCtx());
-    assert.ok(notifications[0].message.includes("Pi Orchestra Agent Registry"));
+    await commandHandlers["senai-agents"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Senai Agent Registry"));
     assert.ok(notifications[0].message.includes("missing-agent"));
     assert.strictEqual(notifications[0].type, "error");
   });
 
-  it("orchestra-configure-agents saves a config from user choices", async () => {
+  it("senai-configure-agents saves a config from user choices", async () => {
     registerAgentCommands(makeApi());
     // Pre-program choices: for every role choose "Use default: <default>".
-    for (const role of Object.keys(DEFAULT_AGENTS) as OrchestraRole[]) {
+    for (const role of Object.keys(DEFAULT_AGENTS) as SenaiRole[]) {
       selectChoices.push(`Use default: ${DEFAULT_AGENTS[role]}`);
     }
-    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+    await commandHandlers["senai-configure-agents"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Agent configuration saved"));
-    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     assert.ok(fs.existsSync(configPath));
     const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
     assert.strictEqual(saved.version, 1);
     assert.strictEqual(saved.agents.implementer, "worker");
   });
 
-  it("orchestra-configure-agents reads existing config on re-run", async () => {
+  it("senai-configure-agents reads existing config on re-run", async () => {
     saveAgentConfig(tmpDir, { version: 1, agents: { planner: "custom-planner" } });
     registerAgentCommands(makeApi());
 
-    for (const role of Object.keys(DEFAULT_AGENTS) as OrchestraRole[]) {
+    for (const role of Object.keys(DEFAULT_AGENTS) as SenaiRole[]) {
       if (role === "planner") {
         selectChoices.push("Keep current: custom-planner");
       } else {
@@ -248,17 +248,17 @@ describe("commands", () => {
       }
     }
 
-    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+    await commandHandlers["senai-configure-agents"]("", makeCtx());
 
-    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
     assert.strictEqual(saved.agents.planner, "custom-planner");
     assert.strictEqual(saved.agents.implementer, "worker");
   });
 
-  it("orchestra-configure-agents lets the user go back", async () => {
+  it("senai-configure-agents lets the user go back", async () => {
     registerAgentCommands(makeApi());
-    const roles = Object.keys(DEFAULT_AGENTS) as OrchestraRole[];
+    const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
 
     // Role 0: pick default, then role 1: go back, then role 0 again: pick default, then rest defaults.
     selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[0]]}`);
@@ -268,94 +268,94 @@ describe("commands", () => {
       selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
     }
 
-    await commandHandlers["orchestra-configure-agents"]("", makeCtx());
+    await commandHandlers["senai-configure-agents"]("", makeCtx());
 
-    const configPath = path.join(tmpDir, ".pi/orchestra/agents.json");
+    const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
     assert.strictEqual(saved.version, 1);
     assert.strictEqual(saved.agents[roles[0]], DEFAULT_AGENTS[roles[0]]);
   });
 
-  it("orchestra-status reports no active run", async () => {
+  it("senai-status reports no active run", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-status"]("", makeCtx());
-    assert.ok(notifications[0].message.includes("No active orchestra run"));
+    await commandHandlers["senai-status"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("No active senai run"));
   });
 
-  it("orchestra-status shows active run and next step", async () => {
+  it("senai-status shows active run and next step", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
     notifications.length = 0;
-    await commandHandlers["orchestra-status"]("", makeCtx());
+    await commandHandlers["senai-status"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Stage: planning"));
     assert.ok(notifications[0].message.includes("Mission: Mission"));
-    assert.ok(notifications[0].message.includes("Next step: run /orchestra-approve"));
+    assert.ok(notifications[0].message.includes("Next step: run /senai-approve"));
   });
 
-  it("orchestra-approve advances stage and auto-runs next stage", async () => {
+  it("senai-approve advances stage and auto-runs next stage", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
     notifications.length = 0;
     sentMessages.length = 0;
 
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
 
     assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
-    assert.ok(notifications[0].message.includes("Automatically running the next stage: /orchestra-implement"));
+    assert.ok(notifications[0].message.includes("Automatically running the next stage: /senai-implement"));
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Implement Stage"));
   });
 
-  it("orchestra-approve finishes run after deliver stage", async () => {
+  it("senai-approve finishes run after deliver stage", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
 
     // Approve through all stages.
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // implementing -> implemented -> documenting
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // documenting -> documented -> delivering
+    await commandHandlers["senai-approve"]("", makeCtx()); // planning -> planned -> implementing
+    await commandHandlers["senai-approve"]("", makeCtx()); // implementing -> implemented -> documenting
+    await commandHandlers["senai-approve"]("", makeCtx()); // documenting -> documented -> delivering
 
     notifications.length = 0;
     sentMessages.length = 0;
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // delivering -> delivered
+    await commandHandlers["senai-approve"]("", makeCtx()); // delivering -> delivered
 
     assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
     assert.ok(notifications[0].message.includes("All stages are complete"));
     assert.strictEqual(sentMessages.length, 0);
   });
 
-  it("orchestra-reset clears state", async () => {
+  it("senai-reset clears state", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
     notifications.length = 0;
-    await commandHandlers["orchestra-reset"]("", makeCtx());
+    await commandHandlers["senai-reset"]("", makeCtx());
     assert.strictEqual(loadState(tmpDir).currentStage, "none");
-    assert.ok(notifications[0].message.includes("Orchestra state reset"));
+    assert.ok(notifications[0].message.includes("Senai state reset"));
   });
 
-  it("orchestra-implement blocks when plan artifact is missing", async () => {
+  it("senai-implement blocks when plan artifact is missing", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
     notifications.length = 0;
-    await commandHandlers["orchestra-implement"]("", makeCtx());
+    await commandHandlers["senai-implement"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Plan artifacts not found"));
   });
 
-  it("orchestra-implement can be run directly from planned stage", async () => {
+  it("senai-implement can be run directly from planned stage", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // advances to implementing
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx()); // advances to implementing
 
     // Manually reset stage back to planned to test direct implement command.
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create the required plan artifacts for implement to proceed.
-    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -365,7 +365,7 @@ describe("commands", () => {
 
     notifications.length = 0;
     sentMessages.length = 0;
-    await commandHandlers["orchestra-implement"]("", makeCtx());
+    await commandHandlers["senai-implement"]("", makeCtx());
 
     assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
     assert.ok(notifications[0].message.includes("Implement stage started"));
@@ -392,8 +392,8 @@ describe("commands", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -411,8 +411,8 @@ describe("commands", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -424,85 +424,85 @@ describe("commands", () => {
     assert.strictEqual(result.ok, true);
   });
 
-  it("orchestra-document blocks when implement artifacts are missing", async () => {
+  it("senai-document blocks when implement artifacts are missing", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx()); // planning -> planned -> implementing
 
     // Manually set state to implemented without creating implement artifacts.
     let state = loadState(tmpDir);
     state.currentStage = "implemented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     notifications.length = 0;
-    await commandHandlers["orchestra-document"]("", makeCtx());
+    await commandHandlers["senai-document"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("Implement artifacts not found"));
     assert.strictEqual(loadState(tmpDir).currentStage, "implemented");
   });
 
-  it("orchestra-deliver blocks when document artifacts are missing", async () => {
+  it("senai-deliver blocks when document artifacts are missing", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx()); // planning -> planned -> implementing
 
     // Manually set state to documented without creating document artifacts.
     let state = loadState(tmpDir);
     state.currentStage = "documented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     notifications.length = 0;
-    await commandHandlers["orchestra-deliver"]("", makeCtx());
+    await commandHandlers["senai-deliver"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("Document artifacts not found"));
     assert.strictEqual(loadState(tmpDir).currentStage, "documented");
   });
 
-  it("orchestra-document rejects running from planned stage", async () => {
+  it("senai-document rejects running from planned stage", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx()); // planning -> planned -> implementing
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx()); // planning -> planned -> implementing
 
     // Manually reset stage back to planned.
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create plan and implement artifacts so only the stage restriction is tested.
-    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
-    const implementPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
     notifications.length = 0;
-    await commandHandlers["orchestra-document"]("", makeCtx());
+    await commandHandlers["senai-document"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("can only run from 'implemented'"));
     assert.strictEqual(loadState(tmpDir).currentStage, "planned");
   });
 
-  it("orchestra-implement succeeds from planned with plan artifact", async () => {
+  it("senai-implement succeeds from planned with plan artifact", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
 
     // Reset back to planned so the manual command can be tested.
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -512,7 +512,7 @@ describe("commands", () => {
 
     notifications.length = 0;
     sentMessages.length = 0;
-    await commandHandlers["orchestra-implement"]("", makeCtx());
+    await commandHandlers["senai-implement"]("", makeCtx());
 
     assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
     assert.ok(notifications[0].message.includes("Implement stage started"));
@@ -520,28 +520,28 @@ describe("commands", () => {
     assert.ok(sentMessages[0].includes("Implement Stage"));
   });
 
-  it("orchestra-document succeeds from implemented with artifacts", async () => {
+  it("senai-document succeeds from implemented with artifacts", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
 
     let state = loadState(tmpDir);
     state.currentStage = "implemented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "plan", "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
 
-    const implementPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
     notifications.length = 0;
     sentMessages.length = 0;
-    await commandHandlers["orchestra-document"]("", makeCtx());
+    await commandHandlers["senai-document"]("", makeCtx());
 
     assert.strictEqual(loadState(tmpDir).currentStage, "documenting");
     assert.ok(notifications[0].message.includes("Document stage started"));
@@ -549,29 +549,29 @@ describe("commands", () => {
     assert.ok(sentMessages[0].includes("Document Stage"));
   });
 
-  it("orchestra-deliver succeeds from documented with artifacts", async () => {
+  it("senai-deliver succeeds from documented with artifacts", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
 
     let state = loadState(tmpDir);
     state.currentStage = "documented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const documentPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
 
     notifications.length = 0;
     sentMessages.length = 0;
-    await commandHandlers["orchestra-deliver"]("", makeCtx());
+    await commandHandlers["senai-deliver"]("", makeCtx());
 
     assert.strictEqual(loadState(tmpDir).currentStage, "delivering");
     assert.ok(notifications[0].message.includes("Deliver stage started"));
@@ -589,7 +589,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
 
@@ -611,7 +611,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
 
@@ -629,7 +629,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "planned");
     state = advanceTo(tmpDir, state, "implementing");
 
-    const implementPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Notes\n");
 
@@ -645,7 +645,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "implemented");
     state = advanceTo(tmpDir, state, "documenting");
 
-    const documentPath = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
@@ -663,7 +663,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
@@ -672,52 +672,52 @@ describe("commands", () => {
     assert.strictEqual(result.ok, true);
   });
 
-  it("orchestra-status reports delivered run", async () => {
+  it("senai-status reports delivered run", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
 
     notifications.length = 0;
-    await commandHandlers["orchestra-status"]("", makeCtx());
+    await commandHandlers["senai-status"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("Stage: delivered"));
-    assert.ok(notifications[0].message.includes("Next step: run /orchestra-status"));
+    assert.ok(notifications[0].message.includes("Next step: run /senai-status"));
   });
 
-  it("orchestra-approve rejects when no run is active", async () => {
+  it("senai-approve rejects when no run is active", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-approve"]("", makeCtx());
-    assert.ok(notifications[0].message.includes("No active orchestra run"));
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("No active senai run"));
   });
 
-  it("orchestra-implement rejects from planning stage", async () => {
+  it("senai-implement rejects from planning stage", async () => {
     registerCommands(makeApi());
-    await commandHandlers["orchestra-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
 
     notifications.length = 0;
-    await commandHandlers["orchestra-implement"]("", makeCtx());
+    await commandHandlers["senai-implement"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("Plan artifacts not found"));
   });
 
   it("registerFilesCommands registers file commands", () => {
     registerFilesCommands(makeApi());
-    ["orchestra-files", "orchestra-configure-files"].forEach((cmd) =>
+    ["senai-files", "senai-configure-files"].forEach((cmd) =>
       assert.ok(commandHandlers[cmd], `missing ${cmd}`),
     );
   });
 
   it("registerAgentsFilesCommands registers agent file commands", () => {
     registerAgentsFilesCommands(makeApi());
-    ["orchestra-agents-files", "orchestra-configure-agents-files"].forEach((cmd) =>
+    ["senai-agents-files", "senai-configure-agents-files"].forEach((cmd) =>
       assert.ok(commandHandlers[cmd], `missing ${cmd}`),
     );
   });
 
-  it("orchestra-files shows configured project files", async () => {
+  it("senai-files shows configured project files", async () => {
     saveFilesConfig(tmpDir, {
       version: 2,
       codePaths: ["Doc/"],
@@ -727,26 +727,26 @@ describe("commands", () => {
     });
     registerFilesCommands(makeApi());
 
-    await commandHandlers["orchestra-files"]("", makeCtx());
-    assert.ok(notifications[0].message.includes("Pi Orchestra Project Files"));
+    await commandHandlers["senai-files"]("", makeCtx());
+    assert.ok(notifications[0].message.includes("Pi Senai Project Files"));
     assert.ok(notifications[0].message.includes("README.md"));
     assert.ok(notifications[0].message.includes("Doc/"));
   });
 
-  it("orchestra-agents-files shows configured assignments", async () => {
+  it("senai-agents-files shows configured assignments", async () => {
     saveAgentsFilesConfig(tmpDir, {
       version: 1,
       documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
     });
     registerAgentsFilesCommands(makeApi());
 
-    await commandHandlers["orchestra-agents-files"]("", makeCtx());
+    await commandHandlers["senai-agents-files"]("", makeCtx());
     assert.ok(notifications[0].message.includes("Agent Document Assignments"));
     assert.ok(notifications[0].message.includes("Doc/planner.md"));
     assert.ok(notifications[0].message.includes("Doc/plan.md"));
   });
 
-  it("orchestra-configure-files saves categorized choices", async () => {
+  it("senai-configure-files saves categorized choices", async () => {
     fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "", "utf8");
@@ -766,13 +766,13 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, ["src/"]);
     assert.deepStrictEqual(saved?.inputDocuments, ["docs/PRD.md"]);
   });
 
-  it("orchestra-configure-files avoids folder and child file conflicts", async () => {
+  it("senai-configure-files avoids folder and child file conflicts", async () => {
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "", "utf8");
 
@@ -791,12 +791,12 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.inputDocuments, ["docs/"]);
   });
 
-  it("orchestra-configure-agents-files saves user choices", async () => {
+  it("senai-configure-agents-files saves user choices", async () => {
     saveFilesConfig(tmpDir, {
       version: 2,
       codePaths: [],
@@ -818,14 +818,14 @@ describe("commands", () => {
       "⬜ Finish",
     );
 
-    await commandHandlers["orchestra-configure-agents-files"]("", makeCtx());
+    await commandHandlers["senai-configure-agents-files"]("", makeCtx());
     const saved = loadAgentsFilesConfig(tmpDir);
     assert.strictEqual(saved?.documents.planner?.primary, "Doc/planner.md");
     assert.deepStrictEqual(saved?.documents.planner?.reads, ["Doc/plan.md"]);
   });
 
   // Edge cases
-  it("orchestra-configure-files handles empty suggestions gracefully", async () => {
+  it("senai-configure-files handles empty suggestions gracefully", async () => {
     fs.mkdirSync(path.join(tmpDir, "custom"), { recursive: true });
 
     registerFilesCommands(makeApi());
@@ -838,12 +838,12 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, ["custom/"]);
   });
 
-  it("orchestra-configure-files prevents selecting nested folder and ancestor", async () => {
+  it("senai-configure-files prevents selecting nested folder and ancestor", async () => {
     fs.mkdirSync(path.join(tmpDir, "src", "components"), { recursive: true });
 
     registerFilesCommands(makeApi());
@@ -862,12 +862,12 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, ["src/"]);
   });
 
-  it("orchestra-configure-files allows test files inside selected code folders", async () => {
+  it("senai-configure-files allows test files inside selected code folders", async () => {
     fs.mkdirSync(path.join(tmpDir, "src"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "src", "main.test.ts"), "", "utf8");
 
@@ -886,13 +886,13 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, ["src/"]);
     assert.deepStrictEqual(saved?.testPaths, ["src/main.test.ts"]);
   });
 
-  it("orchestra-configure-files filters suggestions by name", async () => {
+  it("senai-configure-files filters suggestions by name", async () => {
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     for (const name of ["alpha.md", "beta.md", "gamma.md"]) {
       fs.writeFileSync(path.join(tmpDir, "docs", name), "", "utf8");
@@ -908,12 +908,12 @@ describe("commands", () => {
     );
     inputs.push("beta");
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.inputDocuments, ["docs/beta.md"]);
   });
 
-  it("orchestra-configure-files paginates long suggestion lists", async () => {
+  it("senai-configure-files paginates long suggestion lists", async () => {
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     for (let i = 1; i <= 15; i++) {
       const num = i.toString().padStart(2, "0");
@@ -929,12 +929,12 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.inputDocuments, ["docs/doc12.md"]);
   });
 
-  it("orchestra-configure-files picker can select a folder for input documents", async () => {
+  it("senai-configure-files picker can select a folder for input documents", async () => {
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "docs", "one.md"), "", "utf8");
     fs.writeFileSync(path.join(tmpDir, "docs", "two.md"), "", "utf8");
@@ -947,12 +947,12 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.inputDocuments, ["docs/"]);
   });
 
-  it("orchestra-configure-files picker cancels without adding a path", async () => {
+  it("senai-configure-files picker cancels without adding a path", async () => {
     registerFilesCommands(makeApi());
     selectChoices.push(
       "Edit code paths",
@@ -962,29 +962,29 @@ describe("commands", () => {
       "Finish",
     );
 
-    await commandHandlers["orchestra-configure-files"]("", makeCtx());
+    await commandHandlers["senai-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, []);
   });
 
-  it("registerDoctorCommand registers /orchestra-doctor", async () => {
+  it("registerDoctorCommand registers /senai-doctor", async () => {
     registerDoctorCommand(makeApi());
-    assert.ok(commandHandlers["orchestra-doctor"]);
+    assert.ok(commandHandlers["senai-doctor"]);
 
-    await commandHandlers["orchestra-doctor"]("", makeCtx());
+    await commandHandlers["senai-doctor"]("", makeCtx());
     assert.ok(sentMessages.some((m) => m.includes("Architecture setup")));
   });
 
   it("registerArchitectInputsCommands cancels when main menu is dismissed", async () => {
     registerArchitectInputsCommands(makeApi());
-    assert.ok(commandHandlers["orchestra-configure-architect-inputs"]);
+    assert.ok(commandHandlers["senai-configure-architect-inputs"]);
 
     selectChoices.push(undefined as unknown as string);
-    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    await commandHandlers["senai-configure-architect-inputs"]("", makeCtx());
     assert.ok(notifications.some((n) => n.message.includes("Configuration cancelled")));
   });
 
-  it("orchestra-configure-architect-inputs saves selected suggestions", async () => {
+  it("senai-configure-architect-inputs saves selected suggestions", async () => {
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
 
@@ -996,13 +996,13 @@ describe("commands", () => {
       "⬜ Finish",
     );
 
-    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    await commandHandlers["senai-configure-architect-inputs"]("", makeCtx());
     const saved = loadArchitectInputsConfig(tmpDir);
     assert.ok(saved);
     assert.ok(saved?.documents.some((d) => d.type === "prd" && d.path === "docs/PRD.md"));
   });
 
-  it("orchestra-configure-architect-inputs adds custom path via browser", async () => {
+  it("senai-configure-architect-inputs adds custom path via browser", async () => {
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
 
@@ -1016,12 +1016,12 @@ describe("commands", () => {
       "⬜ Finish",
     );
 
-    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    await commandHandlers["senai-configure-architect-inputs"]("", makeCtx());
     const saved = loadArchitectInputsConfig(tmpDir);
     assert.ok(saved?.documents.some((d) => d.type === "prd" && d.path === "docs/PRD.md"));
   });
 
-  it("orchestra-configure-architect-inputs saves additional constraints", async () => {
+  it("senai-configure-architect-inputs saves additional constraints", async () => {
     registerArchitectInputsCommands(makeApi());
     editorValues.push("Keep it simple");
     selectChoices.push(
@@ -1029,16 +1029,16 @@ describe("commands", () => {
       "⬜ Finish",
     );
 
-    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    await commandHandlers["senai-configure-architect-inputs"]("", makeCtx());
     const saved = loadArchitectInputsConfig(tmpDir);
     assert.deepStrictEqual(saved?.additionalConstraints, ["Keep it simple"]);
   });
 
   it("registerArchitectCommand warns when no architect inputs configured", async () => {
     registerArchitectCommand(makeApi());
-    assert.ok(commandHandlers["orchestra-generate-architect"]);
+    assert.ok(commandHandlers["senai-generate-architect"]);
 
-    await commandHandlers["orchestra-generate-architect"]("", makeCtx());
+    await commandHandlers["senai-generate-architect"]("", makeCtx());
     assert.ok(notifications.some((n) => n.message.includes("No architect inputs configured")));
   });
 
@@ -1050,8 +1050,8 @@ describe("commands", () => {
     });
 
     registerArchitectCommand(makeApi());
-    await commandHandlers["orchestra-generate-architect"]("", makeCtx());
-    assert.ok(sentMessages.some((m) => m.includes("<pi-orchestra-generate-architect>")));
+    await commandHandlers["senai-generate-architect"]("", makeCtx());
+    assert.ok(sentMessages.some((m) => m.includes("<pi-senai-generate-architect>")));
     assert.ok(sentMessages.some((m) => m.includes("docs/PRD.md")));
     assert.ok(sentMessages.some((m) => m.includes("feasibility")));
   });

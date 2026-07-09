@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAgentConfig } from "./agent-config.js";
 import { buildAgentRegistryBlock } from "./agent-registry.js";
-import { ORCHESTRA_ROLES, ROLE_LABELS, type OrchestraRole } from "./agent-suggestions.js";
+import { SENAI_ROLES, ROLE_LABELS, type SenaiRole } from "./agent-suggestions.js";
 import {
   loadAgentsFilesConfig,
   type AgentsFilesConfig,
@@ -11,7 +11,7 @@ import {
 } from "./agents-files-config.js";
 import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
-import type { OrchestraState } from "./state.js";
+import type { SenaiState } from "./state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,7 +24,7 @@ export interface StageContext {
 
 function resolveSkillPath(stage: string): string {
   // skills/ is at repo root; pi-extension/src/ is two levels below repo root
-  return path.resolve(__dirname, "../../..", "skills", `orchestra-${stage}.md`);
+  return path.resolve(__dirname, "../../..", "skills", `senai-${stage}.md`);
 }
 
 export function loadSkill(stage: string): string {
@@ -36,7 +36,7 @@ export function loadSkill(stage: string): string {
     return content.trim();
   } catch (err: any) {
     if (err.code === "ENOENT") {
-      return `# Orchestra ${stage} stage\n\nNo detailed skill file found at ${skillPath}. Follow the Senai sequence from Doc/senai-full-sequence.md.`;
+      return `# Senai ${stage} stage\n\nNo detailed skill file found at ${skillPath}. Follow the Senai sequence from Doc/senai-full-sequence.md.`;
     }
     throw err;
   }
@@ -58,7 +58,7 @@ function buildDocumentScopeBlock(
 
   if (agentsFilesConfig?.documents && Object.keys(agentsFilesConfig.documents).length > 0) {
     lines.push("Per-agent document assignments:");
-    for (const role of ORCHESTRA_ROLES) {
+    for (const role of SENAI_ROLES) {
       const docs = agentsFilesConfig.documents[role];
       const docPart = formatAgentDocuments(docs);
       if (docPart) lines.push(`- ${ROLE_LABELS[role]} (${role}): ${docPart}`);
@@ -98,7 +98,7 @@ function getAllSelectedPaths(config: FilesConfig): string[] {
 
 export function buildStagePrompt(
   cwd: string,
-  state: OrchestraState,
+  state: SenaiState,
   stage: string,
 ): { skill: string; context: StageContext; prompt: string } {
   const artifacts = state.runId
@@ -120,7 +120,7 @@ export function buildStagePrompt(
   const documentScopeBlock = buildDocumentScopeBlock(filesConfig, agentsFilesConfig);
 
   const prompt = [
-    `<pi-orchestra stage="${stage}">`,
+    `<pi-senai stage="${stage}">`,
     `Mission: ${state.mission || "(none)"}`,
     `Run ID: ${state.runId || "(none)"}`,
     ``,
@@ -144,7 +144,7 @@ export function buildStagePrompt(
     `  Deliver directory: ${artifacts.deliverDir}`,
     `    security-report.md: ${artifacts.securityReport}`,
     `    deliver-summary.md: ${artifacts.deliverSummary}`,
-    `</pi-orchestra>`,
+    `</pi-senai>`,
     ``,
     registryBlock,
     ``,
