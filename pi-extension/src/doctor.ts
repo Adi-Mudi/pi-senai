@@ -15,6 +15,20 @@ import {
   ROLE_LABELS,
   type OrchestraRole,
 } from "./agent-suggestions.js";
+import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
+import {
+  ARCHITECT_ROLES,
+  ARCHITECT_STAGES,
+  discoverArchitectureLibrary,
+  loadArchitectProfile,
+  loadArchitectReport,
+  slugify,
+  type ArchitectProfile,
+  type ArchitectReport,
+} from "./architect.js";
+import { loadDrivers } from "./driver-extractor.js";
+import { parseAgentFile } from "./agent-discovery.js";
+import { getArchitectStateDir, getArchitectMapDir } from "./constants.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 
@@ -123,6 +137,7 @@ export function runOrchestraDiagnostic(cwd: string): DiagnosticReport {
   }
 
   sections.push(checkEnvironment());
+  sections.push(checkArchitectureSetup(cwd));
 
   const summary = sections.reduce(
     (acc, section) => {
@@ -553,6 +568,260 @@ function isPathConflict(a: string, b: string): boolean {
   if (a.endsWith("/") && b.startsWith(a)) return true;
   if (b.endsWith("/") && a.startsWith(b)) return true;
   return false;
+}
+
+function checkArchitectureSetup(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const architectStateDir = getArchitectStateDir(cwd);
+
+  const library = discoverArchitectureLibrary(cwd);
+  if (library.length === 0) {
+    items.push({
+      status: "warning",
+      message: "Architecture library is empty or missing.",
+      details: ["Create .pi/architecture-library/*.md or *.json files with architecture references."],
+    });
+  } else {
+    items.push({
+      status: "ok",
+      message: `Architecture library has ${library.length} entries.`,
+    });
+  }
+
+  const inputsConfig = loadArchitectInputsConfig(cwd);
+  if (!inputsConfig) {
+    items.push({
+      status: "info",
+      message: "No architect inputs configured. Run /orchestra-configure-architect-inputs to set them.",
+    });
+  } else {
+    const missingFiles: string[] = [];
+    for (const doc of inputsConfig.documents) {
+      const fullPath = path.resolve(cwd, doc.path);
+      if (!fs.existsSync(fullPath)) {
+        missingFiles.push(doc.path);
+      }
+    }
+    if (missingFiles.length > 0) {
+      items.push({
+        status: "error",
+        message: `${missingFiles.length} configured architect input documents are missing.`,
+        details: missingFiles,
+      });
+    } else {
+      items.push({
+        status: "ok",
+        message: `Architect inputs configured with ${inputsConfig.documents.length} documents.`,
+      });
+    }
+  }
+
+  try {
+    const drivers = loadDrivers(cwd);
+    if (!drivers) {
+      items.push({
+        status: "info",
+        message: "No architectural drivers generated yet. Run /orchestra-generate-architect.",
+      });
+    } else {
+      items.push({
+        status: "ok",
+        message: `Architectural drivers file exists at .pi/architect/architectural-drivers.json.`,
+      });
+    }
+  } catch (err: any) {
+    items.push({
+      status: "error",
+      message: `Invalid architectural drivers at .pi/architect/architectural-drivers.json: ${err.message}`,
+      details: ["Run /orchestra-generate-architect to regenerate the drivers, or fix the JSON manually."],
+    });
+  }
+
+  // Warn about stale intermediate driver files in the old root location.
+  const oldRootDrivers = path.join(cwd, ".pi", "orchestra");
+  if (fs.existsSync(oldRootDrivers)) {
+    const stale = fs.readdirSync(oldRootDrivers).filter((f) => f.startsWith("drivers-") && f.endsWith(".json"));
+    if (stale.length > 0) {
+      items.push({
+        status: "warning",
+        message: `${stale.length} stale intermediate driver files found in .pi/orchestra/.`,
+        details: stale.map((f) => `.pi/orchestra/${f} — move or delete this file`),
+      });
+    }
+  }
+
+  let profile: ArchitectProfile | null = null;
+  try {
+    profile = loadArchitectProfile(cwd);
+    if (!profile) {
+      items.push({
+        status: "info",
+        message: "No architect profile generated yet.",
+      });
+    } else {
+      items.push({
+        status: "ok",
+        message: `Architect profile exists: ${profile.projectName} → ${profile.selectedArchitecture}.`,
+      });
+    }
+  } catch (err: any) {
+    items.push({
+      status: "error",
+      message: `Invalid architect profile at .pi/architect/architect-profile.json: ${err.message}`,
+      details: ["Run /orchestra-generate-architect to regenerate the profile, or fix the JSON manually."],
+    });
+  }
+
+  let report: ArchitectReport | null = null;
+  try {
+    report = loadArchitectReport(cwd);
+    if (!report) {
+      items.push({
+        status: "info",
+        message: "No architect report generated yet.",
+      });
+    } else {
+      items.push({
+        status: report.confidence === "high" ? "ok" : "warning",
+        message: `Architect report exists with ${report.confidence} confidence for ${report.selectedArchitecture}.`,
+      });
+    }
+  } catch (err: any) {
+    items.push({
+      status: "error",
+      message: `Invalid architect report at .pi/architect/architect-report.json: ${err.message}`,
+      details: ["Run /orchestra-generate-architect to regenerate the report, or fix the JSON manually."],
+    });
+  }
+
+  if (profile) {
+    const agentsDir = path.join(cwd, ".pi", "agents");
+    const expectedAgentNames = ARCHITECT_ROLES.map((role) => `${profile.projectSlug}-${profile.selectedArchitecture}-${role}`);
+    const expectedAgentPaths = expectedAgentNames.map((name) => path.join(agentsDir, `${name}.md`));
+    const missingAgents: string[] = [];
+    for (const filePath of expectedAgentPaths) {
+      if (!fs.existsSync(filePath)) {
+        missingAgents.push(path.relative(cwd, filePath));
+      }
+    }
+
+    const misnamedAgents: string[] = [];
+    if (fs.existsSync(agentsDir)) {
+      const prefix = `${profile.projectSlug}-${profile.selectedArchitecture}-`;
+      for (const entry of fs.readdirSync(agentsDir)) {
+        if (!entry.endsWith(".md")) continue;
+        if (!entry.startsWith(prefix)) continue;
+        const name = entry.slice(0, -3);
+        if (!expectedAgentNames.includes(name)) {
+          misnamedAgents.push(path.relative(cwd, path.join(agentsDir, entry)));
+        }
+      }
+    }
+
+    if (missingAgents.length === 0 && misnamedAgents.length === 0) {
+      items.push({ status: "ok", message: `Found all ${expectedAgentNames.length} expected architecture agents in .pi/agents/.` });
+    } else {
+      if (missingAgents.length > 0) {
+        items.push({
+          status: "error",
+          message: `${missingAgents.length} expected architecture agents are missing.`,
+          details: missingAgents,
+        });
+      }
+      if (misnamedAgents.length > 0) {
+        items.push({
+          status: "error",
+          message: `${misnamedAgents.length} misnamed architecture agents found.`,
+          details: misnamedAgents,
+        });
+      }
+    }
+
+    const skillsDir = path.join(cwd, ".pi", "skills");
+    const expectedSkillNames = ARCHITECT_STAGES.map((stage) => `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`);
+    const expectedSkillPaths = expectedSkillNames.map((name) => path.join(skillsDir, name, "SKILL.md"));
+    const missingSkills: string[] = [];
+    for (const filePath of expectedSkillPaths) {
+      if (!fs.existsSync(filePath)) {
+        missingSkills.push(path.relative(cwd, filePath));
+      }
+    }
+
+    const misnamedSkills: string[] = [];
+    if (fs.existsSync(skillsDir)) {
+      const prefix = `${profile.projectSlug}-${profile.selectedArchitecture}-`;
+      for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+        if (!entry.isDirectory()) continue;
+        if (!entry.name.startsWith(prefix)) continue;
+        if (!expectedSkillNames.includes(entry.name)) {
+          misnamedSkills.push(path.relative(cwd, path.join(skillsDir, entry.name)));
+        }
+      }
+    }
+
+    if (missingSkills.length === 0 && misnamedSkills.length === 0) {
+      items.push({ status: "ok", message: `Found all ${expectedSkillNames.length} expected architecture skills in .pi/skills/.` });
+    } else {
+      if (missingSkills.length > 0) {
+        items.push({
+          status: "error",
+          message: `${missingSkills.length} expected architecture skills are missing.`,
+          details: missingSkills,
+        });
+      }
+      if (misnamedSkills.length > 0) {
+        items.push({
+          status: "error",
+          message: `${misnamedSkills.length} misnamed architecture skills found.`,
+          details: misnamedSkills,
+        });
+      }
+    }
+
+    const architecturePath = path.join(architectStateDir, "architecture.md");
+    if (fs.existsSync(architecturePath)) {
+      items.push({ status: "ok", message: "architecture.md found in .pi/architect/." });
+    } else {
+      items.push({
+        status: "error",
+        message: "No architecture.md found in .pi/architect/.",
+      });
+    }
+
+    if (report && report.adrs.length > 0) {
+      const adrsDir = path.join(architectStateDir, "adrs");
+      let foundAdrs = 0;
+      let checkedAdrs = 0;
+      for (const adr of report.adrs) {
+        if (!adr || typeof adr.id !== "string" || typeof adr.title !== "string" || !adr.title.trim()) {
+          continue;
+        }
+        checkedAdrs++;
+        const adrPath = path.join(adrsDir, `${adr.id}-${slugify(adr.title)}.md`);
+        if (fs.existsSync(adrPath)) {
+          foundAdrs++;
+        }
+      }
+      if (checkedAdrs === 0) {
+        items.push({
+          status: "warning",
+          message: "Architect report contains ADRs, but none have a valid id and title.",
+        });
+      } else if (foundAdrs === checkedAdrs) {
+        items.push({
+          status: "ok",
+          message: `Found all ${checkedAdrs} ADRs in .pi/architect/adrs/.`,
+        });
+      } else {
+        items.push({
+          status: "error",
+          message: `Found ${foundAdrs} of ${checkedAdrs} expected ADRs in .pi/architect/adrs/.`,
+        });
+      }
+    }
+  }
+
+  return { title: "Architecture setup", items };
 }
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {

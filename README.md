@@ -2,6 +2,11 @@
 
 Stage-gated agent orchestration extension for Pi — **Plan → Implement → Document → Deliver**.
 
+## Project layout
+
+- `.pi/` — Pi's official project-local directory. Holds agents, skills, extensions, and the permanent architecture factory output (`architect/`).
+- `.IDE_Plans/` — A project-local folder used to keep temporary planning artifacts, run state, and draft documents out of the repo root. It is **not** a standard Pi directory; it is a convention used by this project for transient files.
+
 ## What it does
 
 Pi Orchestra splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/orchestra/runs/<run-id>/`, and requires user approval before the next stage starts.
@@ -157,6 +162,56 @@ Check the current settings:
 /orchestra-agents-files
 ```
 
+## Architecture generation
+
+Pi Orchestra can generate project-specific architecture agents and skills from your requirements documents.
+
+1. **Choose the input documents** the architect should read:
+
+   ```
+   /orchestra-configure-architect-inputs
+   ```
+
+   This command reuses the same file picker as `/orchestra-configure-files`. Select PRDs, NFRs, RTMs, test plans, READMEs, feasibility studies, and any other documents that describe the architecture. You can also add additional constraints that are not in any file.
+
+   The selection is saved to `.pi/orchestra/architect-inputs.json`.
+
+2. **Generate the architecture agents and skills**:
+
+   ```
+   /orchestra-generate-architect
+   ```
+
+   This runs the **architecture factory**. It reads the selected documents in parallel (Map-Reduce), extracts architectural drivers, asks clarifying questions, matches the drivers against the architecture library, and produces a complete software architecture.
+
+   The factory uses two deterministic extension tools to avoid LLM drift:
+   - `orchestra_merge_architect_drivers` — merges per-document map outputs into the final drivers file.
+   - `orchestra_finalize_architecture` — generates docs, agents, and skills with exact names.
+
+   The architecture library includes common patterns such as monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, Pi's own layered monorepo, and Google Apps Script spreadsheet automation.
+
+   Generated state and artifacts (kept in `.pi/architect/`):
+
+   - `.pi/architect/architectural-drivers.json` — merged architectural drivers.
+   - `.pi/architect/architect-profile.json` — the chosen architecture id and project profile.
+   - `.pi/architect/architect-report.json` — the full architecture report.
+   - `.pi/architect/architecture.md` — the human-readable software architecture document.
+   - `.pi/architect/adrs/*.md` — architecture decision records.
+   - `.pi/architect-map/*.json` — intermediate per-document driver files.
+
+   Generated Pi-discoverable outputs:
+
+   - `.pi/agents/<project>-<architecture-id>-<role>.md` — project-specific agents for planner, implementer, reviewer-correctness, reviewer-security, and reviewer-tests.
+   - `.pi/skills/<project>-<architecture-id>-<stage>/SKILL.md` — project-specific skills for plan, implement, document, and deliver stages.
+
+   The generated planner agent is used for architecture scouting (`scout-1`), and all generated agents instruct subagents to read `.pi/architect/architecture.md` and the relevant ADRs before acting.
+
+   If the input documents change, `/orchestra-generate-architect` detects it and asks whether to re-run the full architecture factory.
+
+   If the architecture library lacks a matching pattern, the agent falls back to web search to gather relevant guidance before generating the agents.
+
+   After generation, `/orchestra-doctor` also validates the architecture setup.
+
 ## Artifact layout
 
 ```
@@ -182,6 +237,16 @@ Check the current settings:
       deliver/
         security-report.md
         deliver-summary.md
+
+.pi/architect/        # one-time architecture factory output
+  architectural-drivers.json
+  architect-profile.json
+  architect-report.json
+  architecture.md
+  adrs/
+    0001-<title>.md
+  architect-map/              # intermediate per-document drivers
+    <sanitized-path>.json
 ```
 
 ## Development

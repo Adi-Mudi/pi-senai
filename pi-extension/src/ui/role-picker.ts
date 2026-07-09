@@ -13,6 +13,8 @@ export interface RolePickerOptions {
   title: string;
   items: RolePickerItem[];
   pageSize?: number;
+  subtitle?: string;
+  initialSelectedId?: string;
 }
 
 export type RolePickerResult =
@@ -47,7 +49,8 @@ function makeFallbackOptions(
   const idMap = new Map<string, string>();
   for (const item of items) {
     const marker = item.assigned ? "✅" : "⬜";
-    const label = `${marker} ${item.id}: ${item.label} (${item.agent}) — ${item.summary}`;
+    const agentPart = item.agent ? ` (${item.agent})` : "";
+    const label = `${marker} ${item.id}: ${item.label}${agentPart} — ${item.summary}`;
     options.push(label);
     idMap.set(label, item.id);
   }
@@ -84,7 +87,12 @@ async function runCustomRolePicker(
       assigned: false,
     });
 
-    let selectedIndex = 0;
+    let selectedIndex = Math.max(
+      0,
+      options.initialSelectedId
+        ? items.findIndex((i) => i.id === options.initialSelectedId)
+        : 0,
+    );
     let scrollOffset = 0;
 
     function ensureVisible() {
@@ -97,7 +105,8 @@ async function runCustomRolePicker(
 
     function renderRow(item: RolePickerItem, focused: boolean): string {
       const prefix = focused ? "→ " : "  ";
-      const base = `${item.label} (${item.agent}) — ${item.summary}`;
+      const agentPart = item.agent ? ` (${item.agent})` : "";
+      const base = `${item.label}${agentPart} — ${item.summary}`;
       if (item.id === FINISH_ID) {
         return `${prefix}${theme.fg("text", "Finish")}`;
       }
@@ -115,12 +124,8 @@ async function runCustomRolePicker(
       const border = "─".repeat(Math.max(2, width));
       lines.push(theme.fg("accent", border));
       lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
-      lines.push(
-        theme.fg(
-          "warning",
-          " Tip: scouts and reviewers usually need documents; other roles use stage artifacts.",
-        ),
-      );
+      const subtitle = options.subtitle ?? " Tip: scouts and reviewers usually need documents; other roles use stage artifacts.";
+      lines.push(theme.fg("warning", subtitle));
       lines.push(theme.fg("accent", border));
 
       const visible = items.slice(scrollOffset, scrollOffset + pageSize);

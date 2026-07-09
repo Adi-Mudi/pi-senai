@@ -48,6 +48,50 @@ import {
   startRun,
   type OrchestraState,
 } from "./state.js";
+import {
+  createDefaultArchitectInputsConfig,
+  getSelectedInputPaths,
+  loadArchitectInputsConfig,
+  saveArchitectInputsConfig,
+  type ArchitectDocumentInput,
+  type ArchitectDocumentType,
+  type ArchitectInputsConfig,
+} from "./architect-inputs-config.js";
+import {
+  buildDocumentIngestPrompt,
+  buildIngestBatches,
+  buildMapOutputPath,
+  loadDocumentManifest,
+  mergeMapOutputs,
+  readMapOutputs,
+  saveDocumentManifest,
+  type DocumentManifest,
+} from "./document-ingest.js";
+import { getArchitectMapDir } from "./constants.js";
+import {
+  createEmptyDrivers,
+  findDriverGaps,
+  loadDrivers,
+  saveDrivers,
+  type ArchitecturalDrivers,
+  type DriverGap,
+} from "./driver-extractor.js";
+import {
+  areDriversStale,
+  buildArchitectPrompt,
+  discoverArchitectureLibrary,
+  generateAgentFiles,
+  generateSkillFiles,
+  loadArchitectProfile,
+  loadArchitectReport,
+  saveArchitectProfile,
+  saveArchitectReport,
+  selectArchitecture,
+  slugify,
+  type ArchitectProfile,
+  type ArchitectReport,
+  type ArchitectureLibraryEntry,
+} from "./architect.js";
 
 const NEXT_COMMAND: Record<string, string> = {
   planning: "/orchestra-approve",
@@ -720,7 +764,7 @@ function buildDocumentCandidates(
   return Array.from(candidates).sort((a, b) => a.localeCompare(b));
 }
 
-function buildCategoryItems(
+export function buildCategoryItems(
   suggestions: string[],
   current: string[],
   otherPaths: string[],
@@ -792,9 +836,9 @@ async function editCategory(
   }
 }
 
-function matchesFilter(path: string, query: string): boolean {
+export function matchesFilter(path: string, query: string): boolean {
   if (!query) return true;
-  return path.toLowerCase().includes(query);
+  return path.toLowerCase().includes(query.toLowerCase());
 }
 
 async function editExcludedPaths(ctx: ExtensionContext, config: FilesConfig): Promise<void> {
@@ -833,12 +877,12 @@ function getAllSelectedPaths(config: FilesConfig): string[] {
   return [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
 }
 
-function normalizePath(input: string): string {
+export function normalizePath(input: string): string {
   // Keep trailing slash if the user included it; otherwise treat as file.
   return input.replace(/\\/g, "/");
 }
 
-function isPathConflict(path: string, current: string[], other: string[]): boolean {
+export function isPathConflict(path: string, current: string[], other: string[]): boolean {
   // Within the same category, a folder blocks any file inside it,
   // and a file inside blocks the folder.
   for (const existing of current) {
@@ -857,7 +901,7 @@ function isPathConflict(path: string, current: string[], other: string[]): boole
   return false;
 }
 
-function isFolderLike(dir: string, entry: fs.Dirent): boolean {
+export function isFolderLike(dir: string, entry: fs.Dirent): boolean {
   if (entry.isDirectory()) return true;
   if (entry.isSymbolicLink()) {
     try {
@@ -1183,4 +1227,310 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
       pi.sendUserMessage(text);
     },
   });
+}
+
+export function registerArchitectInputsCommands(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-configure-architect-inputs", {
+    description: "Select documents the architect agent reads",
+    handler: async (_args, ctx) => {
+      const existing = loadArchitectInputsConfig(ctx.cwd);
+      const config: ArchitectInputsConfig = existing ?? createDefaultArchitectInputsConfig();
+      const filesConfig = loadFilesConfig(ctx.cwd);
+      const excludedPaths = filesConfig?.excludedPaths ?? [
+        ".git/",
+        "node_modules/",
+        "__pycache__/",
+        ".venv/",
+        "venv/",
+        "dist/",
+        "build/",
+        "target/",
+        ".pi/",
+        ".idea/",
+        ".vscode/",
+      ];
+
+      const discovered = discoverProjectFiles(ctx.cwd, excludedPaths);
+
+      const candidates = [
+        ...discovered.documentFiles,
+        ...discovered.documentFolders.map((f) => f.path),
+        ...discovered.testFiles,
+        ...discovered.testFolders.map((f) => f.path),
+        "README.md",
+      ];
+
+      // Build type-aware suggestions.
+      const typePatterns: Record<ArchitectDocumentType, RegExp> = {
+        prd: /prd|product.requirement|requirements/i,
+        mrd: /mrd|market.requirement/i,
+        brd: /brd|business.requirement/i,
+        rtm: /rtm|traceability|trace/i,
+        nfr: /nfr|non.functional|non_functional/i,
+        "test-plan": /test.plan|test.strategy|testing/i,
+        adr: /adr|architecture.decision/i,
+        readme: /readme/i,
+        code: /src\/|app\/|lib\//i,
+        feasibility: /feasib/i,
+      };
+
+      const documentsByType: Partial<Record<ArchitectDocumentType, string[]>> = {};
+      for (const docType of Object.keys(typePatterns) as ArchitectDocumentType[]) {
+        documentsByType[docType] = candidates.filter((p) => typePatterns[docType].test(p));
+      }
+
+      const typeLabels: Record<ArchitectDocumentType, string> = {
+        prd: "PRD",
+        mrd: "MRD",
+        brd: "BRD",
+        rtm: "RTM",
+        nfr: "NFR",
+        "test-plan": "Test plan",
+        adr: "ADR",
+        readme: "README",
+        code: "Code",
+        feasibility: "Feasibility",
+      };
+
+      const typeIds = Object.keys(typePatterns) as ArchitectDocumentType[];
+
+      let lastSelectedId: string | undefined;
+
+      while (true) {
+        const pickerItems: RolePickerItem[] = typeIds.map((docType) => {
+          const count = config.documents.filter((d) => d.type === docType).length;
+          return {
+            id: docType,
+            label: typeLabels[docType],
+            agent: "",
+            summary: count > 0 ? `${count} selected` : "not set",
+            assigned: count > 0,
+          };
+        });
+        pickerItems.push({
+          id: "additional-constraints",
+          label: "Additional constraints",
+          agent: "",
+          summary: config.additionalConstraints.length > 0
+            ? `${config.additionalConstraints.length} entries`
+            : "not set",
+          assigned: config.additionalConstraints.length > 0,
+        });
+
+        const action = await runRolePicker(ctx, {
+          title: "Configure architect inputs",
+          subtitle: " Select a document type to configure, or Finish when done.",
+          items: pickerItems,
+          initialSelectedId: lastSelectedId,
+        });
+
+        if (action.kind === "back") {
+          ctx.ui.notify("Configuration cancelled.", "warning");
+          return;
+        }
+
+        if (action.kind === "finish") {
+          break;
+        }
+
+        lastSelectedId = action.role;
+
+        if (action.role === "additional-constraints") {
+          const constraints = await ctx.ui.editor(
+            "Enter additional constraints (one per line)",
+            config.additionalConstraints.join("\n"),
+          );
+          if (constraints !== undefined) {
+            config.additionalConstraints = constraints
+              .split("\n")
+              .map((line) => line.trim())
+              .filter((line) => line.length > 0);
+          }
+          continue;
+        }
+
+        const docType = action.role as ArchitectDocumentType;
+        if (!typeIds.includes(docType)) continue;
+
+        const suggestions = documentsByType[docType] ?? [];
+        const current = config.documents.filter((d) => d.type === docType).map((d) => d.path);
+        const done = await editArchitectDocumentType(ctx, docType, suggestions, current, excludedPaths);
+        if (done === null) continue;
+        lastSelectedId = docType;
+
+        config.documents = config.documents.filter((d) => d.type !== docType);
+        for (const p of done) {
+          config.documents.push({ type: docType, path: p });
+        }
+      }
+
+      saveArchitectInputsConfig(ctx.cwd, config);
+      ctx.ui.notify(
+        `Architect inputs saved. ${config.documents.length} documents configured.`,
+        "info",
+      );
+    },
+  });
+}
+
+async function editArchitectDocumentType(
+  ctx: ExtensionContext,
+  docType: ArchitectDocumentType,
+  suggestions: string[],
+  current: string[],
+  excludedPaths: string[],
+): Promise<string[] | null> {
+  let selected = [...current];
+  let filterQuery = "";
+
+  while (true) {
+    const action = await runListEditor(ctx, {
+      title: `${docType.toUpperCase()} inputs (${selected.length} selected)`,
+      items: buildArchitectDocumentItems(suggestions, selected),
+      filterQuery,
+      enableFilter: true,
+      customActions: [{ id: "add-custom", label: "Add custom path" }],
+      pageSize: SUGGESTION_PAGE_SIZE,
+    });
+
+    switch (action.kind) {
+      case "back":
+        return current;
+      case "done":
+        return action.paths;
+      case "filter":
+        selected = action.paths;
+        filterQuery = action.query;
+        break;
+      case "custom": {
+        selected = action.paths;
+        const picked = await browsePath(ctx, ctx.cwd, "both", excludedPaths);
+        if (picked && !selected.includes(picked)) {
+          selected.push(normalizePath(picked));
+        }
+        break;
+      }
+    }
+  }
+}
+
+function buildArchitectDocumentItems(suggestions: string[], current: string[]): ListEditorItem[] {
+  const items: ListEditorItem[] = [];
+  for (const p of suggestions) {
+    if (current.includes(p)) continue;
+    items.push({
+      id: `suggest:${p}`,
+      kind: "suggestion",
+      label: `⬜ Suggest: ${p}`,
+      value: p,
+    });
+  }
+  for (const p of current) {
+    items.push({
+      id: `selected:${p}`,
+      kind: "selected",
+      label: `✅ Remove: ${p}`,
+      value: p,
+    });
+  }
+  return items;
+}
+
+export function registerArchitectCommand(pi: ExtensionAPI) {
+  pi.registerCommand("orchestra-generate-architect", {
+    description: "Generate a project-specific architecture agent and skills",
+    handler: async (_args, ctx) => {
+      const inputsConfig = loadArchitectInputsConfig(ctx.cwd);
+      if (!inputsConfig) {
+        ctx.ui.notify(
+          "No architect inputs configured. Run /orchestra-configure-architect-inputs first.",
+          "warning",
+        );
+        return;
+      }
+
+      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
+
+      const skillPath = path.resolve(ctx.cwd, "skills", "orchestra-generate-architect.md");
+      let skill = "";
+      try {
+        skill = fs.readFileSync(skillPath, "utf8").replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+      } catch {
+        skill = defaultArchitectSkill();
+      }
+
+      const selectedPaths = getSelectedInputPaths(inputsConfig);
+      const drivers = loadDrivers(ctx.cwd);
+      const stale = areDriversStale(ctx.cwd, inputsConfig);
+      let changeNote = "";
+      if (stale) {
+        if (drivers) {
+          const proceed = await ctx.ui.confirm(
+            "Architecture inputs changed",
+            "Input documents are newer than the generated architecture. Re-run the full architecture factory?",
+          );
+          if (!proceed) {
+            ctx.ui.notify("Architecture generation cancelled. Update inputs or re-run when ready.", "info");
+            return;
+          }
+        }
+        changeNote =
+          "Input documents have changed. Regenerate architectural drivers, profile, report, architecture.md, ADRs, agents, and skills from scratch.";
+      }
+
+      const prompt = [
+        `<pi-orchestra-generate-architect>`,
+        ``,
+        `Generate a project-specific architecture agent and skills.`,
+        ``,
+        `Configured input documents:`,
+        ...selectedPaths.map((p) => `  - ${p}`),
+        ``,
+        `Additional constraints:`,
+        ...inputsConfig.additionalConstraints.map((r) => `  - ${r}`),
+        ` `,
+        drivers
+          ? `Existing architectural drivers are available at .pi/architect/architectural-drivers.json. Re-run the full flow only if the user asks for it or the inputs changed.`
+          : `No architectural drivers found. Run the full architect flow.`,
+        ``,
+        `Expected artifacts:`,
+        `  - .pi/architect/architectural-drivers.json`,
+        `  - .pi/architect/architect-profile.json`,
+        `  - .pi/architect/architect-report.json`,
+        `  - .pi/architect/architecture.md`,
+        `  - .pi/architect/adrs/*.md`,
+        `  - .pi/agents/<project>-<architecture-id>-<role>.md`,
+        `  - .pi/skills/<project>-<architecture-id>-<stage>/SKILL.md`,
+        changeNote ? `Note: ${changeNote}` : "",
+        ``,
+        `</pi-orchestra-generate-architect>`,
+        ``,
+        skill,
+      ].join("\n");
+
+      pi.sendUserMessage(prompt);
+    },
+  });
+}
+
+export function defaultArchitectSkill(): string {
+  return [
+    `# Architect Generation`,
+    ``,
+    `Follow the sequence in Doc/architect-sequence.md.`,
+    ``,
+    `1. Read .pi/orchestra/architect-inputs.json.`,
+    `2. For each configured document, spawn an architect-document-ingest subagent to extract architectural drivers. Run up to 4 subagents in parallel.`,
+    `3. Each subagent must write its output to .IDE_Plans/architect-map/<sanitized-path>.json and nowhere else.`,
+    `4. Call the orchestra_merge_architect_drivers tool to merge map outputs into .pi/architect/architectural-drivers.json.`,
+    `5. Check for missing critical drivers. Use AskUserQuestion to fill gaps.`,
+    `6. Save the updated profile to .pi/architect/architect-profile.json. Use the architecture id (not the long name) as selectedArchitecture.`,
+    `7. Read .pi/architecture-library/ and select the best architecture.`,
+    `8. Write .pi/architect/architect-report.json with selectedArchitecture (the architecture id), confidence, missingResources, reasoning, skillProfile, developmentOrder, feasibility, feasibilityReasoning, techStack, atomicFunctions, systemOverview, components, interfaces, dataFlow, dataModel, deployment, qualityAttributeMapping, adrs, and constraints.`,
+    `9. Evaluate feasibility. If not-feasible, stop and notify the user. If risky, ask before proceeding.`,
+    `10. If missingResources is not empty, stop and ask the user whether to search the web for resources.`,
+    `11. Call the orchestra_finalize_architecture tool to generate .pi/architect/architecture.md, .pi/architect/adrs/*.md, .pi/agents/<project>-<architecture-id>-<role>.md, and .pi/skills/<project>-<architecture-id>-<stage>/SKILL.md.`,
+    `12. Notify the user of the results.`,
+
+  ].join("\n");
 }

@@ -142,4 +142,17 @@ describe("runRolePicker custom TUI", () => {
     assert.ok(scoutLine.includes("not set"));
     assert.ok(plannerLine.includes("reads=1"));
   });
+
+  it("starts selection at initialSelectedId", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runRolePicker(ctx, {
+      title: "Test",
+      items: ITEMS,
+      initialSelectedId: "planner",
+    });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    comp.handleInput(ENTER);
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "role", role: "planner" });
+  });
 });

@@ -9,6 +9,15 @@ import {
   registerAgentCommands,
   registerFilesCommands,
   registerAgentsFilesCommands,
+  registerDoctorCommand,
+  registerArchitectInputsCommands,
+  registerArchitectCommand,
+  buildCategoryItems,
+  matchesFilter,
+  normalizePath,
+  isPathConflict,
+  isFolderLike,
+  defaultArchitectSkill,
 } from "../src/commands.js";
 import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
 import type { OrchestraState } from "../src/state.js";
@@ -17,6 +26,10 @@ import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-age
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig, loadFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig, loadAgentsFilesConfig } from "../src/agents-files-config.js";
+import {
+  loadArchitectInputsConfig,
+  saveArchitectInputsConfig,
+} from "../src/architect-inputs-config.js";
 import { DEFAULT_AGENTS, type OrchestraRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -28,6 +41,8 @@ describe("commands", () => {
   let selectIndex: number;
   let inputs: string[];
   let inputIndex: number;
+  let editorValues: string[];
+  let editorIndex: number;
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-cmd-test-"));
@@ -38,6 +53,8 @@ describe("commands", () => {
     selectIndex = 0;
     inputs = [];
     inputIndex = 0;
+    editorValues = [];
+    editorIndex = 0;
     writeDefaultAgentConfig(tmpDir);
     writeDefaultFilesConfig(tmpDir);
     writeDefaultAgentsFilesConfig(tmpDir);
@@ -52,9 +69,10 @@ describe("commands", () => {
         },
         confirm: async (_title: string, _message: string) => true,
         input: async () => inputs[inputIndex++] ?? "",
+        editor: async (_title: string, _value: string) => editorValues[editorIndex++] ?? "",
         select: async (_title: string, options: string[]) => {
-          const choice = selectChoices[selectIndex++] ?? options[0];
-          return choice;
+          if (selectIndex >= selectChoices.length) return options[0];
+          return selectChoices[selectIndex++];
         },
       },
     } as unknown as ExtensionContext;
@@ -947,5 +965,152 @@ describe("commands", () => {
     await commandHandlers["orchestra-configure-files"]("", makeCtx());
     const saved = loadFilesConfig(tmpDir);
     assert.deepStrictEqual(saved?.codePaths, []);
+  });
+
+  it("registerDoctorCommand registers /orchestra-doctor", async () => {
+    registerDoctorCommand(makeApi());
+    assert.ok(commandHandlers["orchestra-doctor"]);
+
+    await commandHandlers["orchestra-doctor"]("", makeCtx());
+    assert.ok(sentMessages.some((m) => m.includes("Architecture setup")));
+  });
+
+  it("registerArchitectInputsCommands cancels when main menu is dismissed", async () => {
+    registerArchitectInputsCommands(makeApi());
+    assert.ok(commandHandlers["orchestra-configure-architect-inputs"]);
+
+    selectChoices.push(undefined as unknown as string);
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    assert.ok(notifications.some((n) => n.message.includes("Configuration cancelled")));
+  });
+
+  it("orchestra-configure-architect-inputs saves selected suggestions", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+
+    registerArchitectInputsCommands(makeApi());
+    selectChoices.push(
+      "⬜ prd: PRD — not set",
+      "⬜ Suggest: docs/PRD.md",
+      "Back",
+      "⬜ Finish",
+    );
+
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    const saved = loadArchitectInputsConfig(tmpDir);
+    assert.ok(saved);
+    assert.ok(saved?.documents.some((d) => d.type === "prd" && d.path === "docs/PRD.md"));
+  });
+
+  it("orchestra-configure-architect-inputs adds custom path via browser", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+
+    registerArchitectInputsCommands(makeApi());
+    selectChoices.push(
+      "⬜ prd: PRD — not set",
+      "Add custom path",
+      "📂 docs/",
+      "📄 PRD.md",
+      "Back",
+      "⬜ Finish",
+    );
+
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    const saved = loadArchitectInputsConfig(tmpDir);
+    assert.ok(saved?.documents.some((d) => d.type === "prd" && d.path === "docs/PRD.md"));
+  });
+
+  it("orchestra-configure-architect-inputs saves additional constraints", async () => {
+    registerArchitectInputsCommands(makeApi());
+    editorValues.push("Keep it simple");
+    selectChoices.push(
+      "⬜ additional-constraints: Additional constraints — not set",
+      "⬜ Finish",
+    );
+
+    await commandHandlers["orchestra-configure-architect-inputs"]("", makeCtx());
+    const saved = loadArchitectInputsConfig(tmpDir);
+    assert.deepStrictEqual(saved?.additionalConstraints, ["Keep it simple"]);
+  });
+
+  it("registerArchitectCommand warns when no architect inputs configured", async () => {
+    registerArchitectCommand(makeApi());
+    assert.ok(commandHandlers["orchestra-generate-architect"]);
+
+    await commandHandlers["orchestra-generate-architect"]("", makeCtx());
+    assert.ok(notifications.some((n) => n.message.includes("No architect inputs configured")));
+  });
+
+  it("registerArchitectCommand sends prompt when inputs configured", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: ["Keep it simple"],
+    });
+
+    registerArchitectCommand(makeApi());
+    await commandHandlers["orchestra-generate-architect"]("", makeCtx());
+    assert.ok(sentMessages.some((m) => m.includes("<pi-orchestra-generate-architect>")));
+    assert.ok(sentMessages.some((m) => m.includes("docs/PRD.md")));
+    assert.ok(sentMessages.some((m) => m.includes("feasibility")));
+  });
+});
+
+
+describe("commands helpers", () => {
+  it("normalizePath converts backslashes and preserves trailing slash", () => {
+    assert.strictEqual(normalizePath("src\\app\\main.ts"), "src/app/main.ts");
+    assert.strictEqual(normalizePath("src/app/"), "src/app/");
+  });
+
+  it("matchesFilter returns true for empty query and case-insensitive match", () => {
+    assert.strictEqual(matchesFilter("src/app.ts", ""), true);
+    assert.strictEqual(matchesFilter("src/app.ts", "APP"), true);
+    assert.strictEqual(matchesFilter("src/app.ts", "app"), true);
+    assert.strictEqual(matchesFilter("src/app.ts", "missing"), false);
+  });
+
+  it("isPathConflict detects exact duplicates and folder-child conflicts", () => {
+    assert.strictEqual(isPathConflict("src/app.ts", ["src/app.ts"], []), true);
+    assert.strictEqual(isPathConflict("src/", ["src/app.ts"], []), true);
+    assert.strictEqual(isPathConflict("src/app.ts", ["src/"], []), true);
+    assert.strictEqual(isPathConflict("src/app.ts", ["tests/"], []), false);
+    assert.strictEqual(isPathConflict("src/app.ts", [], ["other/"]), false);
+  });
+
+  it("isFolderLike detects directories and files", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "cmd-helper-"));
+    const filePath = path.join(tmpDir, "file.txt");
+    fs.writeFileSync(filePath, "x");
+    const subDir = path.join(tmpDir, "sub");
+    fs.mkdirSync(subDir);
+
+    const entries = fs.readdirSync(tmpDir, { withFileTypes: true });
+    const fileEntry = entries.find((e) => e.name === "file.txt");
+    const dirEntry = entries.find((e) => e.name === "sub");
+    assert.ok(fileEntry);
+    assert.ok(dirEntry);
+    assert.strictEqual(isFolderLike(filePath, fileEntry!), false);
+    assert.strictEqual(isFolderLike(subDir, dirEntry!), true);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("buildCategoryItems filters suggestions and excludes conflicts", () => {
+    const suggestions = ["src/", "src/app.ts", "tests/", "README.md"];
+    const current = ["src/"];
+    const other = ["tests/"];
+    const items = buildCategoryItems(suggestions, current, other);
+    assert.ok(items.some((i) => i.value === "README.md" && i.kind === "suggestion"));
+    assert.ok(items.some((i) => i.value === "src/" && i.kind === "selected"));
+    assert.ok(!items.some((i) => i.value === "tests/"));
+    assert.ok(!items.some((i) => i.value === "src/app.ts"));
+  });
+
+  it("defaultArchitectSkill returns non-empty architect prompt", () => {
+    const skill = defaultArchitectSkill();
+    assert.ok(skill.length > 0);
+    assert.ok(skill.includes("Architect Generation"));
   });
 });

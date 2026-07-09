@@ -78,10 +78,30 @@ export function suggestAgentForRole(
   role: OrchestraRole,
   agents: DiscoveredAgent[],
 ): string | undefined {
+  // First pass: prefer project-specific generated architecture agents.
+  for (const agent of agents) {
+    const agentText = (agent.name + " " + agent.description).toLowerCase();
+    if (
+      (role === "planner" || role === "plan-overview" || role === "scout-1") &&
+      agent.name.endsWith("-planner") &&
+      agentText.includes("architecture")
+    ) {
+      return agent.name;
+    }
+    if (
+      role === "reviewer-correctness" &&
+      agent.name.endsWith("-reviewer-correctness") &&
+      agentText.includes("architecture")
+    ) {
+      return agent.name;
+    }
+  }
+
   for (const agent of agents) {
     const agentText = (agent.name + " " + agent.description).toLowerCase();
 
     if (role === "discussion" && agentText.includes("discussion")) return agent.name;
+
     if (role === "planner" && agentText.includes("planner")) return agent.name;
     if (role === "plan-overview" && agentText.includes("planner")) return agent.name;
 

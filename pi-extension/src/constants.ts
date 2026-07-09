@@ -5,6 +5,8 @@ export const STATE_FILE = "state.json";
 export const RUNS_DIR = "runs";
 export const ORCHESTRA_CONFIG_DIR = ".pi/orchestra";
 export const ORCHESTRA_CONFIG_FILE = "agents.json";
+export const ARCHITECT_STATE_DIR = ".pi/architect";
+export const ARCHITECT_MAP_DIR = ".IDE_Plans/architect-map";
 
 export type Stage =
   | "none"
@@ -66,6 +68,14 @@ export interface StageArtifactPaths {
 
 export function getOrchestraDir(cwd: string): string {
   return path.join(cwd, ORCHESTRA_DIR);
+}
+
+export function getArchitectStateDir(cwd: string): string {
+  return path.join(cwd, ARCHITECT_STATE_DIR);
+}
+
+export function getArchitectMapDir(cwd: string): string {
+  return path.join(cwd, ARCHITECT_MAP_DIR);
 }
 
 export function getStatePath(cwd: string): string {

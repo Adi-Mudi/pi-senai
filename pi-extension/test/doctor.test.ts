@@ -7,6 +7,9 @@ import { runOrchestraDiagnostic, formatDiagnosticReport } from "../src/doctor.js
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
+import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
+import { saveArchitectProfile, saveArchitectReport } from "../src/architect.js";
+import { createEmptyDrivers } from "../src/driver-extractor.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -301,6 +304,305 @@ describe("doctor", () => {
     assert.ok(text.includes("Project file scope"));
     assert.ok(text.includes("Agent document assignments"));
     assert.ok(text.includes("Runtime environment"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports invalid architectural drivers without crashing", () => {
+    const tmpDir = makeTmpDir("doctor-invalid-drivers-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    // Write an invalid drivers file (malformed JSON).
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"),
+      "{ not valid json",
+      "utf8",
+    );
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const archSection = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(archSection);
+
+    const invalidDrivers = archSection.items.find((i) => i.message.includes("Invalid architectural drivers"));
+    assert.ok(invalidDrivers, "doctor should report invalid drivers as an error instead of crashing");
+    assert.strictEqual(invalidDrivers.status, "error");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports invalid architect profile without crashing", () => {
+    const tmpDir = makeTmpDir("doctor-invalid-profile-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-profile.json"),
+      "{ not valid json",
+      "utf8",
+    );
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const archSection = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(archSection);
+
+    const invalidProfile = archSection.items.find((i) => i.message.includes("Invalid architect profile"));
+    assert.ok(invalidProfile, "doctor should report invalid profile as an error instead of crashing");
+    assert.strictEqual(invalidProfile.status, "error");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports invalid architect report without crashing", () => {
+    const tmpDir = makeTmpDir("doctor-invalid-report-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-report.json"),
+      "{ not valid json",
+      "utf8",
+    );
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const archSection = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(archSection);
+
+    const invalidReport = archSection.items.find((i) => i.message.includes("Invalid architect report"));
+    assert.ok(invalidReport, "doctor should report invalid report as an error instead of crashing");
+    assert.strictEqual(invalidReport.status, "error");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports missing generated architecture agents and skills as errors", () => {
+    const tmpDir = makeTmpDir("doctor-arch-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    // Create architecture inputs and profile so doctor reaches the agent/skill checks.
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "readme", path: "README.md" }],
+      additionalConstraints: [],
+    });
+
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const archSection = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(archSection);
+
+    const missingAgents = archSection.items.find((i) => i.message.includes("expected architecture agents are missing"));
+    const missingSkills = archSection.items.find((i) => i.message.includes("expected architecture skills are missing"));
+    assert.ok(missingAgents, "doctor should report missing agents as errors");
+    assert.ok(missingSkills, "doctor should report missing skills as errors");
+    assert.strictEqual(missingAgents.status, "error");
+    assert.strictEqual(missingSkills.status, "error");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports agent capability mismatch", () => {
+    const tmpDir = makeTmpDir("doctor-capability-");
+
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: {
+        "reviewer-correctness": "read-only-reviewer",
+      },
+    });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    writeAgent(tmpDir, "read-only-reviewer", {
+      name: "read-only-reviewer",
+      description: "Read-only reviewer",
+      tools: "read, write",
+      output: "single",
+    });
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const roleSection = report.sections.find((s) => s.title === "Agent-role capability fit");
+    assert.ok(roleSection);
+
+    const mismatch = roleSection.items.find((i) => i.message.includes("read-only") && i.status === "warning");
+    assert.ok(mismatch, "doctor should warn about read-only role with write tool");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports stale intermediate driver files", () => {
+    const tmpDir = makeTmpDir("doctor-stale-drivers-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "orchestra", "drivers-prd.json"), "{}", "utf8");
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const archSection = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(archSection);
+
+    const staleWarning = archSection.items.find((i) => i.message.includes("stale intermediate driver files"));
+    assert.ok(staleWarning, "doctor should warn about stale intermediate driver files");
+    assert.strictEqual(staleWarning.status, "warning");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports missing architecture.md", () => {
+    const tmpDir = makeTmpDir("doctor-no-arch-md-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "readme", path: "README.md" }],
+      additionalConstraints: [],
+    });
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+
+    const report = runOrchestraDiagnostic(tmpDir);
+    const archSection = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(archSection);
+
+    const missingMd = archSection.items.find((i) => i.message.includes("No architecture.md found"));
+    assert.ok(missingMd, "doctor should report missing architecture.md");
+    assert.strictEqual(missingMd.status, "error");
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
