@@ -845,4 +845,123 @@ describe("architect", () => {
     assert.deepStrictEqual(fs.readdirSync(adrsDir), ["0001-adopt-plugin-kernel.md"]);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  function makeArchReport(adrs: ArchitectReport["adrs"]): ArchitectReport {
+    return {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs,
+      constraints: [],
+    };
+  }
+
+  function makeCleanupProfile(): ArchitectProfile {
+    return {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "hexagonal",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+  }
+
+  it("removeStaleArchitectureArtifacts clears multiple old architectures and keeps lookalikes", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-multi-"));
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "test-project-monolith-planner.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-layered-architecture-implementer.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-hexagonal-planner-backup.md"), "lookalike", "utf8");
+
+    const removed = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
+
+    assert.strictEqual(removed.length, 2);
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-planner.md")));
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-layered-architecture-implementer.md")));
+    assert.ok(fs.existsSync(path.join(agentsDir, "test-project-hexagonal-planner-backup.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts keeps skill-like files that are not directories", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-file-"));
+    const skillsDir = path.join(tmpDir, ".pi", "skills");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, "test-project-monolith-plan"), "a file, not a dir", "utf8");
+
+    const removed = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
+
+    assert.deepStrictEqual(removed, []);
+    assert.ok(fs.existsSync(path.join(skillsDir, "test-project-monolith-plan")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts handles missing agents and skills directories", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-empty-"));
+    assert.deepStrictEqual(removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile()), []);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs keeps non-markdown files in the adrs folder", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-adr-keep-"));
+    const adrsDir = path.join(tmpDir, ".pi", "architect", "adrs");
+    fs.mkdirSync(adrsDir, { recursive: true });
+    fs.writeFileSync(path.join(adrsDir, "notes.txt"), "keep me", "utf8");
+    fs.writeFileSync(path.join(adrsDir, "0099-old-decision.md"), "old", "utf8");
+
+    generateArchitectureDocs(tmpDir, makeCleanupProfile(), makeArchReport([
+      { id: "0001", title: "First decision", context: "c", decision: "d", consequences: "x" },
+    ]));
+
+    assert.ok(fs.existsSync(path.join(adrsDir, "notes.txt")));
+    assert.ok(!fs.existsSync(path.join(adrsDir, "0099-old-decision.md")));
+    assert.ok(fs.existsSync(path.join(adrsDir, "0001-first-decision.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs with zero ADRs empties the adrs folder", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-adr-zero-"));
+    const adrsDir = path.join(tmpDir, ".pi", "architect", "adrs");
+    fs.mkdirSync(adrsDir, { recursive: true });
+    fs.writeFileSync(path.join(adrsDir, "0001-old-decision.md"), "old", "utf8");
+
+    generateArchitectureDocs(tmpDir, makeCleanupProfile(), makeArchReport([]));
+
+    assert.deepStrictEqual(fs.readdirSync(adrsDir), []);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns false when config and drivers have the same mtime", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-equal-"));
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+    const inputsConfig = {
+      version: 1 as const,
+      documents: [{ type: "prd" as const, path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    };
+    saveArchitectInputsConfig(tmpDir, inputsConfig);
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    const same = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(tmpDir, "docs", "PRD.md"), same, same);
+    fs.utimesSync(path.join(tmpDir, ".pi", "senai", "architect-inputs.json"), same, same);
+    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), same, same);
+    assert.strictEqual(areDriversStale(tmpDir, inputsConfig), false);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

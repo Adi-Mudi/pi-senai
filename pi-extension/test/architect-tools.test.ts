@@ -369,4 +369,106 @@ describe("architect-tools", () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("merge tool sweeps all map files when the config has an empty document list", async () => {
+    const tmpDir = makeTmpDir("arch-tools-empty-docs-");
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+
+    saveArchitectInputsConfig(tmpDir, { version: 1, documents: [], additionalConstraints: [] });
+
+    const output = {
+      document: "docs/PRD.md",
+      documentType: "prd",
+      functionalRequirements: [{ id: "FR-1", description: "Do X" }],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    fs.writeFileSync(path.join(mapDir, "docs-PRD.md.json"), JSON.stringify(output), "utf8");
+    fs.writeFileSync(
+      path.join(mapDir, "architect-documents.json"),
+      JSON.stringify({ version: 1, documents: [], mapOutputs: [], reducedDriversPath: "" }),
+      "utf8",
+    );
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.functionalRequirements, 0);
+    assert.strictEqual(result.details.deletedStaleMapFiles.length, 1);
+    assert.ok(!fs.existsSync(path.join(mapDir, "docs-PRD.md.json")));
+    assert.ok(fs.existsSync(path.join(mapDir, "architect-documents.json")), "manifest must be kept");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("merge tool keeps but does not merge a file whose content document mismatches its name", async () => {
+    const tmpDir = makeTmpDir("arch-tools-mismatch-");
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+
+    const mismatched = {
+      document: "docs/OTHER.md",
+      documentType: "prd",
+      functionalRequirements: [{ id: "FR-OTHER", description: "Wrong content" }],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    fs.writeFileSync(path.join(mapDir, "docs-PRD.md.json"), JSON.stringify(mismatched), "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.functionalRequirements, 0);
+    assert.deepStrictEqual(result.details.deletedStaleMapFiles, []);
+    assert.ok(fs.existsSync(path.join(mapDir, "docs-PRD.md.json")), "file kept because its name matches a configured doc");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("merge tool deletes malformed stale map files without crashing", async () => {
+    const tmpDir = makeTmpDir("arch-tools-malformed-");
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+
+    const valid = {
+      document: "docs/PRD.md",
+      documentType: "prd",
+      functionalRequirements: [{ id: "FR-1", description: "Do X" }],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    fs.writeFileSync(path.join(mapDir, "docs-PRD.md.json"), JSON.stringify(valid), "utf8");
+    fs.writeFileSync(path.join(mapDir, "docs-BROKEN.md.json"), "{ not valid json", "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.functionalRequirements, 1);
+    assert.strictEqual(result.details.deletedStaleMapFiles.length, 1);
+    assert.ok(!fs.existsSync(path.join(mapDir, "docs-BROKEN.md.json")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

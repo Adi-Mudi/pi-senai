@@ -1007,4 +1007,19 @@ describe("doctor architecture validation", () => {
     assert.ok(warning.message.includes("0001-test.md"));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("drift check ignores files with the same mtime as the report", () => {
+    const tmpDir = makeTmpDir("doctor-drift-equal-");
+    saveTestProfile(tmpDir);
+    saveTestReport(tmpDir);
+    writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "original");
+    const same = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architect-report.json"), same, same);
+    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), same, same);
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture drift");
+    assert.strictEqual(section.items.filter((i) => i.status === "warning").length, 0);
+    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 1);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });
