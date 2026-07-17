@@ -64,6 +64,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- The doctor drift check no longer flags freshly generated files. It now compares content hashes from `.pi/architect/generated-manifest.json` (written by the finalize tool at generation time) instead of file timestamps. The old timestamp comparison flagged every generated file on every project, because the factory writes the report before the other files. Old projects without a manifest see a quiet info line instead of false warnings.
+- Architect reports with a numeric `confidence` (e.g., `95` from older generators) are now read correctly: 80+ maps to high, 50+ to medium, below 50 to low.
 - Generated agents now reference the correct stage skill in their frontmatter: the architecture id is used instead of the human-readable architecture name, and the implementer agent links to the `-implement` skill instead of `-plan`.
 - Re-running `/senai-generate-architect` is now safe against stale data and orphans.
   - `areDriversStale` also watches `architect-inputs.json`, so editing `additionalConstraints` or the document list triggers the re-run confirmation.

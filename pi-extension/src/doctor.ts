@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import {
   findNearestProjectAgentsDir,
   getUserAgentsDir,
@@ -20,9 +21,9 @@ import {
   ARCHITECT_ROLES,
   ARCHITECT_STAGES,
   discoverArchitectureLibrary,
-  getArchitectReportPath,
   loadArchitectProfile,
   loadArchitectReport,
+  loadGeneratedManifest,
   slugify,
   type ArchitectProfile,
   type ArchitectReport,
@@ -948,62 +949,47 @@ function checkGeneratedAgentContent(cwd: string): DiagnosticSection {
 function checkArchitectureDrift(cwd: string): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
-  const reportPath = getArchitectReportPath(cwd);
-  if (!fs.existsSync(reportPath)) {
-    items.push({ status: "info", message: "No architecture report generated yet. Drift check skipped." });
+  const manifest = loadGeneratedManifest(cwd);
+  if (!manifest) {
+    items.push({
+      status: "info",
+      message: "No generation manifest found. Drift check skipped.",
+      details: [
+        "This architecture was generated before drift tracking existed.",
+        "Re-run /senai-generate-architect to enable drift detection.",
+      ],
+    });
     return { title: "Architecture drift", items };
   }
 
-  let profile: ArchitectProfile | null = null;
-  try {
-    profile = loadArchitectProfile(cwd);
-  } catch {
-    // An invalid profile is already reported by the architecture setup section.
-  }
-
-  const baseline = fs.statSync(reportPath).mtimeMs;
-  const architectStateDir = getArchitectStateDir(cwd);
-
-  const generatedFiles: string[] = [];
-  if (profile) {
-    for (const role of ARCHITECT_ROLES) {
-      generatedFiles.push(
-        path.join(cwd, ".pi", "agents", `${profile.projectSlug}-${profile.selectedArchitecture}-${role}.md`),
-      );
-    }
-    for (const stage of ARCHITECT_STAGES) {
-      generatedFiles.push(
-        path.join(cwd, ".pi", "skills", `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`, "SKILL.md"),
-      );
-    }
-  }
-  generatedFiles.push(path.join(architectStateDir, "architecture.md"));
-
-  const adrsDir = path.join(architectStateDir, "adrs");
-  if (fs.existsSync(adrsDir)) {
-    for (const entry of fs.readdirSync(adrsDir)) {
-      if (entry.endsWith(".md")) generatedFiles.push(path.join(adrsDir, entry));
-    }
-  }
-
-  const drifted: string[] = [];
-  for (const filePath of generatedFiles) {
-    if (!fs.existsSync(filePath)) continue;
-    if (fs.statSync(filePath).mtimeMs > baseline) {
-      drifted.push(path.relative(cwd, filePath));
-    }
-  }
-
-  if (drifted.length === 0) {
-    items.push({ status: "ok", message: "No generated architecture files were modified after the report." });
-  } else {
-    for (const file of drifted) {
-      items.push({
+  const problems: DiagnosticItem[] = [];
+  for (const [relPath, expectedHash] of Object.entries(manifest.files)) {
+    const filePath = path.resolve(cwd, relPath);
+    if (!fs.existsSync(filePath)) {
+      problems.push({
         status: "warning",
-        message: `${file} was modified after the architecture report was generated.`,
+        message: `Generated file was deleted: ${relPath}`,
+        details: ["If this was not intentional, re-run /senai-generate-architect."],
+      });
+      continue;
+    }
+    const actualHash = createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+    if (actualHash !== expectedHash) {
+      problems.push({
+        status: "warning",
+        message: `${relPath} was modified after generation.`,
         details: ["If this was not intentional, re-run /senai-generate-architect."],
       });
     }
+  }
+
+  if (problems.length === 0) {
+    items.push({
+      status: "ok",
+      message: `All ${Object.keys(manifest.files).length} generated files match the generation manifest.`,
+    });
+  } else {
+    items.push(...problems);
   }
 
   return { title: "Architecture drift", items };

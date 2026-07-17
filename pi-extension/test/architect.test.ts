@@ -964,4 +964,22 @@ describe("architect", () => {
     assert.strictEqual(areDriversStale(tmpDir, inputsConfig), false);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("loadArchitectReport normalizes numeric confidence", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-confidence-"));
+
+    saveArchitectReport(tmpDir, { ...makeArchReport([]), confidence: 95 } as unknown as ArchitectReport);
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "high");
+
+    saveArchitectReport(tmpDir, { ...makeArchReport([]), confidence: 60 } as unknown as ArchitectReport);
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "medium");
+
+    saveArchitectReport(tmpDir, { ...makeArchReport([]), confidence: 10 } as unknown as ArchitectReport);
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "low");
+
+    saveArchitectReport(tmpDir, makeArchReport([]));
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "high");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

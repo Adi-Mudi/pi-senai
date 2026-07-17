@@ -10,6 +10,7 @@ import {
   loadArchitectProfile,
   loadArchitectReport,
   removeStaleArchitectureArtifacts,
+  writeGeneratedManifest,
   type ArchitectureLibraryEntry,
 } from "./architect.js";
 import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
@@ -185,11 +186,14 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
       const createdAgents = generateAgentFiles(cwd, profile, architecture);
       const createdSkills = generateSkillFiles(cwd, profile, architecture);
 
+      const manifest = writeGeneratedManifest(cwd, [...createdDocs, ...createdAgents, ...createdSkills]);
+
       const summary = {
         docs: createdDocs.map((p) => path.relative(cwd, p)),
         agents: createdAgents.map((p) => path.relative(cwd, p)),
         skills: createdSkills.map((p) => path.relative(cwd, p)),
         removedStaleArtifacts,
+        manifestFiles: Object.keys(manifest.files).length,
       };
 
       return {

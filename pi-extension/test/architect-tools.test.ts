@@ -3,6 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { registerArchitectTools } from "../src/architect-tools.js";
 import { saveArchitectProfile, saveArchitectReport } from "../src/architect.js";
 import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
@@ -468,6 +469,67 @@ describe("architect-tools", () => {
     assert.strictEqual(result.details.functionalRequirements, 1);
     assert.strictEqual(result.details.deletedStaleMapFiles.length, 1);
     assert.ok(!fs.existsSync(path.join(mapDir, "docs-BROKEN.md.json")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finalize tool writes a generation manifest with content hashes", async () => {
+    const tmpDir = makeTmpDir("arch-tools-manifest-");
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "modular-monolith.md"),
+      "---\nname: modular-monolith\ncomplexity: low\nbest-for-drivers:\n  - small team\n---\n# Modular Monolith\n",
+      "utf8",
+    );
+
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [{ id: "0001", title: "First decision", context: "c", decision: "d", consequences: "x" }],
+      constraints: [],
+    });
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    const manifestPath = path.join(tmpDir, ".pi", "architect", "generated-manifest.json");
+    assert.ok(fs.existsSync(manifestPath), "manifest should exist after finalize");
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, "utf8"));
+    assert.strictEqual(manifest.version, 1);
+    assert.ok(typeof manifest.generatedAt === "string");
+
+    const expectedCount = result.details.docs.length + result.details.agents.length + result.details.skills.length;
+    assert.strictEqual(Object.keys(manifest.files).length, expectedCount);
+    assert.strictEqual(result.details.manifestFiles, expectedCount);
+
+    for (const [rel, hash] of Object.entries(manifest.files)) {
+      const actual = createHash("sha256").update(fs.readFileSync(path.join(tmpDir, rel))).digest("hex");
+      assert.strictEqual(actual, hash, `hash mismatch for ${rel}`);
+    }
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
 import { getArchitectInputsConfigPath } from "./architect-inputs-config.js";
@@ -197,10 +198,56 @@ export function loadArchitectReport(cwd: string): ArchitectReport | null {
         .filter((adr): adr is ArchitectAdr => adr !== null);
     }
 
+    // Older reports store confidence as a number (e.g. 95). Normalize it to
+    // the string scale so downstream checks read it correctly.
+    if (typeof record.confidence === "number" && Number.isFinite(record.confidence)) {
+      normalized.confidence = record.confidence >= 80 ? "high" : record.confidence >= 50 ? "medium" : "low";
+    }
+
     return normalized;
   } catch (err: any) {
     if (err.code === "ENOENT") return null;
     throw new Error(`Invalid architect report at ${reportPath}: ${err.message}`);
+  }
+}
+
+export const GENERATED_MANIFEST_FILE = "generated-manifest.json";
+
+export interface GeneratedManifest {
+  version: 1;
+  generatedAt: string;
+  files: Record<string, string>;
+}
+
+// Records the content hash of every generated file at generation time. The
+// drift check compares against these hashes, never against timestamps.
+export function writeGeneratedManifest(cwd: string, files: string[]): GeneratedManifest {
+  const manifest: GeneratedManifest = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    files: {},
+  };
+  for (const filePath of files) {
+    const hash = createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+    manifest.files[path.relative(cwd, filePath)] = hash;
+  }
+  const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  return manifest;
+}
+
+export function loadGeneratedManifest(cwd: string): GeneratedManifest | null {
+  const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
+  try {
+    const raw = fs.readFileSync(manifestPath, "utf8");
+    const parsed = JSON.parse(raw) as GeneratedManifest;
+    if (parsed.version !== 1 || typeof parsed.files !== "object" || parsed.files === null) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
   }
 }
 

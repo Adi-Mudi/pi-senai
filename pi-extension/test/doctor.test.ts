@@ -8,7 +8,7 @@ import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
 import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
-import { saveArchitectProfile, saveArchitectReport } from "../src/architect.js";
+import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest } from "../src/architect.js";
 import { createEmptyDrivers } from "../src/driver-extractor.js";
 
 function makeTmpDir(prefix: string): string {
@@ -798,29 +798,30 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("drift check warns when a generated file is newer than the report", () => {
-    const tmpDir = makeTmpDir("doctor-drift-warn-");
+  it("drift check warns when a generated file is modified after the manifest", () => {
+    const tmpDir = makeTmpDir("doctor-drift-edit-");
     saveTestProfile(tmpDir);
-    saveTestReport(tmpDir);
-    const reportPath = path.join(tmpDir, ".pi", "architect", "architect-report.json");
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(reportPath, old, old);
+    writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "original");
+    writeGeneratedManifest(tmpDir, [path.join(tmpDir, ".pi", "architect", "architecture.md")]);
     writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "hand edited");
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture drift");
     const warning = section.items.find((i) => i.status === "warning");
     assert.ok(warning, "should warn about the modified file");
     assert.ok(warning.message.includes("architecture.md"));
+    assert.ok(warning.message.includes("modified after generation"));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("drift check is ok when no generated file is newer than the report", () => {
-    const tmpDir = makeTmpDir("doctor-drift-ok-");
+  it("drift check is ok when all generated files match the manifest", () => {
+    const tmpDir = makeTmpDir("doctor-drift-match-");
     saveTestProfile(tmpDir);
     writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "original");
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), old, old);
-    saveTestReport(tmpDir);
+    writeFile(tmpDir, path.join(".pi", "skills", `${SLUG}-${ARCH}-plan`, "SKILL.md"), "skill");
+    writeGeneratedManifest(tmpDir, [
+      path.join(tmpDir, ".pi", "architect", "architecture.md"),
+      path.join(tmpDir, ".pi", "skills", `${SLUG}-${ARCH}-plan`, "SKILL.md"),
+    ]);
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture drift");
     assert.strictEqual(section.items.filter((i) => i.status === "warning").length, 0);
@@ -966,7 +967,7 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("drift check skips with info when no report exists", () => {
+  it("drift check skips with info when no manifest exists", () => {
     const tmpDir = makeTmpDir("doctor-drift-none-");
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture drift");
@@ -976,50 +977,47 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("drift check warns when a generated skill file is newer than the report", () => {
-    const tmpDir = makeTmpDir("doctor-drift-skill-");
+  it("drift check warns when a generated file is deleted", () => {
+    const tmpDir = makeTmpDir("doctor-drift-delete-");
     saveTestProfile(tmpDir);
-    saveTestReport(tmpDir);
-    const reportPath = path.join(tmpDir, ".pi", "architect", "architect-report.json");
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(reportPath, old, old);
-    writeFile(tmpDir, path.join(".pi", "skills", `${SLUG}-${ARCH}-plan`, "SKILL.md"), "hand edited");
+    const agentRelPath = path.join(".pi", "agents", `${SLUG}-${ARCH}-planner.md`);
+    writeFile(tmpDir, agentRelPath, "agent");
+    writeGeneratedManifest(tmpDir, [path.join(tmpDir, agentRelPath)]);
+    fs.rmSync(path.join(tmpDir, agentRelPath));
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture drift");
     const warning = section.items.find((i) => i.status === "warning");
-    assert.ok(warning, "should warn about the modified skill file");
-    assert.ok(warning.message.includes("SKILL.md"));
+    assert.ok(warning, "should warn about the deleted file");
+    assert.ok(warning.message.includes("deleted"));
+    assert.ok(warning.message.includes("planner.md"));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("drift check warns when an ADR file is newer than the report", () => {
-    const tmpDir = makeTmpDir("doctor-drift-adr-");
+  it("drift check does not flag files written after the report in the same generation batch", () => {
+    // Regression test: the old timestamp-based check flagged every generated
+    // file because the factory writes the report before the other files.
+    const tmpDir = makeTmpDir("doctor-drift-batch-");
     saveTestProfile(tmpDir);
     saveTestReport(tmpDir);
-    const reportPath = path.join(tmpDir, ".pi", "architect", "architect-report.json");
-    const old = new Date(Date.now() - 60_000);
-    fs.utimesSync(reportPath, old, old);
-    writeFile(tmpDir, path.join(".pi", "architect", "adrs", "0001-test.md"), "hand edited");
-    const report = runSenaiDiagnostic(tmpDir);
-    const section = findSection(report, "Architecture drift");
-    const warning = section.items.find((i) => i.status === "warning");
-    assert.ok(warning, "should warn about the modified ADR file");
-    assert.ok(warning.message.includes("0001-test.md"));
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it("drift check ignores files with the same mtime as the report", () => {
-    const tmpDir = makeTmpDir("doctor-drift-equal-");
-    saveTestProfile(tmpDir);
-    saveTestReport(tmpDir);
-    writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "original");
-    const same = new Date(Date.now() - 60_000);
-    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architect-report.json"), same, same);
-    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), same, same);
+    writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "written after the report, same batch");
+    writeGeneratedManifest(tmpDir, [path.join(tmpDir, ".pi", "architect", "architecture.md")]);
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture drift");
     assert.strictEqual(section.items.filter((i) => i.status === "warning").length, 0);
-    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 1);
+    assert.strictEqual(section.items[0].status, "ok");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("drift check ignores files that are not in the manifest", () => {
+    const tmpDir = makeTmpDir("doctor-drift-foreign-");
+    saveTestProfile(tmpDir);
+    writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "original");
+    writeGeneratedManifest(tmpDir, [path.join(tmpDir, ".pi", "architect", "architecture.md")]);
+    writeFile(tmpDir, path.join(".pi", "architect", "my-own-notes.md"), "user file, not generated");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture drift");
+    assert.strictEqual(section.items.filter((i) => i.status === "warning").length, 0);
+    assert.strictEqual(section.items[0].status, "ok");
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
