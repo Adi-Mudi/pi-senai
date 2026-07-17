@@ -827,4 +827,184 @@ describe("doctor architecture validation", () => {
     assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 1);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("mapping check skips safely when the profile is corrupt", () => {
+    const tmpDir = makeTmpDir("doctor-map-corrupt-");
+    writeFile(tmpDir, path.join(".pi", "architect", "architect-profile.json"), "{ not valid json");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture agent mapping");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "info");
+    assert.ok(section.items[0].message.includes("skipped"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mapping check uses the architecture id from the profile", () => {
+    const tmpDir = makeTmpDir("doctor-map-hex-");
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: SLUG,
+      selectedArchitecture: "hexagonal",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: {
+        "scout-1": `${SLUG}-hexagonal-planner`,
+        planner: `${SLUG}-hexagonal-planner`,
+        implementer: `${SLUG}-hexagonal-implementer`,
+        "reviewer-correctness": `${SLUG}-hexagonal-reviewer-correctness`,
+        "reviewer-security": `${SLUG}-hexagonal-reviewer-security`,
+        "reviewer-tests": `${SLUG}-hexagonal-reviewer-tests`,
+      },
+    });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture agent mapping");
+    assert.strictEqual(section.items.filter((i) => i.status === "error").length, 0);
+    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 6);
+    assert.ok(section.items.every((i) => i.message.includes(`${SLUG}-hexagonal-`)));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mapping check reports mixed ok and error items for partial mapping", () => {
+    const tmpDir = makeTmpDir("doctor-map-partial-");
+    saveTestProfile(tmpDir);
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: {
+        planner: `${SLUG}-${ARCH}-planner`,
+        implementer: `${SLUG}-${ARCH}-implementer`,
+      },
+    });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture agent mapping");
+    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 2);
+    assert.strictEqual(section.items.filter((i) => i.status === "error").length, 4);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("content check skips with info when no architecture profile exists", () => {
+    const tmpDir = makeTmpDir("doctor-content-none-");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated agent content");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "info");
+    assert.ok(section.items[0].message.includes("skipped"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("content check names only the missing skill when several are listed", () => {
+    const tmpDir = makeTmpDir("doctor-content-multiskill-");
+    saveTestProfile(tmpDir);
+    writeGeneratedSkills(tmpDir);
+    writeGeneratedAgent(tmpDir, "planner", {
+      skillsLine: `skills: ${SLUG}-${ARCH}-plan, ${SLUG}-${ARCH}-nonexistent`,
+    });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated agent content");
+    const item = section.items.find((i) => i.message.includes(`${SLUG}-${ARCH}-planner`));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.details?.some((d) => d.includes(`"${SLUG}-${ARCH}-nonexistent" not found`)));
+    assert.ok(!item.details?.some((d) => d.includes(`"${SLUG}-${ARCH}-plan" not found`)));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("content check errors when the tools frontmatter line is missing", () => {
+    const tmpDir = makeTmpDir("doctor-content-notools-");
+    saveTestProfile(tmpDir);
+    writeGeneratedSkills(tmpDir);
+    const name = `${SLUG}-${ARCH}-planner`;
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", `${name}.md`),
+      [
+        "---",
+        `name: ${name}`,
+        "description: generated test agent",
+        `skills: ${SLUG}-${ARCH}-plan`,
+        "---",
+        "",
+        `# ${name}`,
+        "",
+        "Read `.pi/architect/architecture.md` and the relevant ADRs in `.pi/architect/adrs/` before acting.",
+        "",
+        "## Forbidden patterns",
+        "",
+        "- global mutable state",
+      ].join("\n"),
+    );
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated agent content");
+    const item = section.items.find((i) => i.message.includes(name));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.details?.some((d) => d.includes("missing a tools: line")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("content check tolerates extra whitespace in the skills line", () => {
+    const tmpDir = makeTmpDir("doctor-content-whitespace-");
+    saveTestProfile(tmpDir);
+    writeGeneratedSkills(tmpDir);
+    writeGeneratedAgent(tmpDir, "planner", { skillsLine: `skills:   ${SLUG}-${ARCH}-plan  ` });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated agent content");
+    const item = section.items.find((i) => i.message.includes(`${SLUG}-${ARCH}-planner`));
+    assert.ok(item);
+    assert.strictEqual(item.status, "ok");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("content check skips agent files that do not exist on disk", () => {
+    const tmpDir = makeTmpDir("doctor-content-missing-");
+    saveTestProfile(tmpDir);
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated agent content");
+    assert.strictEqual(section.items.length, 0);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("drift check skips with info when no report exists", () => {
+    const tmpDir = makeTmpDir("doctor-drift-none-");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture drift");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "info");
+    assert.ok(section.items[0].message.includes("skipped"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("drift check warns when a generated skill file is newer than the report", () => {
+    const tmpDir = makeTmpDir("doctor-drift-skill-");
+    saveTestProfile(tmpDir);
+    saveTestReport(tmpDir);
+    const reportPath = path.join(tmpDir, ".pi", "architect", "architect-report.json");
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(reportPath, old, old);
+    writeFile(tmpDir, path.join(".pi", "skills", `${SLUG}-${ARCH}-plan`, "SKILL.md"), "hand edited");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture drift");
+    const warning = section.items.find((i) => i.status === "warning");
+    assert.ok(warning, "should warn about the modified skill file");
+    assert.ok(warning.message.includes("SKILL.md"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("drift check warns when an ADR file is newer than the report", () => {
+    const tmpDir = makeTmpDir("doctor-drift-adr-");
+    saveTestProfile(tmpDir);
+    saveTestReport(tmpDir);
+    const reportPath = path.join(tmpDir, ".pi", "architect", "architect-report.json");
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(reportPath, old, old);
+    writeFile(tmpDir, path.join(".pi", "architect", "adrs", "0001-test.md"), "hand edited");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture drift");
+    const warning = section.items.find((i) => i.status === "warning");
+    assert.ok(warning, "should warn about the modified ADR file");
+    assert.ok(warning.message.includes("0001-test.md"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });
