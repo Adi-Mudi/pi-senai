@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { registerArchitectTools } from "../src/architect-tools.js";
 import { saveArchitectProfile, saveArchitectReport } from "../src/architect.js";
+import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { createEmptyDrivers } from "../src/driver-extractor.js";
 import { getArchitectMapDir } from "../src/constants.js";
 
@@ -233,6 +234,139 @@ describe("architect-tools", () => {
     assert.ok(result.details.docs.length > 0);
     assert.ok(result.details.agents.length > 0);
     assert.ok(result.details.skills.length > 0);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("merge tool only merges configured documents and deletes stale map files", async () => {
+    const tmpDir = makeTmpDir("arch-tools-stale-map-");
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [
+        { type: "prd", path: "docs/PRD.md" },
+        { type: "nfr", path: "docs/NFR.md" },
+      ],
+      additionalConstraints: [],
+    });
+
+    const mkOutput = (doc: string, fr: string) => ({
+      document: doc,
+      documentType: "prd",
+      functionalRequirements: [{ id: fr, description: fr }],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    });
+    fs.writeFileSync(path.join(mapDir, "docs-PRD.md.json"), JSON.stringify(mkOutput("docs/PRD.md", "FR-1")), "utf8");
+    fs.writeFileSync(path.join(mapDir, "docs-NFR.md.json"), JSON.stringify(mkOutput("docs/NFR.md", "FR-2")), "utf8");
+    fs.writeFileSync(path.join(mapDir, "docs-OLD.md.json"), JSON.stringify(mkOutput("docs/OLD.md", "FR-OLD")), "utf8");
+    fs.writeFileSync(
+      path.join(mapDir, "architect-documents.json"),
+      JSON.stringify({ version: 1, documents: [], mapOutputs: [], reducedDriversPath: "" }),
+      "utf8",
+    );
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.functionalRequirements, 2);
+    assert.strictEqual(result.details.deletedStaleMapFiles.length, 1);
+    assert.ok(result.details.deletedStaleMapFiles[0].includes("docs-OLD.md.json"));
+    assert.ok(!fs.existsSync(path.join(mapDir, "docs-OLD.md.json")));
+    assert.ok(fs.existsSync(path.join(mapDir, "docs-PRD.md.json")));
+    assert.ok(fs.existsSync(path.join(mapDir, "architect-documents.json")), "manifest must be kept");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("merge tool keeps all map files when no inputs config exists", async () => {
+    const tmpDir = makeTmpDir("arch-tools-noconfig-");
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+
+    const output = {
+      document: "docs/PRD.md",
+      documentType: "prd",
+      functionalRequirements: [{ id: "FR-1", description: "Do X" }],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    fs.writeFileSync(path.join(mapDir, "docs-PRD.md.json"), JSON.stringify(output), "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.functionalRequirements, 1);
+    assert.deepStrictEqual(result.details.deletedStaleMapFiles, []);
+    assert.ok(fs.existsSync(path.join(mapDir, "docs-PRD.md.json")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finalize tool removes orphan agents and skills from previous architectures", async () => {
+    const tmpDir = makeTmpDir("arch-tools-orphans-");
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "hexagonal.md"),
+      "---\nname: hexagonal\ncomplexity: low\nbest-for-drivers:\n  - small team\n---\n# Hexagonal\n",
+      "utf8",
+    );
+
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "hexagonal",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "hexagonal",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "test-project-monolith-planner.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "my-helper.md"), "user", "utf8");
+    const oldSkillDir = path.join(tmpDir, ".pi", "skills", "test-project-monolith-plan");
+    fs.mkdirSync(oldSkillDir, { recursive: true });
+    fs.writeFileSync(path.join(oldSkillDir, "SKILL.md"), "old", "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.ok(fs.existsSync(path.join(agentsDir, "test-project-hexagonal-planner.md")));
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-planner.md")));
+    assert.ok(!fs.existsSync(oldSkillDir));
+    assert.ok(fs.existsSync(path.join(agentsDir, "my-helper.md")));
+    assert.strictEqual(result.details.removedStaleArtifacts.length, 2);
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

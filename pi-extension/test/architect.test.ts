@@ -16,12 +16,14 @@ import {
   loadArchitectProfile,
   loadArchitectReport,
   migrateLegacyArchitectState,
+  removeStaleArchitectureArtifacts,
   saveArchitectProfile,
   saveArchitectReport,
   selectArchitecture,
   slugify,
 } from "../src/architect.js";
 import type { ArchitectProfile, ArchitectReport, ArchitectureLibraryEntry } from "../src/architect.js";
+import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import type { ArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { createEmptyDrivers } from "../src/driver-extractor.js";
 
@@ -722,6 +724,125 @@ describe("architect", () => {
       );
     }
 
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns true when the inputs config is newer than drivers", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-config-"));
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(tmpDir, "docs", "PRD.md"), old, old);
+    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), old, old);
+    const inputsConfig = {
+      version: 1 as const,
+      documents: [{ type: "prd" as const, path: "docs/PRD.md" }],
+      additionalConstraints: ["changed constraint"],
+    };
+    saveArchitectInputsConfig(tmpDir, inputsConfig);
+    assert.strictEqual(areDriversStale(tmpDir, inputsConfig), true);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns false when config and documents are older than drivers", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-config-ok-"));
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+    const inputsConfig = {
+      version: 1 as const,
+      documents: [{ type: "prd" as const, path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    };
+    saveArchitectInputsConfig(tmpDir, inputsConfig);
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(tmpDir, "docs", "PRD.md"), old, old);
+    fs.utimesSync(path.join(tmpDir, ".pi", "senai", "architect-inputs.json"), old, old);
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    assert.strictEqual(areDriversStale(tmpDir, inputsConfig), false);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts removes only previous-architecture files", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-"));
+    const profile: ArchitectProfile = {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "hexagonal",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "test-project-monolith-planner.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-monolith-implementer.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-hexagonal-planner.md"), "current", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "my-helper.md"), "user", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-notes.md"), "user file with slug prefix", "utf8");
+    const oldSkillDir = path.join(tmpDir, ".pi", "skills", "test-project-monolith-plan");
+    fs.mkdirSync(oldSkillDir, { recursive: true });
+    fs.writeFileSync(path.join(oldSkillDir, "SKILL.md"), "old", "utf8");
+    const currentSkillDir = path.join(tmpDir, ".pi", "skills", "test-project-hexagonal-plan");
+    fs.mkdirSync(currentSkillDir, { recursive: true });
+    fs.writeFileSync(path.join(currentSkillDir, "SKILL.md"), "current", "utf8");
+
+    const removed = removeStaleArchitectureArtifacts(tmpDir, profile);
+
+    assert.strictEqual(removed.length, 3);
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-planner.md")));
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-implementer.md")));
+    assert.ok(!fs.existsSync(oldSkillDir));
+    assert.ok(fs.existsSync(path.join(agentsDir, "test-project-hexagonal-planner.md")));
+    assert.ok(fs.existsSync(path.join(agentsDir, "my-helper.md")));
+    assert.ok(fs.existsSync(path.join(agentsDir, "test-project-notes.md")));
+    assert.ok(fs.existsSync(path.join(currentSkillDir, "SKILL.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs replaces the ADR set on regeneration", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-adr-clear-"));
+    const profile: ArchitectProfile = {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const baseReport: ArchitectReport = {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [{ id: "0001", title: "Use modular monolith", context: "c", decision: "d", consequences: "x" }],
+      constraints: [],
+    };
+
+    generateArchitectureDocs(tmpDir, profile, baseReport);
+    const adrsDir = path.join(tmpDir, ".pi", "architect", "adrs");
+    assert.ok(fs.existsSync(path.join(adrsDir, "0001-use-modular-monolith.md")));
+
+    const newReport: ArchitectReport = {
+      ...baseReport,
+      adrs: [{ id: "0001", title: "Adopt plugin kernel", context: "c", decision: "d", consequences: "x" }],
+    };
+    generateArchitectureDocs(tmpDir, profile, newReport);
+
+    assert.deepStrictEqual(fs.readdirSync(adrsDir), ["0001-adopt-plugin-kernel.md"]);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

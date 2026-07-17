@@ -1055,6 +1055,70 @@ describe("commands", () => {
     assert.ok(sentMessages.some((m) => m.includes("docs/PRD.md")));
     assert.ok(sentMessages.some((m) => m.includes("feasibility")));
   });
+
+  it("registerArchitectCommand asks to re-run when inputs changed and user confirms", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD v2", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    const driversPath = path.join(tmpDir, ".pi", "architect", "architectural-drivers.json");
+    fs.writeFileSync(
+      driversPath,
+      JSON.stringify({
+        functionalRequirements: [],
+        qualityAttributes: [],
+        constraints: [],
+        technicalConcerns: [],
+        uncertainties: [],
+      }),
+      "utf8",
+    );
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(driversPath, old, old);
+
+    registerArchitectCommand(makeApi());
+    await commandHandlers["senai-generate-architect"]("", makeCtx());
+
+    assert.ok(sentMessages.some((m) => m.includes("<pi-senai-generate-architect>")));
+    assert.ok(sentMessages.some((m) => m.includes("Regenerate architectural drivers")));
+  });
+
+  it("registerArchitectCommand cancels when user declines the re-run", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD v2", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    const driversPath = path.join(tmpDir, ".pi", "architect", "architectural-drivers.json");
+    fs.writeFileSync(
+      driversPath,
+      JSON.stringify({
+        functionalRequirements: [],
+        qualityAttributes: [],
+        constraints: [],
+        technicalConcerns: [],
+        uncertainties: [],
+      }),
+      "utf8",
+    );
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(driversPath, old, old);
+
+    registerArchitectCommand(makeApi());
+    const ctx = makeCtx();
+    (ctx.ui as any).confirm = async () => false;
+    await commandHandlers["senai-generate-architect"]("", ctx);
+
+    assert.ok(!sentMessages.some((m) => m.includes("<pi-senai-generate-architect>")));
+    assert.ok(notifications.some((n) => n.message.includes("cancelled")));
+  });
 });
 
 

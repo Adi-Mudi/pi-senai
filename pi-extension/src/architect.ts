@@ -2,6 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
+import { getArchitectInputsConfigPath } from "./architect-inputs-config.js";
 import { getDriversPath, type ArchitecturalDrivers } from "./driver-extractor.js";
 import { getArchitectStateDir } from "./constants.js";
 
@@ -426,6 +427,12 @@ export function areDriversStale(cwd: string, inputsConfig: ArchitectInputsConfig
     return true;
   }
   const driversMtime = fs.statSync(driversPath).mtimeMs;
+  // The inputs config itself is watched: editing additionalConstraints or the
+  // document list rewrites it, and both must trigger a re-run.
+  const configPath = getArchitectInputsConfigPath(cwd);
+  if (fs.existsSync(configPath) && fs.statSync(configPath).mtimeMs > driversMtime) {
+    return true;
+  }
   for (const doc of inputsConfig.documents) {
     const docPath = path.resolve(cwd, doc.path);
     if (fs.existsSync(docPath)) {
@@ -453,6 +460,17 @@ export function generateArchitectureDocs(
   fs.writeFileSync(architecturePath, buildArchitectureMarkdown(profile, report), "utf8");
   created.push(architecturePath);
 
+  // Regeneration replaces the ADR set: remove old ADRs so the folder always
+  // matches the current report exactly.
+  for (const entry of fs.readdirSync(adrsDir)) {
+    if (!entry.endsWith(".md")) continue;
+    try {
+      fs.unlinkSync(path.join(adrsDir, entry));
+    } catch {
+      // Ignore deletion failures.
+    }
+  }
+
   for (const adr of report.adrs) {
     const adrFileName = `${adr.id}-${slugify(adr.title)}.md`;
     const adrPath = path.join(adrsDir, adrFileName);
@@ -461,6 +479,59 @@ export function generateArchitectureDocs(
   }
 
   return created;
+}
+
+// Removes generated agents and skills from PREVIOUS architecture runs of this
+// project (same project slug, different architecture id). Files that do not
+// match both the slug prefix and an architect role/stage suffix are untouched,
+// so user-created agents and skills stay safe.
+export function removeStaleArchitectureArtifacts(cwd: string, profile: ArchitectProfile): string[] {
+  const removed: string[] = [];
+  const prefix = `${profile.projectSlug}-`;
+
+  const expectedAgents = new Set(
+    ARCHITECT_ROLES.map((role) => `${profile.projectSlug}-${profile.selectedArchitecture}-${role}`),
+  );
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  if (fs.existsSync(agentsDir)) {
+    for (const entry of fs.readdirSync(agentsDir)) {
+      if (!entry.endsWith(".md")) continue;
+      const name = entry.slice(0, -3);
+      if (!name.startsWith(prefix)) continue;
+      if (!ARCHITECT_ROLES.some((role) => name.endsWith(`-${role}`))) continue;
+      if (expectedAgents.has(name)) continue;
+      const filePath = path.join(agentsDir, entry);
+      try {
+        fs.unlinkSync(filePath);
+        removed.push(path.relative(cwd, filePath));
+      } catch {
+        // Ignore deletion failures.
+      }
+    }
+  }
+
+  const expectedSkills = new Set(
+    ARCHITECT_STAGES.map((stage) => `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`),
+  );
+  const skillsDir = path.join(cwd, ".pi", "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const name = entry.name;
+      if (!name.startsWith(prefix)) continue;
+      if (!ARCHITECT_STAGES.some((stage) => name.endsWith(`-${stage}`))) continue;
+      if (expectedSkills.has(name)) continue;
+      const dirPath = path.join(skillsDir, name);
+      try {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        removed.push(path.relative(cwd, dirPath));
+      } catch {
+        // Ignore deletion failures.
+      }
+    }
+  }
+
+  return removed;
 }
 
 export function slugify(text: string): string {
