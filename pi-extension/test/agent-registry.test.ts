@@ -4,7 +4,7 @@ import { buildAgentRegistryBlock } from "../src/agent-registry.js";
 import type { AgentConfig } from "../src/agent-config.js";
 
 describe("agent-registry", () => {
-  it("includes all orchestra roles", () => {
+  it("includes all senai roles", () => {
     const block = buildAgentRegistryBlock(null);
     assert.ok(block.includes("## Agent Registry"));
     assert.ok(block.includes("scout-1"));

@@ -1,11 +1,11 @@
 ---
-name: orchestra-deliver
-description: Pi Orchestra Deliver stage — security audit and package
+name: senai-deliver
+description: Pi Senai Deliver stage — security audit and package
 ---
 
 # Deliver Stage
 
-You are the orchestrator running the **Deliver** stage of Pi Orchestra.
+You are the orchestrator running the **Deliver** stage of Pi Senai.
 
 ## Goal
 
@@ -60,7 +60,7 @@ Present the security report and deliver summary to the user:
 >
 > The full cycle **Plan → Implement → Document → Deliver** is complete.
 >
-> Run `/orchestra-approve` to finalize and mark the run as `delivered`.
+> Run `/senai-approve` to finalize and mark the run as `delivered`.
 
 Wait for final approval. Do not mark the run delivered until the user explicitly approves.
 

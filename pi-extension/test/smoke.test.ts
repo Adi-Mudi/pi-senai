@@ -29,7 +29,7 @@ describe("smoke", () => {
   let commandHandlers: Record<string, (args: string, ctx: ExtensionContext) => Promise<void>>;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-smoke-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-smoke-"));
     notifications = [];
     sentMessages = [];
     commandHandlers = {};
@@ -75,14 +75,14 @@ describe("smoke", () => {
 
   function getRunDir(): string {
     const state = loadState(tmpDir);
-    return path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId);
+    return path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId);
   }
 
   it("full Plan → Implement → Document → Deliver lifecycle", async () => {
     registerCommands(makeApi());
 
     // 1. Plan
-    await commandHandlers["orchestra-plan"]("Add a hello world CLI", makeCtx());
+    await commandHandlers["senai-plan"]("Add a hello world CLI", makeCtx());
     assert.strictEqual(loadState(tmpDir).currentStage, "planning");
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Plan Stage"));
@@ -102,7 +102,7 @@ describe("smoke", () => {
 
     // 2. Approve plan → auto-starts Implement
     sentMessages.length = 0;
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
     assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Implement Stage"));
@@ -115,7 +115,7 @@ describe("smoke", () => {
 
     // 3. Approve implement → auto-starts Document
     sentMessages.length = 0;
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
     assert.strictEqual(loadState(tmpDir).currentStage, "documenting");
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Document Stage"));
@@ -126,7 +126,7 @@ describe("smoke", () => {
 
     // 4. Approve document → auto-starts Deliver
     sentMessages.length = 0;
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
     assert.strictEqual(loadState(tmpDir).currentStage, "delivering");
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Deliver Stage"));
@@ -137,7 +137,7 @@ describe("smoke", () => {
 
     // 5. Approve deliver → run delivered
     sentMessages.length = 0;
-    await commandHandlers["orchestra-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
     assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
     assert.strictEqual(sentMessages.length, 0);
 

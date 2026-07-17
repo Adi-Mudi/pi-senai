@@ -16,7 +16,7 @@ describe("state", () => {
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-test-"));
   });
 
   it("defaultState returns a fresh none state", () => {
@@ -51,7 +51,7 @@ describe("state", () => {
     assert.strictEqual(state.currentStage, "none");
     assert.ok(state.runId.length > 0);
 
-    const runDir = path.join(tmpDir, ".IDE_Plans/orchestra/runs", state.runId);
+    const runDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId);
     assert.ok(fs.existsSync(runDir));
     assert.ok(fs.existsSync(path.join(runDir, "plan/scouts")));
     assert.ok(fs.existsSync(path.join(runDir, "plan/reviews")));
@@ -109,7 +109,7 @@ describe("state", () => {
   });
 
   it("loadState migrates old state versions", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -131,7 +131,7 @@ describe("state", () => {
   });
 
   it("loadState throws on corrupted JSON", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, "{ not valid json");
 
@@ -139,7 +139,7 @@ describe("state", () => {
   });
 
   it("loadState migrates partial legacy state safely", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/orchestra/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, JSON.stringify({ version: 0, mission: "partial" }));
 

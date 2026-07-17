@@ -7,22 +7,22 @@ import { loadSkill, buildStagePrompt } from "../src/prompt.js";
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
-import type { OrchestraState } from "../src/state.js";
+import type { SenaiState } from "../src/state.js";
 
 describe("prompt", () => {
   const cwd = "/fake/project";
   let tmpDir: string;
 
   beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-orchestra-prompt-test-"));
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-prompt-test-"));
   });
 
-  function makeState(stage: string, runId: string): OrchestraState {
+  function makeState(stage: string, runId: string): SenaiState {
     return {
       version: 1,
       mission: "Build CLI",
       runId,
-      currentStage: stage as OrchestraState["currentStage"],
+      currentStage: stage as SenaiState["currentStage"],
       startedAt: "2026-06-12T00:00:00Z",
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
@@ -75,15 +75,15 @@ describe("prompt", () => {
     assert.strictEqual(context.stage, "plan");
     assert.strictEqual(
       context.artifacts.plan,
-      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan.md"),
+      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/plan.md"),
     );
     assert.strictEqual(
       context.artifacts.planOverview,
-      path.join(cwd, ".IDE_Plans/orchestra/runs/run-1/plan/plan-overview.md"),
+      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/plan-overview.md"),
     );
     assert.ok(prompt.includes("plan-overview.md"));
 
-    assert.ok(prompt.includes('<pi-orchestra stage="plan">'));
+    assert.ok(prompt.includes('<pi-senai stage="plan">'));
     assert.ok(prompt.includes("Mission: Build CLI"));
     assert.ok(prompt.includes("Run ID: run-1"));
     assert.ok(prompt.includes("Plan Stage"));
@@ -115,7 +115,7 @@ describe("prompt", () => {
   });
 
   it("buildStagePrompt uses default artifact paths when runId is empty", () => {
-    const state: OrchestraState = {
+    const state: SenaiState = {
       version: 1,
       mission: "",
       runId: "",
@@ -136,9 +136,9 @@ describe("prompt", () => {
     for (const stage of stages) {
       const state = makeState("planning", `run-${stage}`);
       const { prompt, context } = buildStagePrompt(cwd, state, stage);
-      assert.ok(prompt.includes(`<pi-orchestra stage="${stage}">`));
+      assert.ok(prompt.includes(`<pi-senai stage="${stage}">`));
       assert.strictEqual(context.stage, stage);
-      assert.ok(context.artifacts.runDir.includes(`.IDE_Plans/orchestra/runs/run-${stage}`));
+      assert.ok(context.artifacts.runDir.includes(`.IDE_Plans/senai/runs/run-${stage}`));
     }
   });
 

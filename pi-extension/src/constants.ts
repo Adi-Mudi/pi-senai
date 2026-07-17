@@ -1,10 +1,10 @@
 import * as path from "node:path";
 
-export const ORCHESTRA_DIR = ".IDE_Plans/orchestra";
+export const SENAI_DIR = ".IDE_Plans/senai";
 export const STATE_FILE = "state.json";
 export const RUNS_DIR = "runs";
-export const ORCHESTRA_CONFIG_DIR = ".pi/orchestra";
-export const ORCHESTRA_CONFIG_FILE = "agents.json";
+export const SENAI_CONFIG_DIR = ".pi/senai";
+export const SENAI_CONFIG_FILE = "agents.json";
 export const ARCHITECT_STATE_DIR = ".pi/architect";
 export const ARCHITECT_MAP_DIR = ".IDE_Plans/architect-map";
 
@@ -66,8 +66,8 @@ export interface StageArtifactPaths {
   deliverSummary: string;
 }
 
-export function getOrchestraDir(cwd: string): string {
-  return path.join(cwd, ORCHESTRA_DIR);
+export function getSenaiDir(cwd: string): string {
+  return path.join(cwd, SENAI_DIR);
 }
 
 export function getArchitectStateDir(cwd: string): string {
@@ -79,11 +79,11 @@ export function getArchitectMapDir(cwd: string): string {
 }
 
 export function getStatePath(cwd: string): string {
-  return path.join(getOrchestraDir(cwd), STATE_FILE);
+  return path.join(getSenaiDir(cwd), STATE_FILE);
 }
 
 export function getRunDir(cwd: string, runId: string): string {
-  return path.join(getOrchestraDir(cwd), RUNS_DIR, runId);
+  return path.join(getSenaiDir(cwd), RUNS_DIR, runId);
 }
 
 export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths {
@@ -119,7 +119,7 @@ export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths
 }
 
 export function getDefaultArtifactPaths(): StageArtifactPaths {
-  const runDir = ".IDE_Plans/orchestra/runs/<run-id>";
+  const runDir = ".IDE_Plans/senai/runs/<run-id>";
   const planDir = path.join(runDir, "plan");
   const planScoutsDir = path.join(planDir, "scouts");
   const planReviewsDir = path.join(planDir, "reviews");
@@ -171,7 +171,7 @@ export function formatStageStatus(state: {
   runId?: string;
 }): string {
   const lines = [
-    `<pi-orchestra_status>`,
+    `<pi-senai_status>`,
     `Active stage: ${state.currentStage}`,
   ];
   if (state.mission) lines.push(`Mission: ${state.mission}`);
@@ -179,13 +179,13 @@ export function formatStageStatus(state: {
   lines.push(
     ``,
     `Available commands:`,
-    `  /orchestra-plan <mission>`,
-    `  /orchestra-implement`,
-    `  /orchestra-document`,
-    `  /orchestra-deliver`,
-    `  /orchestra-status`,
-    `  /orchestra-reset`,
-    `</pi-orchestra_status>`,
+    `  /senai-plan <mission>`,
+    `  /senai-implement`,
+    `  /senai-document`,
+    `  /senai-deliver`,
+    `  /senai-status`,
+    `  /senai-reset`,
+    `</pi-senai_status>`,
   );
   return lines.join("\n");
 }

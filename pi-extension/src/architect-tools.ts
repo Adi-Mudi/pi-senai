@@ -27,10 +27,10 @@ import {
 
 export function registerArchitectTools(pi: ExtensionAPI): void {
   pi.registerTool({
-    name: "orchestra_merge_architect_drivers",
+    name: "senai_merge_architect_drivers",
     label: "Merge architect driver map outputs",
     description:
-      "Merge per-document architectural driver map outputs into the merged architectural-drivers.json file. Removes stale intermediate files from the old .pi/orchestra/ root location.",
+      "Merge per-document architectural driver map outputs into the merged architectural-drivers.json file. Removes stale intermediate files from the .pi/senai/ root location.",
     parameters: Type.Object({}),
     async execute(_toolCallId, _params, _signal, _onUpdate, ctx) {
       const cwd = ctx.cwd;
@@ -39,8 +39,8 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
 
       let merged = mergeMapOutputs(readMapOutputs(cwd));
 
-      // Also pull in any legacy intermediate files from the old .pi/orchestra/ root.
-      const legacyDir = path.join(cwd, ".pi", "orchestra");
+      // Also pull in any legacy intermediate files from the .pi/senai/ root.
+      const legacyDir = path.join(cwd, ".pi", "senai");
       const deletedLegacy: string[] = [];
       if (fs.existsSync(legacyDir)) {
         const legacyFiles = fs
@@ -98,7 +98,7 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
   });
 
   pi.registerTool({
-    name: "orchestra_finalize_architecture",
+    name: "senai_finalize_architecture",
     label: "Finalize architecture artifacts",
     description:
       "Generate architecture.md, ADRs, project-specific agents, and project-specific skills from the architect profile and report. Uses the architecture library entry matching the selected architecture id.",

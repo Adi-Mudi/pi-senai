@@ -1,12 +1,12 @@
 {
-  "name": "pi-orchestra",
+  "name": "pi-senai",
   "version": "0.1.0",
-  "description": "Stage-gated agent orchestration extension for Pi — Plan → Implement → Document → Deliver",
+  "description": "Senai — stage-gated agent orchestration extension for Pi — Plan → Implement → Document → Deliver",
   "type": "module",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourname/pi-orchestra"
+    "url": "https://github.com/yourname/pi-senai"
   },
   "scripts": {
     "build": "tsc",
@@ -17,11 +17,11 @@
       "pi-extension/src/index.ts"
     ],
     "skills": [
-      "skills/orchestra-plan",
-      "skills/orchestra-implement",
-      "skills/orchestra-document",
-      "skills/orchestra-deliver",
-      "skills/orchestra-generate-architect"
+      "skills/senai-plan",
+      "skills/senai-implement",
+      "skills/senai-document",
+      "skills/senai-deliver",
+      "skills/senai-generate-architect"
     ]
   },
   "peerDependencies": {

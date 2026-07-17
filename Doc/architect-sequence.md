@@ -1,6 +1,6 @@
-# Architect Sequence — `/orchestra-generate-architect`
+# Architect Sequence — `/senai-generate-architect`
 
-This document describes the design and runtime sequence for the `/orchestra-generate-architect` command in Pi Orchestra.
+This document describes the design and runtime sequence for the `/senai-generate-architect` command in Pi Senai.
 
 ## Goal
 
@@ -10,25 +10,25 @@ Generate a project-specific architecture agent and matching skills by reading th
 
 | Command | Purpose |
 |---------|---------|
-| `/orchestra-configure-architect-inputs` | Select which documents the architect agent reads. |
-| `/orchestra-generate-architect` | Run the full architect generation flow. |
+| `/senai-configure-architect-inputs` | Select which documents the architect agent reads. |
+| `/senai-generate-architect` | Run the full architect generation flow. |
 
 ---
 
 ## Preconditions
 
-Before running `/orchestra-generate-architect`:
+Before running `/senai-generate-architect`:
 
-1. Pi Orchestra must be configured:
-   - `.pi/orchestra/agents.json`
-   - `.pi/orchestra/files.json`
-   - `.pi/orchestra/agents_files.json`
+1. Pi Senai must be configured:
+   - `.pi/senai/agents.json`
+   - `.pi/senai/files.json`
+   - `.pi/senai/agents_files.json`
 2. Architect inputs must be configured:
-   - `.pi/orchestra/architect-inputs.json`
+   - `.pi/senai/architect-inputs.json`
 3. Architecture library should exist:
    - `.pi/architecture-library/*.md`
 
-If architect inputs are missing, the command tells the user to run `/orchestra-configure-architect-inputs` first.
+If architect inputs are missing, the command tells the user to run `/senai-configure-architect-inputs` first.
 
 ---
 
@@ -36,7 +36,7 @@ If architect inputs are missing, the command tells the user to run `/orchestra-c
 
 ### Command
 ```
-/orchestra-configure-architect-inputs
+/senai-configure-architect-inputs
 ```
 
 ### What it does
@@ -44,7 +44,7 @@ If architect inputs are missing, the command tells the user to run `/orchestra-c
 2. Shows a categorized list editor (`ui/list-editor.ts`) with document type labels.
 3. Allows the user to select, deselect, and add custom paths.
 4. Allows free-form text input for additional constraints not in any file.
-5. Saves the result to `.pi/orchestra/architect-inputs.json`.
+5. Saves the result to `.pi/senai/architect-inputs.json`.
 
 ### Document types detected
 - `prd` — Product Requirements Document
@@ -79,7 +79,7 @@ If architect inputs are missing, the command tells the user to run `/orchestra-c
 
 ### Command
 ```
-/orchestra-generate-architect
+/senai-generate-architect
 ```
 
 ### Sequence
@@ -190,7 +190,7 @@ Output:
 .pi/architect/architectural-drivers.json
 ```
 
-> **Implementation note:** The extension provides the `orchestra_merge_architect_drivers` tool. The agent should call it instead of writing the merged file by hand. This guarantees the correct schema and cleans up stale intermediate files from `.pi/orchestra/`.
+> **Implementation note:** The extension provides the `senai_merge_architect_drivers` tool. The agent should call it instead of writing the merged file by hand. This guarantees the correct schema and cleans up stale intermediate files from `.pi/senai/`.
 
 ### Output format after reduce
 
@@ -396,7 +396,7 @@ After the report is accepted, the main agent generates the living architecture d
 
 ## Step 4 — Generate project agents and skills
 
-> **Implementation note:** The extension provides the `orchestra_finalize_architecture` tool. The agent should call it after the report is accepted. The tool reads the profile and report, selects the architecture from the library by id, and generates the docs, agents, and skills with the exact names below.
+> **Implementation note:** The extension provides the `senai_finalize_architecture` tool. The agent should call it after the report is accepted. The tool reads the profile and report, selects the architecture from the library by id, and generates the docs, agents, and skills with the exact names below.
 
 ### Naming convention
 
@@ -461,12 +461,12 @@ Checks include:
 - Architect inputs config exists and selected files exist.
 - Architectural drivers file is valid JSON.
 - Architect report is valid JSON.
-- `architecture.md` exists in `.pi/orchestra/`.
+- `architecture.md` exists in `.pi/senai/`.
 - ADRs in `.pi/architect/adrs/` match the report.
 - Generated agent files have valid frontmatter.
 - Generated skill files exist.
 
-These checks are added to the existing `/orchestra-doctor` command.
+These checks are added to the existing `/senai-doctor` command.
 
 ---
 
@@ -484,7 +484,7 @@ Generated skills:
   - inventory-modular-monolith-plan
   - inventory-modular-monolith-implement
 
-Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
+Next: run /senai-doctor to verify, then /senai-plan <mission>.
 ```
 
 ---
@@ -492,7 +492,7 @@ Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
 ## Artifacts
 
 ```
-.pi/orchestra/
+.pi/senai/
   architect-inputs.json          # user-selected input documents
   architectural-drivers.json     # merged drivers from all inputs
   architect-profile.json         # user answers to gap questions
@@ -530,7 +530,7 @@ Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
 
 | Problem | Action |
 |---------|--------|
-| Architect inputs not configured | Tell user to run `/orchestra-configure-architect-inputs`. |
+| Architect inputs not configured | Tell user to run `/senai-configure-architect-inputs`. |
 | Selected document missing | Skip with warning, continue with remaining documents. |
 | Map subagent fails | Retry once; if still failing, continue with partial results. |
 | No architecture matches | Fall back to layered architecture and warn user. |
@@ -548,4 +548,4 @@ Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
 3. **Parallelize document reading.** Map-Reduce handles large document sets.
 4. **Subagents are read-only.** Only the main agent has web access and file-write control.
 5. **Generated agents are project-specific.** Names and rules come from the actual project context.
-6. **Doctor validates everything.** Reuse `/orchestra-doctor` for architecture setup checks.
+6. **Doctor validates everything.** Reuse `/senai-doctor` for architecture setup checks.

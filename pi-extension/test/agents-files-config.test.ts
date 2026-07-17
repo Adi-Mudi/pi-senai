@@ -15,7 +15,7 @@ describe("agents-files-config", () => {
   it("getAgentsFilesConfigPath returns correct path", () => {
     assert.strictEqual(
       getAgentsFilesConfigPath("/fake"),
-      path.join("/fake", ".pi/orchestra/agents_files.json"),
+      path.join("/fake", ".pi/senai/agents_files.json"),
     );
   });
 
@@ -39,9 +39,9 @@ describe("agents-files-config", () => {
 
   it("loadAgentsFilesConfig migrates v1 config to v2", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
-    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
     fs.writeFileSync(
-      path.join(tmpDir, ".pi", "orchestra", "agents_files.json"),
+      path.join(tmpDir, ".pi", "senai", "agents_files.json"),
       JSON.stringify({
         version: 1,
         documents: { planner: { primary: "Doc/planner.md", reads: ["Doc/plan.md"] } },
@@ -58,9 +58,9 @@ describe("agents-files-config", () => {
 
   it("loadAgentsFilesConfig throws on invalid JSON", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
-    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
     fs.writeFileSync(
-      path.join(tmpDir, ".pi", "orchestra", "agents_files.json"),
+      path.join(tmpDir, ".pi", "senai", "agents_files.json"),
       "not json",
       "utf8",
     );
@@ -109,14 +109,14 @@ describe("agents-files-config", () => {
   it("saveAgentsFilesConfig creates directories if needed", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
     saveAgentsFilesConfig(tmpDir, { version: 1, documents: {} });
-    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "orchestra", "agents_files.json")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai", "agents_files.json")));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("saveAgentsFilesConfig writes version 2", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
     saveAgentsFilesConfig(tmpDir, { version: 1, documents: {} });
-    const raw = fs.readFileSync(path.join(tmpDir, ".pi", "orchestra", "agents_files.json"), "utf8");
+    const raw = fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"), "utf8");
     const parsed = JSON.parse(raw);
     assert.strictEqual(parsed.version, 2);
     fs.rmSync(tmpDir, { recursive: true, force: true });

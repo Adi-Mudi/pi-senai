@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { ORCHESTRA_ROLES, type OrchestraRole } from "./agent-suggestions.js";
+import { SENAI_ROLES, type SenaiRole } from "./agent-suggestions.js";
 
 export const AGENTS_FILES_CONFIG_FILE = "agents_files.json";
 
@@ -11,11 +11,11 @@ export interface AgentFilesDocuments {
 
 export interface AgentsFilesConfig {
   version: number;
-  documents: Partial<Record<OrchestraRole, AgentFilesDocuments>>;
+  documents: Partial<Record<SenaiRole, AgentFilesDocuments>>;
 }
 
 export function getAgentsFilesConfigPath(cwd: string): string {
-  return path.join(cwd, ".pi", "orchestra", AGENTS_FILES_CONFIG_FILE);
+  return path.join(cwd, ".pi", "senai", AGENTS_FILES_CONFIG_FILE);
 }
 
 export function migrateAgentsFilesConfig(
@@ -60,10 +60,10 @@ export function validateAgentsFilesConfig(config: AgentsFilesConfig): void {
     throw new Error("Missing or invalid 'documents' field");
   }
   for (const role of Object.keys(config.documents)) {
-    if (!ORCHESTRA_ROLES.includes(role as OrchestraRole)) {
+    if (!SENAI_ROLES.includes(role as SenaiRole)) {
       throw new Error(`Unknown role "${role}"`);
     }
-    const docs = config.documents[role as OrchestraRole];
+    const docs = config.documents[role as SenaiRole];
     if (docs?.primary !== undefined && typeof docs.primary !== "string") {
       throw new Error(`documents.${role}.primary must be a string`);
     }

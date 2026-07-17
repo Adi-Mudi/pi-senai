@@ -27,7 +27,7 @@ describe("architect-inputs-config", () => {
   it("getArchitectInputsConfigPath returns correct path", () => {
     assert.strictEqual(
       getArchitectInputsConfigPath("/fake"),
-      path.join("/fake", ".pi/orchestra/architect-inputs.json"),
+      path.join("/fake", ".pi/senai/architect-inputs.json"),
     );
   });
 

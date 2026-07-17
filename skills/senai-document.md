@@ -1,11 +1,11 @@
 ---
-name: orchestra-document
-description: Pi Orchestra Document stage — write all project documentation
+name: senai-document
+description: Pi Senai Document stage — write all project documentation
 ---
 
 # Document Stage
 
-You are the orchestrator running the **Document** stage of Pi Orchestra.
+You are the orchestrator running the **Document** stage of Pi Senai.
 
 ## Goal
 
@@ -49,7 +49,7 @@ Present the updated docs to the user and ask:
 
 > Document stage complete. Updated README, CHANGELOG, API docs, and other docs. Ready to move to Deliver?
 
-Wait for approval. Once approved, tell the user to run `/orchestra-approve`. Running `/orchestra-approve` will mark documentation complete and automatically start the Deliver stage.
+Wait for approval. Once approved, tell the user to run `/senai-approve`. Running `/senai-approve` will mark documentation complete and automatically start the Deliver stage.
 
 ## Constraints
 

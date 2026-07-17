@@ -3,7 +3,7 @@ import assert from "node:assert";
 import {
   buildSuggestionMap,
   DEFAULT_AGENTS,
-  ORCHESTRA_ROLES,
+  SENAI_ROLES,
   suggestAgentForRole,
 } from "../src/agent-suggestions.js";
 import type { DiscoveredAgent } from "../src/agent-discovery.js";
@@ -14,8 +14,8 @@ describe("agent-suggestions", () => {
   }
 
   it("suggests discussion agent", () => {
-    const agents = [agent("orchestra-discussion", "Discussion agent")];
-    assert.strictEqual(suggestAgentForRole("discussion", agents), "orchestra-discussion");
+    const agents = [agent("senai-discussion", "Discussion agent")];
+    assert.strictEqual(suggestAgentForRole("discussion", agents), "senai-discussion");
   });
 
   it("suggests planner agent", () => {
@@ -102,16 +102,16 @@ describe("agent-suggestions", () => {
 
   it("buildSuggestionMap returns a map with all matched roles", () => {
     const agents = [
-      agent("orchestra-discussion", "Discussion"),
+      agent("senai-discussion", "Discussion"),
       agent("gas-coder", "Coder"),
     ];
     const map = buildSuggestionMap(agents);
-    assert.strictEqual(map.discussion, "orchestra-discussion");
+    assert.strictEqual(map.discussion, "senai-discussion");
     assert.strictEqual(map.implementer, "gas-coder");
   });
 
   it("DEFAULT_AGENTS covers every role", () => {
-    for (const role of ORCHESTRA_ROLES) {
+    for (const role of SENAI_ROLES) {
       assert.ok(DEFAULT_AGENTS[role], `Missing default agent for ${role}`);
     }
   });

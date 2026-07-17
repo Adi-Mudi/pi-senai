@@ -1,5 +1,5 @@
 ---
-name: orchestra-generate-architect
+name: senai-generate-architect
 description: Generate a project-specific architecture agent and skills
 ---
 
@@ -9,12 +9,12 @@ Generate a project-specific architecture agent and matching skills.
 
 ## Preconditions
 
-- `.pi/orchestra/architect-inputs.json` exists.
+- `.pi/senai/architect-inputs.json` exists.
 - `.pi/architecture-library/` has architecture reference files.
 
 ## Step 1 — Read inputs
 
-Read `.pi/orchestra/architect-inputs.json`.
+Read `.pi/senai/architect-inputs.json`.
 
 Note:
 - `documents` — files the user selected.
@@ -57,13 +57,13 @@ Run up to **4** ingest subagents in parallel. If there are more than 4 documents
 
 ### Wait and merge
 
-Wait for all map subagents to complete. Then call the `orchestra_merge_architect_drivers` tool to merge the map outputs into `.pi/architect/architectural-drivers.json`.
+Wait for all map subagents to complete. Then call the `senai_merge_architect_drivers` tool to merge the map outputs into `.pi/architect/architectural-drivers.json`.
 
 Do not write the merged file by hand. The tool:
 - Combines all driver categories.
 - Removes duplicate IDs.
 - Keeps unique uncertainties.
-- Cleans up stale intermediate files from `.pi/orchestra/`.
+- Cleans up stale intermediate files from `.pi/senai/`.
 
 ## Step 3 — Gap analysis
 
@@ -209,7 +209,7 @@ Generate the living architecture documents:
 
 ## Step 10 — Generate agents and skills
 
-Call the `orchestra_finalize_architecture` tool. It reads the profile and report, selects the architecture from the library by id, and generates the exact files below.
+Call the `senai_finalize_architecture` tool. It reads the profile and report, selects the architecture from the library by id, and generates the exact files below.
 
 Generate project-specific agents in `.pi/agents/`:
 
@@ -259,11 +259,11 @@ Generated skills:
   - <project>-<architecture-id>-implement
   ...
 
-Next: run /orchestra-doctor to verify, then /orchestra-plan <mission>.
+Next: run /senai-doctor to verify, then /senai-plan <mission>.
 ```
 
 ## Error handling
 
 - If a map subagent fails, retry once. If it still fails, continue with partial results.
-- If no documents are configured, stop and tell the user to run `/orchestra-configure-architect-inputs`.
+- If no documents are configured, stop and tell the user to run `/senai-configure-architect-inputs`.
 - If the architecture library is empty, stop and ask the user to add architecture references.

@@ -1,7 +1,7 @@
 # Senai Full Sequence
-## Stage-Gated Agent Orchestration — Plan → Implement → Document → Deliver
+## Stage-Gated Agent Senaition — Plan → Implement → Document → Deliver
 
-> **Implementation note:** This specification is implemented by the `pi-orchestra` extension in this repository. The commands below reference the `pi-orchestra` slash-command names (`/orchestra-*`).
+> **Implementation note:** This specification is implemented by the `pi-senai` extension in this repository. The commands below reference the `pi-senai` slash-command names (`/senai-*`).
 
 **Version:** 1.4  
 **Date:** 2026-07-01  
@@ -11,7 +11,7 @@
 
 ## 1. Overview
 
-Senai runs software work as a sequence of gated stages. Each stage is one slash command. Each command launches a chain of specialized subagents. The parent Pi session owns every decision — no stage advances without approval. Once a stage is approved with `/orchestra-approve`, the next stage starts automatically.
+Senai runs software work as a sequence of gated stages. Each stage is one slash command. Each command launches a chain of specialized subagents. The parent Pi session owns every decision — no stage advances without approval. Once a stage is approved with `/senai-approve`, the next stage starts automatically.
 
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
@@ -20,7 +20,7 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
      │                 │                   │                   │
      ▼                 ▼                   ▼                   ▼
  Parent approval   Parent approval    Parent approval     Parent approval
- (/orchestra-    (/orchestra-       (/orchestra-        (/orchestra-
+ (/senai-    (/senai-       (/senai-        (/senai-
   approve)         approve)           approve)            approve)
    │                 │                   │                   │
    ▼                 ▼                   ▼                   ▼
@@ -34,35 +34,35 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
 
 | Stage | Command | Purpose | Output |
 |-------|---------|---------|--------|
-| 1. Plan | `/orchestra-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` + user-facing `plan-overview.md` |
-| 2. Implement | `/orchestra-implement` | Build and test the approved plan | Working, tested code |
-| 3. Document | `/orchestra-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
-| 4. Deliver | `/orchestra-deliver` | Security audit and package | `security-report.md` + `deliver-summary.md` |
+| 1. Plan | `/senai-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` + user-facing `plan-overview.md` |
+| 2. Implement | `/senai-implement` | Build and test the approved plan | Working, tested code |
+| 3. Document | `/senai-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
+| 4. Deliver | `/senai-deliver` | Security audit and package | `security-report.md` + `deliver-summary.md` |
 
-Use `/orchestra-approve` to approve a finished stage and automatically run the next stage. Manual stage commands are available as overrides, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
+Use `/senai-approve` to approve a finished stage and automatically run the next stage. Manual stage commands are available as overrides, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
 
 Configuration commands:
 
-- `/orchestra-configure-agents` — discover project, user, and built-in agents and interactively map each Orchestra role to a subagent name.
-- `/orchestra-agents` — show the current role-to-agent mapping and report any missing custom agents.
-- `/orchestra-configure-files` — interactively configure code paths, input documents, and test paths in `.pi/orchestra/files.json`.
-- `/orchestra-files` — show the configured project file list.
-- `/orchestra-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/orchestra/agents_files.json`.
-- `/orchestra-agents-files` — show configured document assignments per role.
-- `/orchestra-doctor` — run a full diagnostic on Orchestra configuration, agent-role fit, file scope, and runtime environment.
+- `/senai-configure-agents` — discover project, user, and built-in agents and interactively map each Senai role to a subagent name.
+- `/senai-agents` — show the current role-to-agent mapping and report any missing custom agents.
+- `/senai-configure-files` — interactively configure code paths, input documents, and test paths in `.pi/senai/files.json`.
+- `/senai-files` — show the configured project file list.
+- `/senai-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/senai/agents_files.json`.
+- `/senai-agents-files` — show configured document assignments per role.
+- `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, and runtime environment.
 
 Other commands:
 
-- `/orchestra-status` — show current stage, mission, run ID, artifacts, and next command.
-- `/orchestra-reset` — clear the active run state (artifacts are preserved).
+- `/senai-status` — show current stage, mission, run ID, artifacts, and next command.
+- `/senai-reset` — clear the active run state (artifacts are preserved).
 
 ---
 
 ## 3. Configuration
 
-Before running any stage, Pi Orchestra requires three configuration files under `.pi/orchestra/`:
+Before running any stage, Pi Senai requires three configuration files under `.pi/senai/`:
 
-1. `agents.json` — maps each Orchestra role to the name of a subagent that the main agent should spawn.
+1. `agents.json` — maps each Senai role to the name of a subagent that the main agent should spawn.
 2. `files.json` — categorizes project context into code paths, input documents, and test paths.
 3. `agents_files.json` — assigns truth and comparison documents to each role.
 
@@ -111,7 +111,7 @@ Project agents override user agents, and both override built-ins. Agent files mu
 }
 ```
 
-Use `/orchestra-configure-files` to create or edit this file.
+Use `/senai-configure-files` to create or edit this file.
 
 ### Agent document assignments (`agents_files.json`)
 
@@ -124,11 +124,11 @@ Use `/orchestra-configure-files` to create or edit this file.
 }
 ```
 
-Each role may have a `primary` truth document and a `reads` list of comparison documents. Use `/orchestra-configure-agents-files` to create or edit this file.
+Each role may have a `primary` truth document and a `reads` list of comparison documents. Use `/senai-configure-agents-files` to create or edit this file.
 
 ## 4. Stage 1 — Plan
 
-**Command:** `/orchestra-plan "<mission>"`
+**Command:** `/senai-plan "<mission>"`
 
 ### Purpose
 Research the codebase, interview the user to clarify scope, write a concrete implementation plan, and review it.
@@ -160,7 +160,7 @@ plan-overview writer writes plan-overview.md
 reviewers × 3 (parallel)
     │
     ▼
-Parent approval gate (/orchestra-approve)
+Parent approval gate (/senai-approve)
     │
     ▼
 Auto-starts Implement
@@ -170,17 +170,17 @@ Auto-starts Implement
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
-| 1 | scout-1 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_1.md` |
-| 1 | scout-2 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_2.md` |
-| 1 | scout-3 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_3.md` |
-| 1 | scout-4 | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/scout-angle_4.md` |
+| 1 | scout-1 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_1.md` |
+| 1 | scout-2 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_2.md` |
+| 1 | scout-3 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_3.md` |
+| 1 | scout-4 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_4.md` |
 | 2 | discussion | fork | Drafts interview questions for the user |
 | 3 | parent + user | main session | User answers via `AskUserQuestion` |
-| 4 | planner | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan.md` |
-| 5 | plan-overview | fork | `.IDE_Plans/orchestra/runs/<run-id>/plan/plan-overview.md` |
-| 6 | reviewer-correctness | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-correctness.md` |
-| 6 | reviewer-security | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-security.md` |
-| 6 | reviewer-tests | fresh | `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/review-tests.md` |
+| 4 | planner | fork | `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` |
+| 5 | plan-overview | fork | `.IDE_Plans/senai/runs/<run-id>/plan/plan-overview.md` |
+| 6 | reviewer-correctness | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-correctness.md` |
+| 6 | reviewer-security | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-security.md` |
+| 6 | reviewer-tests | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-tests.md` |
 
 ### Interview Step
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
@@ -188,14 +188,14 @@ Auto-starts Implement
 - The main agent appends the user's answers to `discussion-notes.md`.
 
 ### Approval Gate
-- If the plan and reviews look good → run `/orchestra-approve`. This marks the plan approved and automatically starts the Implement stage.
+- If the plan and reviews look good → run `/senai-approve`. This marks the plan approved and automatically starts the Implement stage.
 - If changes are needed → ask the main agent to update the plan and reviews, then approve.
 
 ---
 
 ## 5. Stage 2 — Implement
 
-**Command:** `/orchestra-implement`
+**Command:** `/senai-implement`
 
 ### Purpose
 Build the approved plan and validate with tests and code review.
@@ -221,7 +221,7 @@ code-review
 full-test
     │
     ▼
-Parent approval gate (/orchestra-approve)
+Parent approval gate (/senai-approve)
     │
     ▼
 Auto-starts Document
@@ -244,14 +244,14 @@ Auto-starts Document
 - The stage must not start until `plan.md` exists.
 
 ### Approval Gate
-- If all checks pass → run `/orchestra-approve`. This marks implementation complete and automatically starts the Document stage.
+- If all checks pass → run `/senai-approve`. This marks implementation complete and automatically starts the Document stage.
 - If any check fails → fix and re-run the stage.
 
 ---
 
 ## 6. Stage 3 — Document
 
-**Command:** `/orchestra-document`
+**Command:** `/senai-document`
 
 ### Purpose
 Write and update all project documentation.
@@ -265,7 +265,7 @@ api-docs-writer    ──┼──▶ All complete
 other-docs-writer  ──┘
          │
          ▼
-  Parent approval gate (/orchestra-approve)
+  Parent approval gate (/senai-approve)
          │
          ▼
   Auto-starts Deliver
@@ -285,14 +285,14 @@ other-docs-writer  ──┘
 - No source code edits in this stage.
 
 ### Approval Gate
-- If docs look good → run `/orchestra-approve`. This marks documentation complete and automatically starts the Deliver stage.
+- If docs look good → run `/senai-approve`. This marks documentation complete and automatically starts the Deliver stage.
 - If changes needed → fix and re-run.
 
 ---
 
 ## 7. Stage 4 — Deliver
 
-**Command:** `/orchestra-deliver`
+**Command:** `/senai-deliver`
 
 ### Purpose
 Final security check and packaging.
@@ -306,7 +306,7 @@ security-gate
 archive
     │
     ▼
-Parent approval gate (/orchestra-approve)
+Parent approval gate (/senai-approve)
     │
     ▼
 Run marked delivered
@@ -316,21 +316,21 @@ Run marked delivered
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
-| 1 | security-gate | fresh | `.IDE_Plans/orchestra/runs/<run-id>/deliver/security-report.md` |
-| 2 | archive | fork | `.IDE_Plans/orchestra/runs/<run-id>/deliver/deliver-summary.md` + archive artifact |
+| 1 | security-gate | fresh | `.IDE_Plans/senai/runs/<run-id>/deliver/security-report.md` |
+| 2 | archive | fork | `.IDE_Plans/senai/runs/<run-id>/deliver/deliver-summary.md` + archive artifact |
 
 ### Approval Gate
-- If security gate passes → run `/orchestra-approve` to finish the run.
+- If security gate passes → run `/senai-approve` to finish the run.
 - If security issues found → fix and re-run.
 
 ---
 
 ## 8. Runtime Artifacts
 
-All auto-generated files go into `.IDE_Plans/orchestra/runs/<run-id>/`:
+All auto-generated files go into `.IDE_Plans/senai/runs/<run-id>/`:
 
 ```text
-.IDE_Plans/orchestra/
+.IDE_Plans/senai/
 ├── state.json
 └── runs/<run-id>/
     ├── plan/
@@ -377,7 +377,7 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 
 ## 10. Cross-Cutting Rules
 
-1. **Plan before implement.** Always run `/orchestra-plan` before `/orchestra-implement` for non-trivial work.
+1. **Plan before implement.** Always run `/senai-plan` before `/senai-implement` for non-trivial work.
 2. **Never skip review.** Every producing stage ends with a reviewer or approval gate.
 3. **Parent owns decisions.** Subagents advise. The parent session approves or rejects.
 4. **Async by default.** All subagents launch in parallel where dependencies allow.
@@ -385,9 +385,9 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 6. **Escalate, don't guess.** If a subagent needs an unapproved decision, it asks via the main agent.
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
 8. **No direct subagent calls from the extension.** The extension injects prompts; the LLM invokes the `subagent` tool.
-9. **Approve auto-runs the next stage.** `/orchestra-approve` is the single command to move forward; manual stage commands are still available as overrides.
+9. **Approve auto-runs the next stage.** `/senai-approve` is the single command to move forward; manual stage commands are still available as overrides.
 10. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
-11. **Configure first.** Valid `.pi/orchestra/agents.json`, `.pi/orchestra/files.json`, and `.pi/orchestra/agents_files.json` are required before any stage command will run.
+11. **Configure first.** Valid `.pi/senai/agents.json`, `.pi/senai/files.json`, and `.pi/senai/agents_files.json` are required before any stage command will run.
 
 ---
 
@@ -395,7 +395,7 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 
 | Topic | File |
 |-------|------|
-| High-level sequence | `Doc/orchestra-sequence.md` |
+| High-level sequence | `Doc/senai-sequence.md` |
 | Step-by-step user guide | `Doc/step-by-step-guide.md` |
 | This full sequence spec | `Doc/senai-full-sequence.md` |
 | Changelog | `CHANGELOG.md` |

@@ -2,18 +2,18 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { getUserAgentsDir } from "./agent-discovery.js";
 import {
-  ORCHESTRA_ROLES,
+  SENAI_ROLES,
   ROLE_LABELS,
-  type OrchestraRole,
+  type SenaiRole,
   DEFAULT_AGENTS,
 } from "./agent-suggestions.js";
 
-export const CONFIG_DIR = ".pi/orchestra";
+export const CONFIG_DIR = ".pi/senai";
 export const CONFIG_FILE = "agents.json";
 
 export interface AgentConfig {
   version: number;
-  agents: Partial<Record<OrchestraRole, string>>;
+  agents: Partial<Record<SenaiRole, string>>;
 }
 
 export function getConfigPath(cwd: string): string {
@@ -47,15 +47,15 @@ export function validateAgentConfig(config: AgentConfig): void {
     throw new Error("Missing or invalid 'agents' field");
   }
   for (const role of Object.keys(config.agents)) {
-    if (!ORCHESTRA_ROLES.includes(role as OrchestraRole)) {
+    if (!SENAI_ROLES.includes(role as SenaiRole)) {
       throw new Error(
-        `Unknown role "${role}". Allowed roles: ${ORCHESTRA_ROLES.map((r) => `${ROLE_LABELS[r]} (${r})`).join(", ")}`,
+        `Unknown role "${role}". Allowed roles: ${SENAI_ROLES.map((r) => `${ROLE_LABELS[r]} (${r})`).join(", ")}`,
       );
     }
   }
 }
 
-export function resolveAgentName(config: AgentConfig | null, role: OrchestraRole): string {
+export function resolveAgentName(config: AgentConfig | null, role: SenaiRole): string {
   if (config?.agents?.[role]) return config.agents[role]!;
   return DEFAULT_AGENTS[role];
 }
@@ -73,7 +73,7 @@ export function validateMappedAgents(cwd: string, config: AgentConfig): string[]
 
     if (!isBuiltin && !fs.existsSync(projectPath) && !fs.existsSync(userPath)) {
       errors.push(
-        `Custom agent "${agentName}" for role ${ROLE_LABELS[role as OrchestraRole]} (${role}) not found. Expected ${projectPath} or ${userPath}.`,
+        `Custom agent "${agentName}" for role ${ROLE_LABELS[role as SenaiRole]} (${role}) not found. Expected ${projectPath} or ${userPath}.`,
       );
     }
   }

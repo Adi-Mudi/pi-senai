@@ -1,6 +1,6 @@
-# Pi Orchestra — Step-by-Step Guide
+# Pi Senai — Step-by-Step Guide
 
-This guide walks you through running a full **Plan → Implement → Document → Deliver** cycle with the `pi-orchestra` extension.
+This guide walks you through running a full **Plan → Implement → Document → Deliver** cycle with the `pi-senai` extension.
 
 ---
 
@@ -9,13 +9,13 @@ This guide walks you through running a full **Plan → Implement → Document �
 1. Make sure you are inside the project directory:
 
    ```bash
-   cd /mnt/Just_Do_It/02_Devp_Soft/pi-senai/Pi-Orchestra_v4
+   cd /mnt/Just_Do_It/02_Devp_Soft/pi-senai/Pi-Senai_v4
    ```
 
 2. The extension must be installed. For development, a symlink is enough:
 
    ```bash
-   ln -sf /mnt/Just_Do_It/02_Devp_Soft/pi-senai/Pi-Orchestra_v4 ~/.pi/agent/extensions/pi-orchestra
+   ln -sf /mnt/Just_Do_It/02_Devp_Soft/pi-senai/Pi-Senai_v4 ~/.pi/agent/extensions/pi-senai
    ```
 
 3. Restart Pi or run `/reload` so Pi discovers the extension.
@@ -23,40 +23,40 @@ This guide walks you through running a full **Plan → Implement → Document �
 4. Confirm the commands are available:
 
    ```text
-   /orchestra-status
+   /senai-status
    ```
 
    If there is no active run, Pi replies:
 
    ```text
-   No active orchestra run. Use /orchestra-plan <mission> to start.
+   No active senai run. Use /senai-plan <mission> to start.
    ```
 
 ---
 
-## Configure the orchestra
+## Configure the senai
 
-Before you run any stage, you must create three configuration files. Pi Orchestra will block stage commands until these exist and are valid.
+Before you run any stage, you must create three configuration files. Pi Senai will block stage commands until these exist and are valid.
 
-1. **Configure agents** — map each Orchestra role to a subagent name:
+1. **Configure agents** — map each Senai role to a subagent name:
 
    ```text
-   /orchestra-configure-agents
+   /senai-configure-agents
    ```
 
 2. **Configure project files** — select code paths, input documents, and test paths:
 
    ```text
-   /orchestra-configure-files
+   /senai-configure-files
    ```
 
 3. **Configure agent document assignments** — assign truth and comparison documents per role:
 
    ```text
-   /orchestra-configure-agents-files
+   /senai-configure-agents-files
    ```
 
-Check the current settings anytime with `/orchestra-agents`, `/orchestra-files`, and `/orchestra-agents-files`.
+Check the current settings anytime with `/senai-agents`, `/senai-files`, and `/senai-agents-files`.
 
 ---
 
@@ -65,12 +65,12 @@ Check the current settings anytime with `/orchestra-agents`, `/orchestra-files`,
 ### Start the plan
 
 ```text
-/orchestra-plan "add a /hello CLI command that prints Hello, World!"
+/senai-plan "add a /hello CLI command that prints Hello, World!"
 ```
 
 What happens:
 
-1. The extension creates `.IDE_Plans/orchestra/state.json` with the mission and a run ID.
+1. The extension creates `.IDE_Plans/senai/state.json` with the mission and a run ID.
 2. It sets the current stage to `planning`.
 3. It sends the Plan stage skill prompt to the main agent.
 4. The main agent spawns four scouts in parallel:
@@ -82,10 +82,10 @@ What happens:
 6. The main agent asks you those questions live using the **AskUserQuestion** tool.
 7. You answer the questions.
 8. The main agent writes your answers into `discussion-notes.md`.
-9. The planner writes `plan.md` under `.IDE_Plans/orchestra/runs/<run-id>/plan/`.
-10. The planner also writes `plan-overview.md` under `.IDE_Plans/orchestra/runs/<run-id>/plan/` for user-friendly reading.
-11. Scout reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/scouts/`.
-12. Review reports are saved under `.IDE_Plans/orchestra/runs/<run-id>/plan/reviews/`.
+9. The planner writes `plan.md` under `.IDE_Plans/senai/runs/<run-id>/plan/`.
+10. The planner also writes `plan-overview.md` under `.IDE_Plans/senai/runs/<run-id>/plan/` for user-friendly reading.
+11. Scout reports are saved under `.IDE_Plans/senai/runs/<run-id>/plan/scouts/`.
+12. Review reports are saved under `.IDE_Plans/senai/runs/<run-id>/plan/reviews/`.
 
 ### Approve the plan
 
@@ -94,7 +94,7 @@ When the main agent shows you the plan and reviews, read them and decide.
 If you approve, run:
 
 ```text
-/orchestra-approve
+/senai-approve
 ```
 
 The stage advances from `planning` to `planned`, then the extension automatically starts the Implement stage (`implementing`).
@@ -110,7 +110,7 @@ The Implement stage starts automatically after you approve the plan.
 If you ever need to start it manually, run:
 
 ```text
-/orchestra-implement
+/senai-implement
 ```
 
 What happens:
@@ -132,7 +132,7 @@ What happens:
 When the main agent reports that tests and review pass, run:
 
 ```text
-/orchestra-approve
+/senai-approve
 ```
 
 Stage advances from `implementing` to `implemented`, then the extension automatically starts the Document stage (`documenting`).
@@ -148,7 +148,7 @@ The Document stage starts automatically after you approve implementation.
 If you ever need to start it manually, run:
 
 ```text
-/orchestra-document
+/senai-document
 ```
 
 What happens:
@@ -168,7 +168,7 @@ What happens:
 When the docs are ready, run:
 
 ```text
-/orchestra-approve
+/senai-approve
 ```
 
 Stage advances from `documenting` to `documented`, then the extension automatically starts the Deliver stage (`delivering`).
@@ -184,7 +184,7 @@ The Deliver stage starts automatically after you approve documentation.
 If you ever need to start it manually, run:
 
 ```text
-/orchestra-deliver
+/senai-deliver
 ```
 
 What happens:
@@ -202,7 +202,7 @@ What happens:
 When the security report and deliver summary are ready, run:
 
 ```text
-/orchestra-approve
+/senai-approve
 ```
 
 Stage advances from `delivering` to `delivered`. The run is complete.
@@ -212,7 +212,7 @@ Stage advances from `delivering` to `delivered`. The run is complete.
 ## Check status anytime
 
 ```text
-/orchestra-status
+/senai-status
 ```
 
 Shows:
@@ -230,10 +230,10 @@ Shows:
 If you want to start over:
 
 ```text
-/orchestra-reset
+/senai-reset
 ```
 
-This deletes `.IDE_Plans/orchestra/state.json`. Artifacts under `.IDE_Plans/orchestra/runs/<run-id>/` are preserved.
+This deletes `.IDE_Plans/senai/state.json`. Artifacts under `.IDE_Plans/senai/runs/<run-id>/` are preserved.
 
 ---
 
@@ -242,25 +242,25 @@ This deletes `.IDE_Plans/orchestra/state.json`. Artifacts under `.IDE_Plans/orch
 With auto-advance, the full session is just five commands:
 
 ```text
-/orchestra-plan "add a /hello CLI command"
+/senai-plan "add a /hello CLI command"
 # ... wait for plan and reviews ...
-/orchestra-approve           # auto-starts Implement
+/senai-approve           # auto-starts Implement
 # ... wait for implementation and tests ...
-/orchestra-approve           # auto-starts Document
+/senai-approve           # auto-starts Document
 # ... wait for docs ...
-/orchestra-approve           # auto-starts Deliver
+/senai-approve           # auto-starts Deliver
 # ... wait for security and archive ...
-/orchestra-approve           # run delivered
+/senai-approve           # run delivered
 ```
 
-If you prefer to control each stage manually, you can still run `/orchestra-implement`, `/orchestra-document`, and `/orchestra-deliver` directly.
+If you prefer to control each stage manually, you can still run `/senai-implement`, `/senai-document`, and `/senai-deliver` directly.
 
 ---
 
 ## Tips
 
-- **Use `/orchestra-approve` to move forward.** It approves the current stage and automatically runs the next one.
-- **Manual stage commands still work.** `/orchestra-implement`, `/orchestra-document`, and `/orchestra-deliver` are available as overrides.
+- **Use `/senai-approve` to move forward.** It approves the current stage and automatically runs the next one.
+- **Manual stage commands still work.** `/senai-implement`, `/senai-document`, and `/senai-deliver` are available as overrides.
 - **Each stage is user-driven.** The main agent pauses at each approval gate and waits for you.
-- **Artifacts are local.** Everything lives inside `.IDE_Plans/orchestra/` in this project directory.
+- **Artifacts are local.** Everything lives inside `.IDE_Plans/senai/` in this project directory.
 - **Subagents need a multiplexer.** Make sure you run Pi inside tmux, zellij, or another supported terminal multiplexer so `pi-interactive-subagents` can spawn subagents.
