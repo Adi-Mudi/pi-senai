@@ -674,4 +674,54 @@ describe("architect", () => {
     assert.ok(!fs.existsSync(path.join(targetDir, "architect-map")));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("generateAgentFiles links each agent to its stage skill using the architecture id", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-agent-skills-"));
+    const profile: ArchitectProfile = {
+      projectName: "Inventory App",
+      projectSlug: "inventory-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
+      name: "Modular Monolith",
+      filePath: "",
+      domain: ["web"],
+      teamSize: "small",
+      complexity: "low",
+      bestForDrivers: ["small team"],
+      notForDrivers: ["large independent teams"],
+      content: "",
+    };
+    generateAgentFiles(tmpDir, profile, entry);
+    const skillPaths = generateSkillFiles(tmpDir, profile, entry);
+    const skillNames = new Set(skillPaths.map((p) => path.basename(path.dirname(p))));
+
+    const readSkillRef = (role: string): string => {
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".pi", "agents", `inventory-app-modular-monolith-${role}.md`),
+        "utf8",
+      );
+      const match = content.match(/^skills:\s*(.+)$/m);
+      assert.ok(match, `agent ${role} should have a skills frontmatter line`);
+      return match[1].trim();
+    };
+
+    assert.strictEqual(readSkillRef("planner"), "inventory-app-modular-monolith-plan");
+    assert.strictEqual(readSkillRef("implementer"), "inventory-app-modular-monolith-implement");
+    assert.strictEqual(readSkillRef("reviewer-correctness"), "inventory-app-modular-monolith-plan");
+    assert.strictEqual(readSkillRef("reviewer-security"), "inventory-app-modular-monolith-plan");
+    assert.strictEqual(readSkillRef("reviewer-tests"), "inventory-app-modular-monolith-plan");
+
+    for (const role of ["planner", "implementer", "reviewer-correctness", "reviewer-security", "reviewer-tests"]) {
+      assert.ok(
+        skillNames.has(readSkillRef(role)),
+        `referenced skill for ${role} should match a generated skill folder`,
+      );
+    }
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

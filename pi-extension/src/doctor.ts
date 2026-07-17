@@ -20,6 +20,7 @@ import {
   ARCHITECT_ROLES,
   ARCHITECT_STAGES,
   discoverArchitectureLibrary,
+  getArchitectReportPath,
   loadArchitectProfile,
   loadArchitectReport,
   slugify,
@@ -138,6 +139,9 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
 
   sections.push(checkEnvironment());
   sections.push(checkArchitectureSetup(cwd));
+  sections.push(checkArchitectureAgentMapping(cwd, agentConfig));
+  sections.push(checkGeneratedAgentContent(cwd));
+  sections.push(checkArchitectureDrift(cwd));
 
   const summary = sections.reduce(
     (acc, section) => {
@@ -822,6 +826,187 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
   }
 
   return { title: "Architecture setup", items };
+}
+
+// Roles that must resolve to the generated architecture agents once an
+// architecture has been generated. scout-1 shares the generated planner agent.
+const ARCHITECTURE_MAPPED_ROLES: Array<{ role: SenaiRole; label: string; expectedSuffix: string }> = [
+  { role: "scout-1", label: "Scout Architecture", expectedSuffix: "planner" },
+  { role: "planner", label: "Architecture Planner", expectedSuffix: "planner" },
+  { role: "implementer", label: "Architecture Implementer", expectedSuffix: "implementer" },
+  { role: "reviewer-correctness", label: "Architecture Reviewer — Correctness", expectedSuffix: "reviewer-correctness" },
+  { role: "reviewer-security", label: "Architecture Reviewer — Security", expectedSuffix: "reviewer-security" },
+  { role: "reviewer-tests", label: "Architecture Reviewer — Tests", expectedSuffix: "reviewer-tests" },
+];
+
+function checkArchitectureAgentMapping(cwd: string, agentConfig: AgentConfig | null): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  let profile: ArchitectProfile | null = null;
+  try {
+    profile = loadArchitectProfile(cwd);
+  } catch {
+    // An invalid profile is already reported by the architecture setup section.
+  }
+  if (!profile) {
+    items.push({
+      status: "info",
+      message: "No architecture generated yet. Mapping check skipped.",
+      details: ["Run /senai-generate-architect to generate project-specific architecture agents."],
+    });
+    return { title: "Architecture agent mapping", items };
+  }
+
+  for (const { role, label, expectedSuffix } of ARCHITECTURE_MAPPED_ROLES) {
+    const expected = `${profile.projectSlug}-${profile.selectedArchitecture}-${expectedSuffix}`;
+    const actual = resolveAgentName(agentConfig, role);
+
+    if (actual === expected) {
+      items.push({ status: "ok", message: `${label} (${role}) → ${actual}: correctly mapped` });
+    } else {
+      items.push({
+        status: "error",
+        message: `${label} (${role}) is mapped to "${actual}" but the architecture factory generated "${expected}".`,
+        details: [`Fix: run /senai-configure-agents and map ${role} to ${expected}.`],
+      });
+    }
+  }
+
+  return { title: "Architecture agent mapping", items };
+}
+
+function checkGeneratedAgentContent(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  let profile: ArchitectProfile | null = null;
+  try {
+    profile = loadArchitectProfile(cwd);
+  } catch {
+    // An invalid profile is already reported by the architecture setup section.
+  }
+  if (!profile) {
+    items.push({ status: "info", message: "No architecture generated yet. Content check skipped." });
+    return { title: "Generated agent content", items };
+  }
+
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  const skillsDir = path.join(cwd, ".pi", "skills");
+
+  for (const role of ARCHITECT_ROLES) {
+    const agentName = `${profile.projectSlug}-${profile.selectedArchitecture}-${role}`;
+    const filePath = path.join(agentsDir, `${agentName}.md`);
+    if (!fs.existsSync(filePath)) continue; // Missing files are reported by the architecture setup section.
+
+    const content = fs.readFileSync(filePath, "utf8");
+    const problems: string[] = [];
+
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
+    if (!/^tools:/m.test(frontmatter)) {
+      problems.push("frontmatter is missing a tools: line");
+    }
+
+    const skillsMatch = frontmatter.match(/^skills:(.*)$/m);
+    if (!skillsMatch || !skillsMatch[1].trim()) {
+      problems.push("frontmatter is missing a skills: line");
+    } else {
+      const skillNames = skillsMatch[1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const skillName of skillNames) {
+        if (!fs.existsSync(path.join(skillsDir, skillName, "SKILL.md"))) {
+          problems.push(`referenced skill "${skillName}" not found at .pi/skills/${skillName}/SKILL.md`);
+        }
+      }
+    }
+
+    if (!content.includes(".pi/architect/architecture.md")) {
+      problems.push("body does not reference .pi/architect/architecture.md");
+    }
+    if (!content.includes("adrs/")) {
+      problems.push("body does not reference ADRs in .pi/architect/adrs/");
+    }
+    if (!/^##\s+Forbidden patterns/im.test(content)) {
+      problems.push("body is missing a '## Forbidden patterns' section");
+    }
+
+    if (problems.length === 0) {
+      items.push({ status: "ok", message: `${agentName}: content complete` });
+    } else {
+      items.push({
+        status: "error",
+        message: `${agentName}: content is incomplete`,
+        details: [...problems, "Fix: re-run /senai-generate-architect to regenerate the agent files."],
+      });
+    }
+  }
+
+  return { title: "Generated agent content", items };
+}
+
+function checkArchitectureDrift(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  const reportPath = getArchitectReportPath(cwd);
+  if (!fs.existsSync(reportPath)) {
+    items.push({ status: "info", message: "No architecture report generated yet. Drift check skipped." });
+    return { title: "Architecture drift", items };
+  }
+
+  let profile: ArchitectProfile | null = null;
+  try {
+    profile = loadArchitectProfile(cwd);
+  } catch {
+    // An invalid profile is already reported by the architecture setup section.
+  }
+
+  const baseline = fs.statSync(reportPath).mtimeMs;
+  const architectStateDir = getArchitectStateDir(cwd);
+
+  const generatedFiles: string[] = [];
+  if (profile) {
+    for (const role of ARCHITECT_ROLES) {
+      generatedFiles.push(
+        path.join(cwd, ".pi", "agents", `${profile.projectSlug}-${profile.selectedArchitecture}-${role}.md`),
+      );
+    }
+    for (const stage of ARCHITECT_STAGES) {
+      generatedFiles.push(
+        path.join(cwd, ".pi", "skills", `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`, "SKILL.md"),
+      );
+    }
+  }
+  generatedFiles.push(path.join(architectStateDir, "architecture.md"));
+
+  const adrsDir = path.join(architectStateDir, "adrs");
+  if (fs.existsSync(adrsDir)) {
+    for (const entry of fs.readdirSync(adrsDir)) {
+      if (entry.endsWith(".md")) generatedFiles.push(path.join(adrsDir, entry));
+    }
+  }
+
+  const drifted: string[] = [];
+  for (const filePath of generatedFiles) {
+    if (!fs.existsSync(filePath)) continue;
+    if (fs.statSync(filePath).mtimeMs > baseline) {
+      drifted.push(path.relative(cwd, filePath));
+    }
+  }
+
+  if (drifted.length === 0) {
+    items.push({ status: "ok", message: "No generated architecture files were modified after the report." });
+  } else {
+    for (const file of drifted) {
+      items.push({
+        status: "warning",
+        message: `${file} was modified after the architecture report was generated.`,
+        details: ["If this was not intentional, re-run /senai-generate-architect."],
+      });
+    }
+  }
+
+  return { title: "Architecture drift", items };
 }
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {

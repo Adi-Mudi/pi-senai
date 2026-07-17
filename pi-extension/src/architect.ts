@@ -88,6 +88,16 @@ export const ARCHITECT_ROLES = [
 
 export const ARCHITECT_STAGES = ["plan", "implement", "document", "deliver"] as const;
 
+// Maps each generated architecture role to the stage skill it should reference.
+// Reviewers act in the plan stage: their review artifacts live under plan/reviews/.
+export const ARCHITECT_ROLE_STAGE: Record<string, string> = {
+  planner: "plan",
+  implementer: "implement",
+  "reviewer-correctness": "plan",
+  "reviewer-security": "plan",
+  "reviewer-tests": "plan",
+};
+
 export function getArchitectProfilePath(cwd: string): string {
   return path.join(getArchitectStateDir(cwd), ARCHITECT_PROFILE_FILE);
 }
@@ -329,7 +339,7 @@ export function generateAgentFiles(
     const agentName = `${profile.projectSlug}-${archId}-${role}`;
     const filePath = path.join(agentsDir, `${agentName}.md`);
 
-    const content = buildAgentMarkdown(agentName, role, profile, architecture, rules);
+    const content = buildAgentMarkdown(agentName, role, profile, architecture, rules, archId);
     fs.writeFileSync(filePath, content, "utf8");
     created.push(filePath);
   }
@@ -751,6 +761,7 @@ function buildAgentMarkdown(
   profile: ArchitectProfile,
   architecture: ArchitectureLibraryEntry,
   rules: string[],
+  archId: string,
 ): string {
   const roleDescription: Record<string, string> = {
     planner: "plans architecture-aware implementation",
@@ -765,7 +776,7 @@ function buildAgentMarkdown(
     `name: ${agentName}`,
     `description: ${roleDescription[role] ?? role} for ${profile.projectName} using ${architecture.name}`,
     "tools: read, write, edit, bash",
-    `skills: ${profile.projectSlug}-${architecture.name}-plan`,
+    `skills: ${profile.projectSlug}-${archId}-${ARCHITECT_ROLE_STAGE[role] ?? "plan"}`,
     "---",
     "",
     `# ${agentName}`,
