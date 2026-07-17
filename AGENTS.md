@@ -93,7 +93,7 @@ Three config files live under `.pi/senai/`:
 
 All three files are required before any stage command (`/senai-plan`, `/senai-implement`, `/senai-document`, `/senai-deliver`) will run. Run the corresponding `/senai-configure-*` command for each missing file.
 
-Use `/senai-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs.
+Use `/senai-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs. Once an architecture exists, it also validates the architecture agent mapping (the six architecture-bound roles must resolve to the generated agents), the generated agent file contents (tools, skill link, architecture.md/ADR references, forbidden patterns), and drift (generated files modified after the architect report was written).
 
 ## Architecture factory layout
 
@@ -114,7 +114,7 @@ The `/senai-generate-architect` command produces a one-time architecture for the
 | `architect-report.json` | Full architecture report. |
 | `architecture.md` | Human-readable architecture description. |
 | `adrs/*.md` | Architecture decision records. |
-| `architect-map/*.json` | Intermediate per-document driver files (temporary). |
+| `.IDE_Plans/architect-map/*.json` | Intermediate per-document driver files (temporary; outside `.pi/`). |
 
 **Generated Pi-discoverable outputs (live in `.pi/` per Pi docs):**
 
@@ -125,8 +125,8 @@ The `/senai-generate-architect` command produces a one-time architecture for the
 
 The factory uses two deterministic tools to avoid LLM drift:
 
-- `senai_merge_architect_drivers` — merges map outputs and cleans stale root files.
-- `senai_finalize_architecture` — generates docs, agents, and skills with exact names.
+- `senai_merge_architect_drivers` — merges map outputs for the currently configured documents only, deletes stale map files from removed or renamed documents, and cleans stale root files.
+- `senai_finalize_architecture` — generates docs, agents, and skills with exact names. Removes agents and skills left over from previous architecture runs and regenerates the ADR set to match the report.
 
 ### `files.json` schema (version 2)
 

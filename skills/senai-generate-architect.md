@@ -46,7 +46,7 @@ Output JSON format:
 
 Write each map output to:
 ```
-.pi/architect-map/<sanitized-path>.json
+.IDE_Plans/architect-map/<sanitized-path>.json
 ```
 
 Use `sanitizeDocumentPath` from the extension helpers.
@@ -63,6 +63,8 @@ Do not write the merged file by hand. The tool:
 - Combines all driver categories.
 - Removes duplicate IDs.
 - Keeps unique uncertainties.
+- Merges only map outputs for the currently configured documents.
+- Deletes stale map files left by removed or renamed documents.
 - Cleans up stale intermediate files from `.pi/senai/`.
 
 ## Step 3 — Gap analysis
@@ -209,7 +211,7 @@ Generate the living architecture documents:
 
 ## Step 10 — Generate agents and skills
 
-Call the `senai_finalize_architecture` tool. It reads the profile and report, selects the architecture from the library by id, and generates the exact files below.
+Call the `senai_finalize_architecture` tool. It reads the profile and report, selects the architecture from the library by id, removes agents and skills left over from previous architecture runs, and generates the exact files below. The ADR set is regenerated to match the current report.
 
 Generate project-specific agents in `.pi/agents/`:
 

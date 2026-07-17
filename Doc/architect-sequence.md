@@ -164,7 +164,7 @@ Output format:
 
 Each map subagent writes to:
 ```
-.pi/architect-map/<doc-id>.json
+.IDE_Plans/architect-map/<doc-id>.json
 ```
 
 ### Reduce phase
@@ -178,7 +178,7 @@ description: Merges per-document architectural drivers into one file
 tools: read, write
 ---
 
-Read all files in .pi/architect-map/.
+Read all files in .IDE_Plans/architect-map/.
 Merge them into one architectural-drivers.json file.
 Remove duplicates.
 Resolve conflicts by keeping the most specific statement.
@@ -460,11 +460,14 @@ Checks include:
 - Architecture library has entries.
 - Architect inputs config exists and selected files exist.
 - Architectural drivers file is valid JSON.
-- Architect report is valid JSON.
-- `architecture.md` exists in `.pi/senai/`.
+- Architect profile and report are valid JSON.
+- `architecture.md` exists in `.pi/architect/`.
 - ADRs in `.pi/architect/adrs/` match the report.
-- Generated agent files have valid frontmatter.
+- Generated agent files exist with valid frontmatter.
 - Generated skill files exist.
+- The six architecture-bound roles map to the generated agents (mapping check).
+- Each generated agent body references `architecture.md`, the ADRs, and the forbidden patterns, and its skill link resolves (content check).
+- No generated file was modified after the report was written (drift check).
 
 These checks are added to the existing `/senai-doctor` command.
 
@@ -494,14 +497,17 @@ Next: run /senai-doctor to verify, then /senai-plan <mission>.
 ```
 .pi/senai/
   architect-inputs.json          # user-selected input documents
+
+.pi/architect/
   architectural-drivers.json     # merged drivers from all inputs
-  architect-profile.json         # user answers to gap questions
+  architect-profile.json         # project profile and selected architecture id
   architect-report.json          # Doctor Architect recommendation
   architecture.md                # full software architecture description
   adrs/                          # architecture decision records
     0001-<decision-title>.md
-  architect-map/                 # per-document driver outputs
-    <doc-id>.json
+
+.IDE_Plans/architect-map/        # per-document driver outputs (temporary)
+  <sanitized-path>.json
 
 .pi/agents/
   <project>-<architecture-id>-planner.md
@@ -536,7 +542,7 @@ Next: run /senai-doctor to verify, then /senai-plan <mission>.
 | No architecture matches | Fall back to layered architecture and warn user. |
 | Missing resources reported | Main agent searches web, adds to library, re-runs Doctor. |
 | Feasibility is risky or not-feasible | Ask the user before continuing. |
-| Input documents changed since last run | Ask the user whether to re-run the full architecture factory. |
+| Input documents, document list, or constraints changed since last run | Ask the user whether to re-run the full architecture factory. Re-runs discard stale map files, remove agents/skills from previous architectures, and regenerate the ADR set. |
 | Generated agent validation fails | Report errors and stop before using generated agents. |
 
 ---

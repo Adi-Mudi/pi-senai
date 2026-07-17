@@ -61,6 +61,8 @@ After configuring, run a full diagnostic:
 
 This checks that all config files exist, every mapped agent is found in the right place, each agent has the right tools for its Senai role, file scopes are valid, truth documents exist, and you are running inside a supported terminal multiplexer.
 
+Once an architecture is generated, doctor also validates it: the six architecture-bound roles (`scout-1`, `planner`, `implementer`, `reviewer-correctness`, `reviewer-security`, `reviewer-tests`) must map to the generated agents, each generated agent file must be intact (tools, a working skill link, and references to `architecture.md`, the ADRs, and the forbidden patterns), and no generated file may be modified after generation (drift warning).
+
 ## Usage
 
 Start a new run:
@@ -201,7 +203,7 @@ Pi Senai can generate project-specific architecture agents and skills from your 
    - `.pi/architect/architect-report.json` — the full architecture report.
    - `.pi/architect/architecture.md` — the human-readable software architecture document.
    - `.pi/architect/adrs/*.md` — architecture decision records.
-   - `.pi/architect-map/*.json` — intermediate per-document driver files.
+   - `.IDE_Plans/architect-map/*.json` — intermediate per-document driver files (temporary).
 
    Generated Pi-discoverable outputs:
 
@@ -210,7 +212,7 @@ Pi Senai can generate project-specific architecture agents and skills from your 
 
    The generated planner agent is used for architecture scouting (`scout-1`), and all generated agents instruct subagents to read `.pi/architect/architecture.md` and the relevant ADRs before acting.
 
-   If the input documents change, `/senai-generate-architect` detects it and asks whether to re-run the full architecture factory.
+   If the input documents, the document list, or the additional constraints change, `/senai-generate-architect` detects it and asks whether to re-run the full architecture factory. Re-runs are safe: map files from removed documents are discarded before merging, agents and skills from a previous architecture are removed, and the ADR set is regenerated to match the new report.
 
    If the architecture library lacks a matching pattern, the agent falls back to web search to gather relevant guidance before generating the agents.
 
@@ -249,8 +251,9 @@ Pi Senai can generate project-specific architecture agents and skills from your 
   architecture.md
   adrs/
     0001-<title>.md
-  architect-map/              # intermediate per-document drivers
-    <sanitized-path>.json
+
+.IDE_Plans/architect-map/   # intermediate per-document drivers (temporary)
+  <sanitized-path>.json
 ```
 
 ## Development

@@ -49,7 +49,7 @@ Configuration commands:
 - `/senai-files` — show the configured project file list.
 - `/senai-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/senai/agents_files.json`.
 - `/senai-agents-files` — show configured document assignments per role.
-- `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, and runtime environment.
+- `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, runtime environment, and the architecture factory output (agent mapping, generated agent content, drift).
 
 Other commands:
 
