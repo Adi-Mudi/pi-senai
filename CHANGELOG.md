@@ -15,6 +15,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - New `/senai-doctor` section "Architecture drift": warns when a generated architecture file (agents, skills, architecture.md, ADRs) was modified after the architect report was written.
   - Unit tests for all three sections.
 
+- Sub-agent generation.
+  - New slash command: `/senai-generate-agents` — generates project-specific sub-agents for the 14 non-architecture Senai roles (scouts 2–4, discussion, plan overview, test skeleton, linter, full test, the four doc writers, security gate, archive).
+  - New source module: `agent-generator.ts` — fully deterministic assembly (role template + technology resource + architect report context); no LLM content generation.
+  - New bundled technology resource library: `resources/technologies/` with `google-apps-script`, `python`, and `generic` resources plus a `_template.md`. Projects can add or override resources in `.pi/technologies/`; adding a technology requires no code change.
+  - Every resource is sourced from official documentation with cited URLs.
+  - Only roles on built-in defaults are generated; existing custom agents and mappings are never touched. One confirmation gate, then files are written to `.pi/agents/` and mapped in `agents.json`.
+  - Unit tests for the generator module and the command.
+
 - Document scope configuration.
   - New source modules: `files-config.ts` and `agents-files-config.ts`.
   - New slash commands: `/senai-configure-files`, `/senai-files`, `/senai-configure-agents-files`, `/senai-agents-files`.

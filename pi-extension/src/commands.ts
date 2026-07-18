@@ -92,6 +92,13 @@ import {
   type ArchitectReport,
   type ArchitectureLibraryEntry,
 } from "./architect.js";
+import {
+  GENERATED_ROLES,
+  discoverTechnologyResources,
+  matchTechnologies,
+  planAgentGeneration,
+  writeGeneratedAgents,
+} from "./agent-generator.js";
 
 const NEXT_COMMAND: Record<string, string> = {
   planning: "/senai-approve",
@@ -1533,4 +1540,103 @@ export function defaultArchitectSkill(): string {
     `12. Notify the user of the results.`,
 
   ].join("\n");
+}
+
+export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
+  pi.registerCommand("senai-generate-agents", {
+    description: "Generate project-specific sub-agents for the non-architecture Senai roles",
+    handler: async (_args, ctx) => {
+      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
+
+      const config = loadAgentConfig(ctx.cwd)!;
+
+      // Target only roles still on built-in defaults. Custom agents and custom
+      // mappings are never touched.
+      const targets = GENERATED_ROLES.filter(
+        (def) => resolveAgentName(config, def.role as SenaiRole) === DEFAULT_AGENTS[def.role as SenaiRole],
+      );
+
+      if (targets.length === 0) {
+        ctx.ui.notify(
+          "All non-architecture roles already have custom agents. Nothing to generate.",
+          "info",
+        );
+        return;
+      }
+
+      // Project context: reuse the architect report when it exists, otherwise
+      // ask the basic questions (basic mode).
+      let report: ArchitectReport | null = null;
+      try {
+        report = loadArchitectReport(ctx.cwd);
+      } catch {
+        report = null;
+      }
+
+      let stackHints: string[] = [];
+      if (report) {
+        stackHints = [...report.techStack, ...report.constraints];
+      } else {
+        const projectType = await ctx.ui.select("Project type?", [
+          "automation / scripts",
+          "web application",
+          "cli tool",
+          "library / package",
+          "other",
+        ]);
+        const language = await ctx.ui.input("Primary language? (e.g., python, typescript, apps script)");
+        const framework = await ctx.ui.input(
+          "Framework or platform? (e.g., fastapi, react, google sheets) — optional, press Enter to skip",
+        );
+        stackHints = [projectType, language, framework].filter(
+          (hint): hint is string => typeof hint === "string" && hint.trim() !== "",
+        );
+      }
+
+      const resources = discoverTechnologyResources(ctx.cwd);
+      const matched = matchTechnologies(stackHints, resources);
+      if (matched.length === 0) {
+        ctx.ui.notify(
+          "No technology resources found. Check resources/technologies/ in the extension.",
+          "error",
+        );
+        return;
+      }
+
+      const plans = planAgentGeneration(ctx.cwd, targets, matched, report);
+      const resourceList = matched.map((r) => r.name).join(", ");
+      const roleList = plans.map((p) => `  - ${p.role} → ${p.agentName}`).join("\n");
+      const proceed = await ctx.ui.confirm(
+        "Generate sub-agents",
+        `Technology resources: ${resourceList}\n\nAgents to generate and map in agents.json:\n${roleList}\n\nExisting custom agents and mappings are not touched. Proceed?`,
+      );
+      if (!proceed) {
+        ctx.ui.notify("Agent generation cancelled.", "info");
+        return;
+      }
+
+      const result = writeGeneratedAgents(ctx.cwd, plans);
+
+      // Auto-map only roles whose files were actually created.
+      const createdNames = new Set(result.created.map((rel) => path.basename(rel, ".md")));
+      const mapped = plans.filter((p) => createdNames.has(p.agentName));
+      if (mapped.length > 0) {
+        const agents = { ...config.agents } as Record<string, string>;
+        for (const p of mapped) {
+          agents[p.role] = p.agentName;
+        }
+        saveAgentConfig(ctx.cwd, { ...config, agents });
+      }
+
+      const lines = [`Generated ${result.created.length} agent(s) using: ${resourceList}.`];
+      if (result.skipped.length > 0) {
+        lines.push(`Skipped ${result.skipped.length} existing file(s): ${result.skipped.join(", ")}`);
+      }
+      if (mapped.length > 0) {
+        lines.push(`Mapped ${mapped.length} role(s) in agents.json.`);
+      }
+      lines.push("Next: run /senai-doctor to verify the setup.");
+      ctx.ui.notify(lines.join("\n"), "info");
+    },
+  });
 }

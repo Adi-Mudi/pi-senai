@@ -12,6 +12,7 @@ import {
   registerDoctorCommand,
   registerArchitectInputsCommands,
   registerArchitectCommand,
+  registerAgentGeneratorCommand,
   buildCategoryItems,
   matchesFilter,
   normalizePath,
@@ -30,6 +31,7 @@ import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
 } from "../src/architect-inputs-config.js";
+import { slugify } from "../src/architect.js";
 import { DEFAULT_AGENTS, type SenaiRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -1118,6 +1120,87 @@ describe("commands", () => {
 
     assert.ok(!sentMessages.some((m) => m.includes("<pi-senai-generate-architect>")));
     assert.ok(notifications.some((n) => n.message.includes("cancelled")));
+  });
+
+  it("senai-generate-agents reports nothing to do when all roles have custom agents", async () => {
+    const custom: Record<string, string> = {};
+    for (const role of [
+      "scout-2", "scout-3", "scout-4", "discussion", "plan-overview",
+      "test-skeleton", "linter", "full-test", "readme-writer", "changelog-writer",
+      "api-docs-writer", "other-docs-writer", "security-gate", "archive",
+    ] as SenaiRole[]) {
+      custom[role] = DEFAULT_AGENTS[role] === "worker" ? "scout" : "worker";
+    }
+    saveAgentConfig(tmpDir, { version: 1, agents: { ...DEFAULT_AGENTS, ...custom } });
+
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-agents"]("", makeCtx());
+
+    assert.ok(notifications.some((n) => n.message.includes("Nothing to generate")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")));
+  });
+
+  it("senai-generate-agents generates files and maps only default roles", async () => {
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: { ...DEFAULT_AGENTS, "code-review": "worker" },
+    });
+
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-agents"]("", makeCtx());
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.ok(saved.agents["scout-2"].endsWith("-scout-2"), "scout-2 should be remapped to the generated agent");
+    const agentFile = path.join(tmpDir, ".pi", "agents", `${saved.agents["scout-2"]}.md`);
+    assert.ok(fs.existsSync(agentFile));
+    const content = fs.readFileSync(agentFile, "utf8");
+    assert.ok(content.includes("## Your mandate"));
+    assert.ok(content.includes("## Technology craft"));
+    assert.strictEqual(saved.agents["code-review"], "worker", "custom mapping must stay untouched");
+    assert.ok(notifications.some((n) => n.message.includes("/senai-doctor")));
+  });
+
+  it("senai-generate-agents writes nothing when the user declines", async () => {
+    registerAgentGeneratorCommand(makeApi());
+    const ctx = makeCtx();
+    (ctx.ui as any).confirm = async () => false;
+    await commandHandlers["senai-generate-agents"]("", ctx);
+
+    assert.ok(notifications.some((n) => n.message.includes("cancelled")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")));
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(saved.agents["scout-2"], "scout");
+  });
+
+  it("senai-generate-agents preserves an existing user file on name collision", async () => {
+    const slug = slugify(path.basename(tmpDir));
+    const collisionName = `${slug}-scout-2`;
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, `${collisionName}.md`), "USER_OWNED_CONTENT", "utf8");
+
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-agents"]("", makeCtx());
+
+    const content = fs.readFileSync(path.join(agentsDir, `${collisionName}.md`), "utf8");
+    assert.strictEqual(content, "USER_OWNED_CONTENT", "user file must be preserved byte-for-byte");
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(saved.agents["scout-2"], "scout", "collided role must stay on its current mapping");
+    assert.ok(saved.agents["scout-3"].endsWith("-scout-3"), "other roles are still generated");
+  });
+
+  it("senai-generate-agents second run is a clean no-op", async () => {
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-agents"]("", makeCtx());
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    const firstCount = fs.readdirSync(agentsDir).length;
+    assert.ok(firstCount > 0);
+
+    notifications = [];
+    await commandHandlers["senai-generate-agents"]("", makeCtx());
+
+    assert.ok(notifications.some((n) => n.message.includes("Nothing to generate")));
+    assert.strictEqual(fs.readdirSync(agentsDir).length, firstCount);
   });
 });
 

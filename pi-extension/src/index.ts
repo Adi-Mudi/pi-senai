@@ -2,6 +2,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { formatStageStatus } from "./constants.js";
 import {
   registerAgentCommands,
+  registerAgentGeneratorCommand,
   registerAgentsFilesCommands,
   registerArchitectCommand,
   registerArchitectInputsCommands,
@@ -39,6 +40,7 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   registerDoctorCommand(pi);
   registerArchitectInputsCommands(pi);
   registerArchitectCommand(pi);
+  registerAgentGeneratorCommand(pi);
   registerArchitectTools(pi);
 
   // Inject senai status into the system prompt when a run is active.
