@@ -30,8 +30,7 @@ import {
   type ArchitectReport,
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
-import { parseAgentFile } from "./agent-discovery.js";
-import { getArchitectStateDir, getArchitectMapDir } from "./constants.js";
+import { getArchitectStateDir } from "./constants.js";
 import {
   GENERATED_ROLES,
   getBundledTechnologiesDir,
@@ -68,28 +67,17 @@ interface ResolvedAgent {
 
 const BUILTIN_AGENT_NAMES = Array.from(new Set(Object.values(DEFAULT_AGENTS)));
 
+// Tool requirements for the 14 generator roles come from GENERATED_ROLES
+// (single source of truth); architecture-bound roles are listed explicitly.
 const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
+  ...Object.fromEntries(GENERATED_ROLES.map((def) => [def.role, def.tools])),
   "scout-1": ["read"],
-  "scout-2": ["read"],
-  "scout-3": ["read"],
-  "scout-4": ["read"],
-  discussion: ["read"],
   planner: ["read"],
-  "plan-overview": ["read"],
   "reviewer-correctness": ["read"],
   "reviewer-security": ["read"],
   "reviewer-tests": ["read"],
-  "test-skeleton": ["read", "write"],
   implementer: ["read", "write", "edit"],
-  linter: ["read", "bash"],
   "code-review": ["read"],
-  "full-test": ["read", "bash"],
-  "readme-writer": ["read", "write"],
-  "changelog-writer": ["read", "write"],
-  "api-docs-writer": ["read", "write"],
-  "other-docs-writer": ["read", "write"],
-  "security-gate": ["read"],
-  archive: ["read", "write", "bash"],
 };
 
 const READONLY_ROLES: SenaiRole[] = [

@@ -13,7 +13,7 @@ import {
   writeGeneratedManifest,
   type ArchitectureLibraryEntry,
 } from "./architect.js";
-import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
+import { getArchitectMapDir } from "./constants.js";
 import {
   DOCUMENT_MANIFEST_FILE,
   mergeMapOutputs,
@@ -22,12 +22,9 @@ import {
 } from "./document-ingest.js";
 import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
 import {
-  getDriversPath,
-  loadDrivers,
   mergeDrivers,
   normalizeDrivers,
   saveDrivers,
-  type ArchitecturalDrivers,
 } from "./driver-extractor.js";
 
 export function registerArchitectTools(pi: ExtensionAPI): void {

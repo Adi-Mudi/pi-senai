@@ -2,7 +2,6 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  getConfigPath,
   loadAgentConfig,
   resolveAgentName,
   saveAgentConfig,
@@ -18,7 +17,6 @@ import {
 } from "./agents-files-config.js";
 import { discoverProjectFiles, safeReadDir, isExcluded } from "./files-discovery.js";
 import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./files-config.js";
-import { buildAgentRegistryBlock } from "./agent-registry.js";
 import {
   DEFAULT_AGENTS,
   SENAI_ROLES,
@@ -53,44 +51,14 @@ import {
   getSelectedInputPaths,
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
-  type ArchitectDocumentInput,
   type ArchitectDocumentType,
   type ArchitectInputsConfig,
 } from "./architect-inputs-config.js";
-import {
-  buildDocumentIngestPrompt,
-  buildIngestBatches,
-  buildMapOutputPath,
-  loadDocumentManifest,
-  mergeMapOutputs,
-  readMapOutputs,
-  saveDocumentManifest,
-  type DocumentManifest,
-} from "./document-ingest.js";
-import { getArchitectMapDir } from "./constants.js";
-import {
-  createEmptyDrivers,
-  findDriverGaps,
-  loadDrivers,
-  saveDrivers,
-  type ArchitecturalDrivers,
-  type DriverGap,
-} from "./driver-extractor.js";
+import { loadDrivers } from "./driver-extractor.js";
 import {
   areDriversStale,
-  buildArchitectPrompt,
-  discoverArchitectureLibrary,
-  generateAgentFiles,
-  generateSkillFiles,
-  loadArchitectProfile,
   loadArchitectReport,
-  saveArchitectProfile,
-  saveArchitectReport,
-  selectArchitecture,
-  slugify,
-  type ArchitectProfile,
   type ArchitectReport,
-  type ArchitectureLibraryEntry,
 } from "./architect.js";
 import {
   GENERATED_ROLES,

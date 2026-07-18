@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Code hygiene cleanup: removed dead code (2 unused constants, an unused UI helper and state class), removed ~36 unused imports across source and tests, made `GENERATED_ROLES` the single source of role tool requirements (doctor derives its capability table from it), and enabled `noUnusedLocals`/`noUnusedParameters` in `tsconfig.json` so dead code fails the build from now on.
 - Renamed `/senai-generate-agents` to `/senai-generate-sub-agents` for clarity. The old name is no longer registered.
 - Renamed extension branding and all user-facing identifiers from Orchestra to Senai.
   - Slash commands now use `/senai-*`.

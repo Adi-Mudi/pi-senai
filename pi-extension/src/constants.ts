@@ -3,8 +3,6 @@ import * as path from "node:path";
 export const SENAI_DIR = ".IDE_Plans/senai";
 export const STATE_FILE = "state.json";
 export const RUNS_DIR = "runs";
-export const SENAI_CONFIG_DIR = ".pi/senai";
-export const SENAI_CONFIG_FILE = "agents.json";
 export const ARCHITECT_STATE_DIR = ".pi/architect";
 export const ARCHITECT_MAP_DIR = ".IDE_Plans/architect-map";
 

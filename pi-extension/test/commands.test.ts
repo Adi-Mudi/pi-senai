@@ -20,7 +20,7 @@ import {
   isFolderLike,
   defaultArchitectSkill,
 } from "../src/commands.js";
-import { loadState, startRun, advanceStage, resetState } from "../src/state.js";
+import { loadState, startRun, advanceStage } from "../src/state.js";
 import type { SenaiState } from "../src/state.js";
 import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";

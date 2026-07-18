@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Key, matchesKey, type Component } from "@mariozechner/pi-tui";
+import { Key, matchesKey } from "@mariozechner/pi-tui";
 
 export interface RolePickerItem {
   id: string;

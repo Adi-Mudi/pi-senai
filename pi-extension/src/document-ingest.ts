@@ -16,7 +16,7 @@ import {
   normalizeQualityAttributeItem,
   normalizeConstraintItem,
 } from "./driver-extractor.js";
-import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
+import { getArchitectMapDir } from "./constants.js";
 
 export const DOCUMENT_MANIFEST_FILE = "architect-documents.json";
 

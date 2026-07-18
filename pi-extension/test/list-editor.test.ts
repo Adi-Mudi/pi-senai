@@ -1,13 +1,11 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { ExtensionContext, ExtensionUIContext } from "@mariozechner/pi-coding-agent";
-import { runListEditor, type ListEditorAction, type ListEditorOptions } from "../src/ui/list-editor.js";
+import { runListEditor, type ListEditorAction } from "../src/ui/list-editor.js";
 
 const ENTER = "\r";
 const DOWN = "\x1b[B";
 const UP = "\x1b[A";
-const RIGHT = "\x1b[C";
-const LEFT = "\x1b[D";
 
 function makeTheme() {
   return {

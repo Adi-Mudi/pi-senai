@@ -6,7 +6,6 @@ import {
   SelectList,
   Text,
   matchesKey,
-  type Component,
   type SelectItem,
 } from "@mariozechner/pi-tui";
 
@@ -58,109 +57,6 @@ function isTui(ctx: ExtensionContext): boolean {
 function matchesFilter(path: string, query: string): boolean {
   if (!query) return true;
   return path.toLowerCase().includes(query.toLowerCase());
-}
-
-/** Build the ordered item list shown by both renderers. */
-function buildEditorItems(
-  options: ListEditorOptions,
-  currentPaths: string[],
-  suggestions: string[],
-): ListEditorItem[] {
-  const items: ListEditorItem[] = [];
-  const query = options.filterQuery ?? "";
-
-  if (options.enableFilter) {
-    items.push({
-      id: FILTER_ID,
-      kind: "action",
-      label: query ? `Filter: ${query} (clear)` : "Filter suggestions...",
-      value: FILTER_ID,
-    });
-  }
-
-  for (const path of suggestions) {
-    if (currentPaths.includes(path)) continue;
-    if (matchesFilter(path, query)) {
-      items.push({
-        id: `suggest:${path}`,
-        kind: "suggestion",
-        label: `⬜ Suggest: ${path}`,
-        value: path,
-      });
-    }
-  }
-
-  for (const action of options.customActions ?? []) {
-    items.push({
-      id: `custom:${action.id}`,
-      kind: "action",
-      label: action.label,
-      value: action.id,
-    });
-  }
-
-  for (const path of currentPaths) {
-    items.push({
-      id: `selected:${path}`,
-      kind: "selected",
-      label: `✅ Remove: ${path}`,
-      value: path,
-    });
-  }
-
-  items.push({
-    id: BACK_ID,
-    kind: "action",
-    label: "Back",
-    value: BACK_ID,
-  });
-
-  return items;
-}
-
-/** Pure state manager. Keeps selection stable when the item list changes. */
-class ListEditorState {
-  private items: ListEditorItem[];
-  private selectedId: string;
-
-  constructor(items: ListEditorItem[], selectedId?: string) {
-    this.items = items;
-    this.selectedId = selectedId ?? items[0]?.id ?? "";
-  }
-
-  getItems(): ListEditorItem[] {
-    return this.items;
-  }
-
-  getSelectedIndex(): number {
-    const idx = this.items.findIndex((i) => i.id === this.selectedId);
-    return idx >= 0 ? idx : 0;
-  }
-
-  getSelectedItem(): ListEditorItem | undefined {
-    return this.items[this.getSelectedIndex()];
-  }
-
-  move(delta: number): void {
-    const idx = this.getSelectedIndex();
-    const newIndex = (idx + delta + this.items.length) % this.items.length;
-    this.selectedId = this.items[newIndex]?.id ?? "";
-  }
-
-  setSelectedId(id: string): void {
-    if (this.items.some((i) => i.id === id)) {
-      this.selectedId = id;
-    }
-  }
-
-  updateItems(items: ListEditorItem[]): void {
-    const oldIndex = this.getSelectedIndex();
-    this.items = items;
-    if (!this.items.some((i) => i.id === this.selectedId)) {
-      const newIndex = Math.max(0, Math.min(oldIndex, this.items.length - 1));
-      this.selectedId = this.items[newIndex]?.id ?? "";
-    }
-  }
 }
 
 export async function runListEditor(

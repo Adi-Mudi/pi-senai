@@ -3,7 +3,7 @@ import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadAgentConfig } from "./agent-config.js";
 import { buildAgentRegistryBlock } from "./agent-registry.js";
-import { SENAI_ROLES, ROLE_LABELS, type SenaiRole } from "./agent-suggestions.js";
+import { SENAI_ROLES, ROLE_LABELS } from "./agent-suggestions.js";
 import {
   loadAgentsFilesConfig,
   type AgentsFilesConfig,

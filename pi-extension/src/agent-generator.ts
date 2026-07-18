@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
-import { addToGeneratedManifest, loadArchitectReport, slugify, type ArchitectReport } from "./architect.js";
+import { addToGeneratedManifest, slugify, type ArchitectReport } from "./architect.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

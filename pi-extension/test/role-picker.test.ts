@@ -5,7 +5,6 @@ import { runRolePicker, type RolePickerItem } from "../src/ui/role-picker.js";
 
 const ENTER = "\r";
 const DOWN = "\x1b[B";
-const UP = "\x1b[A";
 
 function makeTheme() {
   return {
