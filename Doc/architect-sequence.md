@@ -465,7 +465,7 @@ Checks include:
 - ADRs in `.pi/architect/adrs/` match the report.
 - Generated agent files exist with valid frontmatter.
 - Generated skill files exist.
-- The six architecture-bound roles map to the generated agents (mapping check).
+- The seven architecture-bound roles map to the generated agents (mapping check; code-review shares the reviewer-correctness agent).
 - Each generated agent body references `architecture.md`, the ADRs, and the forbidden patterns, and its skill link resolves (content check).
 - No generated file was modified after the report was written (drift check).
 

@@ -93,7 +93,7 @@ Three config files live under `.pi/senai/`:
 
 All three files are required before any stage command (`/senai-plan`, `/senai-implement`, `/senai-document`, `/senai-deliver`) will run. Run the corresponding `/senai-configure-*` command for each missing file.
 
-Use `/senai-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs. Once an architecture exists, it also validates the architecture agent mapping (the six architecture-bound roles must resolve to the generated agents), the generated agent file contents (tools, skill link, architecture.md/ADR references, forbidden patterns), and drift (generated files modified after the architect report was written).
+Use `/senai-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs. Once an architecture exists, it also validates the architecture agent mapping (the seven architecture-bound roles must resolve to the generated agents (code-review shares the reviewer-correctness agent)), the generated agent file contents (tools, skill link, architecture.md/ADR references, forbidden patterns), and drift (generated files modified after the architect report was written).
 
 ## Architecture factory layout
 

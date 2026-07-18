@@ -694,7 +694,7 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("mapping check passes when all six roles point to the generated agents", () => {
+  it("mapping check passes when all seven roles point to the generated agents", () => {
     const tmpDir = makeTmpDir("doctor-map-ok-");
     saveTestProfile(tmpDir);
     saveAgentConfig(tmpDir, {
@@ -706,12 +706,13 @@ describe("doctor architecture validation", () => {
         "reviewer-correctness": `${SLUG}-${ARCH}-reviewer-correctness`,
         "reviewer-security": `${SLUG}-${ARCH}-reviewer-security`,
         "reviewer-tests": `${SLUG}-${ARCH}-reviewer-tests`,
+        "code-review": `${SLUG}-${ARCH}-reviewer-correctness`,
       },
     });
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture agent mapping");
     assert.strictEqual(section.items.filter((i) => i.status === "error").length, 0);
-    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 6);
+    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 7);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -858,12 +859,13 @@ describe("doctor architecture validation", () => {
         "reviewer-correctness": `${SLUG}-hexagonal-reviewer-correctness`,
         "reviewer-security": `${SLUG}-hexagonal-reviewer-security`,
         "reviewer-tests": `${SLUG}-hexagonal-reviewer-tests`,
+        "code-review": `${SLUG}-hexagonal-reviewer-correctness`,
       },
     });
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture agent mapping");
     assert.strictEqual(section.items.filter((i) => i.status === "error").length, 0);
-    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 6);
+    assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 7);
     assert.ok(section.items.every((i) => i.message.includes(`${SLUG}-hexagonal-`)));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -881,7 +883,7 @@ describe("doctor architecture validation", () => {
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Architecture agent mapping");
     assert.strictEqual(section.items.filter((i) => i.status === "ok").length, 2);
-    assert.strictEqual(section.items.filter((i) => i.status === "error").length, 4);
+    assert.strictEqual(section.items.filter((i) => i.status === "error").length, 5);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

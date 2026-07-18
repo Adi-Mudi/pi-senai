@@ -64,6 +64,14 @@ describe("agent-suggestions", () => {
     assert.strictEqual(suggestAgentForRole("reviewer-correctness", agents), "inventory-app-modular-monolith-reviewer-correctness");
   });
 
+  it("prefers generated architecture reviewer-correctness for code-review", () => {
+    const agents = [
+      agent("gas-code-reviewer", "Code reviewer for correctness and security"),
+      agent("inventory-app-modular-monolith-reviewer-correctness", "reviews correctness against architecture rules"),
+    ];
+    assert.strictEqual(suggestAgentForRole("code-review", agents), "inventory-app-modular-monolith-reviewer-correctness");
+  });
+
   it("suggests tester agent for test roles", () => {
     const agents = [agent("gas-tester", "Automated tester")];
     assert.strictEqual(suggestAgentForRole("reviewer-tests", agents), "gas-tester");

@@ -838,6 +838,7 @@ const ARCHITECTURE_MAPPED_ROLES: Array<{ role: SenaiRole; label: string; expecte
   { role: "reviewer-correctness", label: "Architecture Reviewer — Correctness", expectedSuffix: "reviewer-correctness" },
   { role: "reviewer-security", label: "Architecture Reviewer — Security", expectedSuffix: "reviewer-security" },
   { role: "reviewer-tests", label: "Architecture Reviewer — Tests", expectedSuffix: "reviewer-tests" },
+  { role: "code-review", label: "Architecture Code Review", expectedSuffix: "reviewer-correctness" },
 ];
 
 function checkArchitectureAgentMapping(cwd: string, agentConfig: AgentConfig | null): DiagnosticSection {

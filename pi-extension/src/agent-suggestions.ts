@@ -89,7 +89,7 @@ export function suggestAgentForRole(
       return agent.name;
     }
     if (
-      role === "reviewer-correctness" &&
+      (role === "reviewer-correctness" || role === "code-review") &&
       agent.name.endsWith("-reviewer-correctness") &&
       agentText.includes("architecture")
     ) {
