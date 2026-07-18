@@ -10,7 +10,7 @@ import {
   planAgentGeneration,
   writeGeneratedAgents,
 } from "../src/agent-generator.js";
-import { saveArchitectReport, slugify } from "../src/architect.js";
+import { addToGeneratedManifest, loadGeneratedManifest, saveArchitectReport, slugify, writeGeneratedManifest } from "../src/architect.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -207,6 +207,52 @@ describe("agent-generator", () => {
     const matched = matchTechnologies(["python"], resources);
     const plans = planAgentGeneration(tmpDir, GENERATED_ROLES.slice(0, 1), matched, null);
     assert.ok(plans[0].content.includes("PROJECT_OVERRIDE_CRAFT_MARKER"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("addToGeneratedManifest creates a manifest when missing", () => {
+    const tmpDir = makeTmpDir("agent-gen-addman-");
+    const file = path.join(tmpDir, "a.txt");
+    fs.writeFileSync(file, "content a", "utf8");
+    const manifest = addToGeneratedManifest(tmpDir, [file]);
+    assert.strictEqual(manifest.version, 1);
+    assert.ok(manifest.files["a.txt"]);
+    assert.ok(manifest.generatedAt);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("addToGeneratedManifest preserves existing entries while updating one file", () => {
+    const tmpDir = makeTmpDir("agent-gen-mergeman-");
+    const fileA = path.join(tmpDir, "a.txt");
+    const fileB = path.join(tmpDir, "b.txt");
+    fs.writeFileSync(fileA, "content a", "utf8");
+    fs.writeFileSync(fileB, "content b", "utf8");
+    writeGeneratedManifest(tmpDir, [fileA, fileB]);
+
+    fs.writeFileSync(fileB, "content b changed", "utf8");
+    const manifest = addToGeneratedManifest(tmpDir, [fileB]);
+
+    assert.deepStrictEqual(Object.keys(manifest.files).sort(), ["a.txt", "b.txt"]);
+    const reloaded = loadGeneratedManifest(tmpDir);
+    assert.ok(reloaded);
+    assert.strictEqual(manifest.files["a.txt"], reloaded!.files["a.txt"], "untouched entry keeps its hash");
+    assert.notStrictEqual(manifest.files["b.txt"], reloaded!.files["a.txt"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writeGeneratedAgents adds created files to the manifest", () => {
+    const tmpDir = makeTmpDir("agent-gen-manifest-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES.slice(0, 2), resources, null);
+    const result = writeGeneratedAgents(tmpDir, plans);
+    assert.strictEqual(result.created.length, 2);
+
+    const manifest = loadGeneratedManifest(tmpDir);
+    assert.ok(manifest, "manifest should exist after generation");
+    for (const rel of result.created) {
+      assert.ok(manifest!.files[rel], `manifest should contain ${rel}`);
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

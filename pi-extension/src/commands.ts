@@ -1231,7 +1231,10 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const report = runSenaiDiagnostic(ctx.cwd);
       const text = formatDiagnosticReport(report);
-      pi.sendUserMessage(text);
+      const reportPath = path.join(ctx.cwd, ".IDE_Plans", "senai", "doctor-report.md");
+      fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+      fs.writeFileSync(reportPath, text, "utf8");
+      pi.sendUserMessage(`${text}\n\nReport saved to .IDE_Plans/senai/doctor-report.md`);
     },
   });
 }

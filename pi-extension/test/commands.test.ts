@@ -1202,6 +1202,16 @@ describe("commands", () => {
     assert.ok(notifications.some((n) => n.message.includes("Nothing to generate")));
     assert.strictEqual(fs.readdirSync(agentsDir).length, firstCount);
   });
+
+  it("senai-doctor writes the report artifact", async () => {
+    registerDoctorCommand(makeApi());
+    await commandHandlers["senai-doctor"]("", makeCtx());
+    const reportPath = path.join(tmpDir, ".IDE_Plans", "senai", "doctor-report.md");
+    assert.ok(fs.existsSync(reportPath), "report artifact should be written");
+    const content = fs.readFileSync(reportPath, "utf8");
+    assert.ok(content.includes("Pi Senai Diagnostic Report"));
+    assert.ok(sentMessages.some((m) => m.includes("Report saved to .IDE_Plans/senai/doctor-report.md")));
+  });
 });
 
 

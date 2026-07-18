@@ -1022,4 +1022,313 @@ describe("doctor architecture validation", () => {
     assert.strictEqual(section.items[0].status, "ok");
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  function writeProjectPackage(cwd: string): void {
+    writeFile(cwd, "package.json", JSON.stringify({ name: SLUG }));
+  }
+
+  function writeTeamAgent(cwd: string, role: string, body: string): void {
+    const name = `${SLUG}-${role}`;
+    writeFile(
+      cwd,
+      path.join(".pi", "agents", `${name}.md`),
+      ["---", `name: ${name}`, "description: team agent", "tools: read", "---", "", `# ${name}`, "", body].join("\n"),
+    );
+  }
+
+  it("team content check passes for a complete generated team agent", () => {
+    const tmpDir = makeTmpDir("doctor-team-ok-");
+    writeProjectPackage(tmpDir);
+    writeTeamAgent(tmpDir, "scout-2", "## Your mandate\n\n- search code\n\n## Technology craft (Generic)\n\ncraft");
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": `${SLUG}-scout-2` } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated team agents");
+    const item = section.items.find((i) => i.message.includes(`${SLUG}-scout-2`));
+    assert.ok(item);
+    assert.strictEqual(item.status, "ok");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("team content check errors when mandate or craft is missing", () => {
+    const tmpDir = makeTmpDir("doctor-team-bad-");
+    writeProjectPackage(tmpDir);
+    writeTeamAgent(tmpDir, "scout-2", "no sections here");
+    writeTeamAgent(tmpDir, "linter", "## Your mandate\n\n- lint\n");
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": `${SLUG}-scout-2`, linter: `${SLUG}-linter` } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated team agents");
+    const scoutItem = section.items.find((i) => i.message.includes(`${SLUG}-scout-2`));
+    const linterItem = section.items.find((i) => i.message.includes(`${SLUG}-linter`));
+    assert.ok(scoutItem && scoutItem.status === "error");
+    assert.ok(scoutItem.details?.some((d) => d.includes("mandate")));
+    assert.ok(linterItem && linterItem.status === "error");
+    assert.ok(linterItem.details?.some((d) => d.includes("Technology craft")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("team content check skips custom-mapped roles silently", () => {
+    const tmpDir = makeTmpDir("doctor-team-skip-");
+    writeProjectPackage(tmpDir);
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated team agents");
+    assert.strictEqual(section.items.filter((i) => i.status === "error").length, 0);
+    assert.strictEqual(section.items[0].status, "info");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check warns on a malformed project resource", () => {
+    const tmpDir = makeTmpDir("doctor-res-bad-");
+    writeFile(tmpDir, path.join(".pi", "technologies", "bad.md"), "---\nid: bad\nname: Bad\n---\n");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("bad.md"));
+    assert.ok(warning, "should warn about the malformed resource");
+    assert.ok(section.items.some((i) => i.status === "ok"), "bundled resources are valid");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("skill reference check errors on a missing skill and accepts a valid one", () => {
+    const tmpDir = makeTmpDir("doctor-skillref-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "my-reviewer.md"),
+      ["---", "name: my-reviewer", "description: reviewer", "tools: read", "skills: my-skill, missing-skill", "---", "", "# my-reviewer", "", "body"].join("\n"),
+    );
+    writeFile(
+      tmpDir,
+      path.join(".pi", "skills", "my-skill", "SKILL.md"),
+      ["---", "name: my-skill", "description: a valid skill", "---", "", "# my-skill", "", "content"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "code-review": "my-reviewer" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent skill references");
+    const missing = section.items.find((i) => i.status === "error" && i.message.includes("missing-skill"));
+    assert.ok(missing, "should error on the missing skill");
+    assert.ok(!section.items.some((i) => i.message.includes('"my-skill"') && i.status !== "ok"), "valid skill passes");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("skill reference check warns on an invalid SKILL.md", () => {
+    const tmpDir = makeTmpDir("doctor-skillref-bad-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "my-reviewer.md"),
+      ["---", "name: my-reviewer", "description: reviewer", "tools: read", "skills: bad-skill", "---", "", "# my-reviewer", "", "body"].join("\n"),
+    );
+    writeFile(tmpDir, path.join(".pi", "skills", "bad-skill", "SKILL.md"), "---\nname: bad-skill\n---\n\ncontent");
+    saveAgentConfig(tmpDir, { version: 1, agents: { "code-review": "my-reviewer" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent skill references");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("bad-skill"));
+    assert.ok(warning, "should warn about the invalid SKILL.md");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("integrity check errors on name mismatch and tool typos", () => {
+    const tmpDir = makeTmpDir("doctor-integrity-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "real-file.md"),
+      ["---", "name: different-name", "description: x", "tools: read, reed", "---", "", "# body"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "real-file" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent file integrity");
+    const item = section.items.find((i) => i.message.includes("real-file"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.details?.some((d) => d.includes("different-name") && d.includes("does not match the filename")));
+    assert.ok(item.details?.some((d) => d.includes("reed")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("integrity check warns on a bad thinking level and errors on an empty body", () => {
+    const tmpDir = makeTmpDir("doctor-integrity-2-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "thinker.md"),
+      ["---", "name: thinker", "description: x", "tools: read", "thinking: turbo", "---", "", "# body"].join("\n"),
+    );
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "empty-body.md"),
+      ["---", "name: empty-body", "description: x", "tools: read", "---"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "thinker", linter: "empty-body" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent file integrity");
+    const thinkerItem = section.items.find((i) => i.message.includes("thinker"));
+    const emptyItem = section.items.find((i) => i.message.includes("empty-body"));
+    assert.ok(thinkerItem && thinkerItem.status === "warning");
+    assert.ok(thinkerItem.details?.some((d) => d.includes("turbo")));
+    assert.ok(emptyItem && emptyItem.status === "error");
+    assert.ok(emptyItem.details?.some((d) => d.includes("empty")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("secret scan warns on a planted api key and passes a clean tree", () => {
+    const tmpDir = makeTmpDir("doctor-secret-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "leaky.md"),
+      ["---", "name: leaky", "description: x", "tools: read", "---", "", '# Config\napi_key = "ABCDEFGH12345678"'].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "leaky" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Secret scan");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("leaky.md"));
+    assert.ok(warning, "should flag the planted secret");
+    assert.ok(warning.message.includes(":8"), "should include the line number");
+
+    const cleanDir = makeTmpDir("doctor-secret-clean-");
+    const cleanReport = runSenaiDiagnostic(cleanDir);
+    const cleanSection = findSection(cleanReport, "Secret scan");
+    assert.strictEqual(cleanSection.items.filter((i) => i.status === "warning").length, 0);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.rmSync(cleanDir, { recursive: true, force: true });
+  });
+
+  it("skill reference check resolves a bundled skill", () => {
+    const tmpDir = makeTmpDir("doctor-skillref-bundled-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "my-planner.md"),
+      ["---", "name: my-planner", "description: planner", "tools: read", "skills: senai-plan", "---", "", "# my-planner", "", "body"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { planner: "my-planner" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent skill references");
+    assert.strictEqual(section.items.filter((i) => i.status === "error").length, 0);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("skill reference check reports info when no agents reference skills", () => {
+    const tmpDir = makeTmpDir("doctor-skillref-none-");
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent skill references");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "info");
+    assert.ok(section.items[0].message.includes("No agents reference skills"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check accepts comma-string keywords", () => {
+    const tmpDir = makeTmpDir("doctor-res-commas-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "technologies", "rust.md"),
+      '---\nid: rust\nname: Rust\nkeywords: "rust, cargo"\n---\n\nRust craft body.',
+    );
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    assert.ok(!section.items.some((i) => i.message.includes("rust.md")), "comma-string keywords should be valid");
+    assert.ok(section.items.some((i) => i.status === "ok"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check warns when keywords are empty", () => {
+    const tmpDir = makeTmpDir("doctor-res-nokey-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "technologies", "nokey.md"),
+      "---\nid: nokey\nname: NoKey\nkeywords: []\n---\n\nBody exists.",
+    );
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("nokey.md"));
+    assert.ok(warning);
+    assert.ok(warning.details?.some((d) => d.includes("no keywords")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("integrity check accepts ext: tool names and rejects unknown ones", () => {
+    const tmpDir = makeTmpDir("doctor-integrity-ext-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "ext-ok.md"),
+      ["---", "name: ext-ok", "description: x", "tools: read, ext:mcp/search", "---", "", "# body"].join("\n"),
+    );
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "ext-bad.md"),
+      ["---", "name: ext-bad", "description: x", "tools: read, ext", "---", "", "# body"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "ext-ok", "scout-3": "ext-bad" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent file integrity");
+    assert.ok(!section.items.some((i) => i.message.includes("ext-ok")), "ext: tool names should pass");
+    const badItem = section.items.find((i) => i.message.includes("ext-bad"));
+    assert.ok(badItem && badItem.status === "error");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("integrity check reports all problems of one agent in a single item", () => {
+    const tmpDir = makeTmpDir("doctor-integrity-multi-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "multi.md"),
+      ["---", "name: wrong-name", "description: x", "tools: reed", "thinking: turbo", "---"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "multi" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent file integrity");
+    const items = section.items.filter((i) => i.message.includes("multi"));
+    assert.strictEqual(items.length, 1, "one agent should produce one item");
+    assert.strictEqual(items[0].status, "error");
+    assert.ok(items[0].details && items[0].details.length >= 3, "all problems listed");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("secret scan reports each secret with its own line number", () => {
+    const tmpDir = makeTmpDir("doctor-secret-multi-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "leaky2.md"),
+      [
+        "---", "name: leaky2", "description: x", "tools: read", "---", "",
+        'api_key = "FIRSTKEY123456"',
+        "some normal line",
+        'token = "SECOND.TOKEN.1234"',
+      ].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "leaky2" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Secret scan");
+    const warnings = section.items.filter((i) => i.status === "warning" && i.message.includes("leaky2.md"));
+    assert.strictEqual(warnings.length, 2);
+    assert.ok(warnings.some((i) => i.message.includes(":7")));
+    assert.ok(warnings.some((i) => i.message.includes(":9")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("secret scan covers senai config json files", () => {
+    const tmpDir = makeTmpDir("doctor-secret-config-");
+    saveAgentConfig(tmpDir, { version: 1, agents: { planner: "sk-ABCDEFGHIJKLMNOPQRSTUV" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Secret scan");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("agents.json"));
+    assert.ok(warning, "should flag the secret inside agents.json");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("team content check errors when the tools frontmatter line is missing", () => {
+    const tmpDir = makeTmpDir("doctor-team-notools-");
+    writeProjectPackage(tmpDir);
+    const name = `${SLUG}-scout-2`;
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", `${name}.md`),
+      ["---", `name: ${name}`, "description: team agent", "---", "", `# ${name}`, "", "## Your mandate", "", "- search", "", "## Technology craft (Generic)", "", "craft"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": name } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated team agents");
+    const item = section.items.find((i) => i.message.includes(name));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.details?.some((d) => d.includes("tools: line")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

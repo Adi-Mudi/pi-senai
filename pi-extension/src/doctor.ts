@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
+import { parseFrontmatter, getAgentDir } from "@mariozechner/pi-coding-agent";
 import {
   findNearestProjectAgentsDir,
   getUserAgentsDir,
@@ -31,6 +32,12 @@ import {
 import { loadDrivers } from "./driver-extractor.js";
 import { parseAgentFile } from "./agent-discovery.js";
 import { getArchitectStateDir, getArchitectMapDir } from "./constants.js";
+import {
+  GENERATED_ROLES,
+  getBundledTechnologiesDir,
+  getProjectSlug,
+  getProjectTechnologiesDir,
+} from "./agent-generator.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 
@@ -143,6 +150,11 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   sections.push(checkArchitectureAgentMapping(cwd, agentConfig));
   sections.push(checkGeneratedAgentContent(cwd));
   sections.push(checkArchitectureDrift(cwd));
+  sections.push(checkGeneratedTeamContent(cwd, agentConfig));
+  sections.push(checkTechnologyResources(cwd));
+  sections.push(checkAgentSkillReferences(cwd, resolvedAgents));
+  sections.push(checkAgentFileIntegrity(cwd, resolvedAgents));
+  sections.push(checkSecretScan(cwd));
 
   const summary = sections.reduce(
     (acc, section) => {
@@ -994,6 +1006,317 @@ function checkArchitectureDrift(cwd: string): DiagnosticSection {
   }
 
   return { title: "Architecture drift", items };
+}
+
+function checkGeneratedTeamContent(cwd: string, agentConfig: AgentConfig | null): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const slug = getProjectSlug(cwd);
+  let found = 0;
+
+  for (const def of GENERATED_ROLES) {
+    const expectedName = `${slug}-${def.role}`;
+    const actual = resolveAgentName(agentConfig, def.role as SenaiRole);
+    if (actual !== expectedName) continue; // custom mapping — not a generated team agent
+
+    const filePath = path.join(cwd, ".pi", "agents", `${expectedName}.md`);
+    if (!fs.existsSync(filePath)) continue; // missing files are reported by the mapping sources section
+
+    found++;
+    const content = fs.readFileSync(filePath, "utf8");
+    const problems: string[] = [];
+
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
+    if (!/^tools:/m.test(frontmatter)) {
+      problems.push("frontmatter is missing a tools: line");
+    }
+    if (!content.includes("## Your mandate")) {
+      problems.push("body is missing the '## Your mandate' section");
+    }
+    if (!content.includes("## Technology craft")) {
+      problems.push("body is missing a '## Technology craft' section");
+    }
+
+    if (problems.length === 0) {
+      items.push({ status: "ok", message: `${expectedName}: content complete` });
+    } else {
+      items.push({
+        status: "error",
+        message: `${expectedName}: content is incomplete`,
+        details: [...problems, "Fix: delete the file and re-run /senai-generate-agents."],
+      });
+    }
+  }
+
+  if (found === 0) {
+    items.push({
+      status: "info",
+      message: "No generated team agents found. Run /senai-generate-agents to create them.",
+    });
+  }
+
+  return { title: "Generated team agents", items };
+}
+
+function checkTechnologyResources(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  const dirs: Array<{ dir: string; label: string }> = [
+    { dir: getBundledTechnologiesDir(), label: "bundled" },
+    { dir: getProjectTechnologiesDir(cwd), label: "project" },
+  ];
+
+  let bundledGenericFound = false;
+  let resourceCount = 0;
+
+  for (const { dir, label } of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const entry of fs.readdirSync(dir)) {
+      if (!entry.endsWith(".md") || entry === "_template.md") continue;
+      const filePath = path.join(dir, entry);
+      const problems: string[] = [];
+      try {
+        const content = fs.readFileSync(filePath, "utf8");
+        const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
+        const id = String(frontmatter.id ?? "").trim();
+        if (!id) problems.push("frontmatter is missing an id");
+        const keywords = frontmatter.keywords;
+        const hasKeywords =
+          (Array.isArray(keywords) && keywords.length > 0) ||
+          (typeof keywords === "string" && keywords.trim() !== "");
+        if (!hasKeywords) problems.push("frontmatter has no keywords (matching will never find it)");
+        const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+        if (!body) problems.push("body is empty");
+        if (label === "bundled" && id === "generic" && problems.length === 0) {
+          bundledGenericFound = true;
+        }
+      } catch {
+        problems.push("file could not be parsed");
+      }
+
+      if (problems.length === 0) {
+        resourceCount++;
+      } else {
+        items.push({
+          status: "warning",
+          message: `${label} resource ${entry} has problems`,
+          details: problems,
+        });
+      }
+    }
+  }
+
+  if (!bundledGenericFound) {
+    items.push({
+      status: "error",
+      message: "The bundled generic.md fallback resource is missing or invalid.",
+      details: ["Restore resources/technologies/generic.md in the extension."],
+    });
+  }
+
+  if (resourceCount > 0) {
+    items.push({ status: "ok", message: `${resourceCount} technology resource(s) valid.` });
+  }
+
+  return { title: "Technology resources", items };
+}
+
+function resolveSkillFile(cwd: string, skillName: string): string | null {
+  const candidates = [
+    path.join(cwd, ".pi", "skills", skillName, "SKILL.md"),
+    path.join(getAgentDir(), "skills", skillName, "SKILL.md"),
+    path.resolve(getBundledTechnologiesDir(), "..", "..", "skills", `${skillName}.md`),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function validateSkillFile(filePath: string): string[] {
+  const problems: string[] = [];
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
+    if (!String(frontmatter.name ?? "").trim()) problems.push("SKILL.md frontmatter is missing a name");
+    if (!String(frontmatter.description ?? "").trim()) problems.push("SKILL.md frontmatter is missing a description");
+    const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+    if (!body) problems.push("SKILL.md body is empty");
+  } catch {
+    problems.push("SKILL.md could not be parsed");
+  }
+  return problems;
+}
+
+function checkAgentSkillReferences(
+  cwd: string,
+  resolved: Record<SenaiRole, ResolvedAgent>,
+): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  let checked = 0;
+
+  for (const role of SENAI_ROLES) {
+    const agent = resolved[role];
+    if (!agent.frontmatter || !agent.frontmatter.skills || agent.frontmatter.skills.length === 0) continue;
+
+    for (const skillName of agent.frontmatter.skills) {
+      checked++;
+      const skillPath = resolveSkillFile(cwd, skillName);
+      if (!skillPath) {
+        items.push({
+          status: "error",
+          message: `${agent.name} (${role}) references missing skill "${skillName}"`,
+          details: [
+            `No SKILL.md found in .pi/skills/, the user skills dir, or the bundled skills.`,
+            `Create the skill or remove it from the agent's skills: line.`,
+          ],
+        });
+        continue;
+      }
+      const problems = validateSkillFile(skillPath);
+      if (problems.length > 0) {
+        items.push({
+          status: "warning",
+          message: `${agent.name} (${role}) references invalid skill "${skillName}"`,
+          details: problems.map((p) => `${skillPath}: ${p}`),
+        });
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    items.push({
+      status: checked === 0 ? "info" : "ok",
+      message: checked === 0 ? "No agents reference skills." : `All ${checked} skill reference(s) are valid.`,
+    });
+  }
+
+  return { title: "Agent skill references", items };
+}
+
+const KNOWN_TOOL_NAMES = new Set([
+  "read", "write", "edit", "bash", "grep", "find", "ls",
+  "askuserquestion", "intercom", "subagent",
+  "taskcreate", "taskexecute", "taskget", "tasklist", "taskoutput", "taskstop", "taskupdate",
+]);
+
+function isKnownToolName(tool: string): boolean {
+  if (tool.startsWith("ext:")) return tool.length > 4;
+  return KNOWN_TOOL_NAMES.has(tool.toLowerCase());
+}
+
+const VALID_THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+
+function checkAgentFileIntegrity(
+  cwd: string,
+  resolved: Record<SenaiRole, ResolvedAgent>,
+): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  for (const role of SENAI_ROLES) {
+    const agent = resolved[role];
+    if (!agent.filePath || !agent.frontmatter) continue; // built-ins and missing agents are covered elsewhere
+
+    const problems: Array<{ status: DiagnosticStatus; text: string }> = [];
+    const fileName = path.basename(agent.filePath, ".md");
+    const content = fs.readFileSync(agent.filePath, "utf8");
+
+    if (agent.frontmatter.name !== fileName) {
+      problems.push({
+        status: "error",
+        text: `frontmatter name "${agent.frontmatter.name}" does not match the filename "${fileName}"`,
+      });
+    }
+
+    const tools = agent.frontmatter.tools ?? [];
+    const unknownTools = tools.filter((t) => !isKnownToolName(t));
+    if (unknownTools.length > 0) {
+      problems.push({ status: "error", text: `unknown tool name(s): ${unknownTools.join(", ")} (typo?)` });
+    }
+
+    const thinking = agent.frontmatter.thinking;
+    if (thinking && !VALID_THINKING_LEVELS.has(thinking.toLowerCase())) {
+      problems.push({ status: "warning", text: `unknown thinking level "${thinking}"` });
+    }
+
+    const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+    if (!body) {
+      problems.push({ status: "error", text: "agent body is empty — no instructions" });
+    }
+
+    if (problems.length === 0) continue;
+    items.push({
+      status: problems.some((p) => p.status === "error") ? "error" : "warning",
+      message: `${agent.name} (${role}) at ${path.relative(cwd, agent.filePath)}`,
+      details: problems.map((p) => p.text),
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({ status: "ok", message: "All mapped agent files are internally valid." });
+  }
+
+  return { title: "Agent file integrity", items };
+}
+
+const SECRET_PATTERNS: RegExp[] = [
+  /api[_-]?key\s*[:=]\s*["']?[A-Za-z0-9_\-]{8,}/i,
+  /secret\s*[:=]\s*["']?[A-Za-z0-9_\-]{8,}/i,
+  /password\s*[:=]\s*["']?[^\s"']{6,}/i,
+  /token\s*[:=]\s*["']?[A-Za-z0-9_\-.]{10,}/i,
+  /BEGIN [A-Z]+ PRIVATE KEY/,
+  /sk-[A-Za-z0-9]{20,}/,
+  /AIza[0-9A-Za-z_\-]{20,}/,
+];
+
+function checkSecretScan(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const filesToScan: string[] = [];
+
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  if (fs.existsSync(agentsDir)) {
+    for (const entry of fs.readdirSync(agentsDir)) {
+      if (entry.endsWith(".md")) filesToScan.push(path.join(agentsDir, entry));
+    }
+  }
+  const skillsDir = path.join(cwd, ".pi", "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
+      if (fs.existsSync(skillPath)) filesToScan.push(skillPath);
+    }
+  }
+  const senaiDir = path.join(cwd, ".pi", "senai");
+  if (fs.existsSync(senaiDir)) {
+    for (const entry of fs.readdirSync(senaiDir)) {
+      if (entry.endsWith(".json")) filesToScan.push(path.join(senaiDir, entry));
+    }
+  }
+
+  for (const filePath of filesToScan) {
+    let lines: string[];
+    try {
+      lines = fs.readFileSync(filePath, "utf8").split("\n");
+    } catch {
+      continue;
+    }
+    for (let i = 0; i < lines.length; i++) {
+      if (SECRET_PATTERNS.some((pattern) => pattern.test(lines[i]))) {
+        items.push({
+          status: "warning",
+          message: `Possible secret at ${path.relative(cwd, filePath)}:${i + 1}`,
+          details: ["Move secrets to environment variables. Never commit them."],
+        });
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    items.push({ status: "ok", message: `No secrets found in ${filesToScan.length} scanned file(s).` });
+  }
+
+  return { title: "Secret scan", items };
 }
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {

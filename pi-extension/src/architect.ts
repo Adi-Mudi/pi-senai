@@ -251,6 +251,24 @@ export function loadGeneratedManifest(cwd: string): GeneratedManifest | null {
   }
 }
 
+// Merges new files into an existing manifest without wiping other entries.
+// Used when a second generator (e.g. the sub-agent generator) adds files to
+// drift tracking after the architecture factory wrote its own entries.
+export function addToGeneratedManifest(cwd: string, files: string[]): GeneratedManifest {
+  const existing = loadGeneratedManifest(cwd);
+  const manifest: GeneratedManifest = existing ?? { version: 1, generatedAt: "", files: {} };
+  for (const filePath of files) {
+    if (!fs.existsSync(filePath)) continue;
+    const hash = createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+    manifest.files[path.relative(cwd, filePath)] = hash;
+  }
+  manifest.generatedAt = new Date().toISOString();
+  const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  return manifest;
+}
+
 export function saveArchitectReport(cwd: string, report: ArchitectReport): void {
   const reportPath = getArchitectReportPath(cwd);
   fs.mkdirSync(path.dirname(reportPath), { recursive: true });

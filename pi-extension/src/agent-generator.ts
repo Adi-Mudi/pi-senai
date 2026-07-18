@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
-import { loadArchitectReport, slugify, type ArchitectReport } from "./architect.js";
+import { addToGeneratedManifest, loadArchitectReport, slugify, type ArchitectReport } from "./architect.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -218,12 +218,14 @@ export function planAgentGeneration(
 
 // Writes agent files into .pi/agents/. Existing files are NEVER overwritten —
 // they are reported as skipped so the user keeps their own custom agents.
+// Created files are added to the generation manifest for drift tracking.
 export function writeGeneratedAgents(cwd: string, plans: GeneratedAgentPlan[]): WriteAgentsResult {
   const agentsDir = path.join(cwd, ".pi", "agents");
   fs.mkdirSync(agentsDir, { recursive: true });
 
   const created: string[] = [];
   const skipped: string[] = [];
+  const createdAbsolute: string[] = [];
   for (const plan of plans) {
     const filePath = path.join(agentsDir, `${plan.agentName}.md`);
     if (fs.existsSync(filePath)) {
@@ -232,6 +234,10 @@ export function writeGeneratedAgents(cwd: string, plans: GeneratedAgentPlan[]): 
     }
     fs.writeFileSync(filePath, plan.content, "utf8");
     created.push(path.relative(cwd, filePath));
+    createdAbsolute.push(filePath);
+  }
+  if (createdAbsolute.length > 0) {
+    addToGeneratedManifest(cwd, createdAbsolute);
   }
   return { created, skipped };
 }

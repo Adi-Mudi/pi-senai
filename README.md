@@ -63,6 +63,10 @@ This checks that all config files exist, every mapped agent is found in the righ
 
 Once an architecture is generated, doctor also validates it: the seven architecture-bound roles (`scout-1`, `planner`, `implementer`, `reviewer-correctness`, `reviewer-security`, `reviewer-tests`, `code-review`) must map to the generated agents, each generated agent file must be intact (tools, a working skill link, and references to `architecture.md`, the ADRs, and the forbidden patterns), and no generated file may be modified after generation (drift warning).
 
+Doctor is the final authority on your setup. Beyond the basics it also checks: generated team agents (mandate and technology craft present), technology resources (valid frontmatter, `generic` fallback present), every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), and secrets accidentally committed in agent, skill, or config files.
+
+Every run saves the full report to `.IDE_Plans/senai/doctor-report.md` (overwritten each run).
+
 ## Usage
 
 Start a new run:
