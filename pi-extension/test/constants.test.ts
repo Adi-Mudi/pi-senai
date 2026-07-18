@@ -8,6 +8,7 @@ import {
   getArtifactPaths,
   getDefaultArtifactPaths,
   makeRunId,
+  STAGES,
   STAGE_TRANSITIONS,
   formatStageStatus,
   getArchitectStateDir,
@@ -152,5 +153,22 @@ describe("constants", () => {
     assert.ok(status.includes("Active stage: none"));
     assert.ok(!status.includes("Mission:"));
     assert.ok(!status.includes("Run ID:"));
+  });
+
+  it("makeRunId strips unicode and emoji from the mission slug", () => {
+    const runId = makeRunId("Fix the 🚀 login बग");
+    assert.match(runId, /^[a-z0-9-]+$/);
+  });
+
+  it("formatStageStatus shows runId when mission is missing", () => {
+    const status = formatStageStatus({ currentStage: "planning", runId: "run-1" });
+    assert.ok(status.includes("Run ID: run-1"));
+    assert.ok(!status.includes("Mission:"));
+  });
+
+  it("STAGE_TRANSITIONS has an entry for every stage", () => {
+    for (const stage of STAGES) {
+      assert.ok(Array.isArray(STAGE_TRANSITIONS[stage]), `Missing transitions for ${stage}`);
+    }
   });
 });

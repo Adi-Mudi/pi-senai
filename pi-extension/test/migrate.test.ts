@@ -79,4 +79,28 @@ describe("migrateLegacyOrchestraDirs", () => {
     assert.ok(fs.existsSync(path.join(tmpDir, ".IDE_Plans", "senai", "state.json")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai", "agents.json")));
   });
+
+  it("preserves nested directory contents during migration", () => {
+    const legacyIde = path.join(tmpDir, ".IDE_Plans", "orchestra");
+    const nested = path.join(legacyIde, "runs", "2026-01-01-test", "plan", "scouts");
+    fs.mkdirSync(nested, { recursive: true });
+    fs.writeFileSync(path.join(nested, "scout-angle_1.md"), "# scout notes");
+
+    migrateLegacyOrchestraDirs(tmpDir);
+
+    const movedFile = path.join(tmpDir, ".IDE_Plans", "senai", "runs", "2026-01-01-test", "plan", "scouts", "scout-angle_1.md");
+    assert.ok(fs.existsSync(movedFile));
+    assert.strictEqual(fs.readFileSync(movedFile, "utf8"), "# scout notes");
+  });
+
+  it("migrates only the legacy directory that exists", () => {
+    const legacyPi = path.join(tmpDir, ".pi", "orchestra");
+    fs.mkdirSync(legacyPi, { recursive: true });
+
+    const moved = migrateLegacyOrchestraDirs(tmpDir);
+
+    assert.deepStrictEqual(moved, [".pi/senai"]);
+    assert.ok(!fs.existsSync(legacyPi));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans", "senai")), "IDE senai dir should not be created");
+  });
 });

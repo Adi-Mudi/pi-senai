@@ -137,4 +137,30 @@ describe("files-config", () => {
       /codePaths/,
     );
   });
+
+  it("loadFilesConfig throws on unsupported version 3", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "senai", "files.json"),
+      JSON.stringify({ version: 3, codePaths: [], inputDocuments: [], testPaths: [], excludedPaths: [] }),
+      "utf8",
+    );
+    assert.throws(() => loadFilesConfig(tmpDir), /Unsupported files\.json version: 3/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("migrateFilesConfig puts spec folders into testPaths", () => {
+    const v1: FilesConfigV1 = { version: 1, files: ["spec/", "src/"] };
+    const v2 = migrateFilesConfig(v1);
+    assert.deepStrictEqual(v2.testPaths, ["spec/"]);
+    assert.deepStrictEqual(v2.codePaths, ["src/"]);
+  });
+
+  it("validateFilesConfig rejects non-string entries in excludedPaths", () => {
+    assert.throws(
+      () => validateFilesConfig(makeV2Config({ excludedPaths: [42] } as any)),
+      /strings/,
+    );
+  });
 });

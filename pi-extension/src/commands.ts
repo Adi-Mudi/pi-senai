@@ -1546,9 +1546,9 @@ export function defaultArchitectSkill(): string {
 }
 
 export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
-  pi.registerCommand("senai-generate-agents", {
-    description: "Generate project-specific sub-agents for the non-architecture Senai roles",
-    handler: async (_args, ctx) => {
+  const command = {
+    description: "Generate project-specific sub-agents for the non-architecture Senai roles (alias: /senai-generate-agents)",
+    handler: async (_args: string, ctx: ExtensionContext) => {
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
 
       const config = loadAgentConfig(ctx.cwd)!;
@@ -1641,5 +1641,8 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
       lines.push("Next: run /senai-doctor to verify the setup.");
       ctx.ui.notify(lines.join("\n"), "info");
     },
-  });
+  };
+  pi.registerCommand("senai-generate-sub-agents", command);
+  // Alias kept for backwards compatibility.
+  pi.registerCommand("senai-generate-agents", command);
 }

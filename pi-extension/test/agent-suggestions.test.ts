@@ -3,6 +3,7 @@ import assert from "node:assert";
 import {
   buildSuggestionMap,
   DEFAULT_AGENTS,
+  ROLE_LABELS,
   SENAI_ROLES,
   suggestAgentForRole,
 } from "../src/agent-suggestions.js";
@@ -121,6 +122,21 @@ describe("agent-suggestions", () => {
   it("DEFAULT_AGENTS covers every role", () => {
     for (const role of SENAI_ROLES) {
       assert.ok(DEFAULT_AGENTS[role], `Missing default agent for ${role}`);
+    }
+  });
+
+  it("buildSuggestionMap returns an empty object for an empty agent list", () => {
+    assert.deepStrictEqual(buildSuggestionMap([]), {});
+  });
+
+  it("suggests by description text when the name has no keyword", () => {
+    const agents = [agent("alpha", "Security audit specialist")];
+    assert.strictEqual(suggestAgentForRole("security-gate", agents), "alpha");
+  });
+
+  it("ROLE_LABELS covers every role", () => {
+    for (const role of SENAI_ROLES) {
+      assert.ok(ROLE_LABELS[role] && ROLE_LABELS[role].length > 0, `Missing label for ${role}`);
     }
   });
 });

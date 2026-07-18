@@ -190,4 +190,31 @@ describe("prompt", () => {
     assert.ok(prompt.includes("## Document Scope"));
     assert.ok(prompt.includes("No default project files configured"));
   });
+
+  it("buildStagePrompt shows comparison reads for a role without a truth document", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 1,
+      documents: { planner: { reads: ["Doc/plan.md"] } },
+    });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes('reads="Doc/plan.md"'));
+    assert.ok(!prompt.includes("truth="));
+  });
+
+  it("buildStagePrompt for the deliver stage includes deliver artifact paths", () => {
+    const state = makeState("delivering", "run-deliver");
+    const { prompt } = buildStagePrompt(tmpDir, state, "deliver");
+    assert.ok(prompt.includes("security-report.md"));
+    assert.ok(prompt.includes("deliver-summary.md"));
+  });
 });

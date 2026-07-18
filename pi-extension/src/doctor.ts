@@ -1043,7 +1043,7 @@ function checkGeneratedTeamContent(cwd: string, agentConfig: AgentConfig | null)
       items.push({
         status: "error",
         message: `${expectedName}: content is incomplete`,
-        details: [...problems, "Fix: delete the file and re-run /senai-generate-agents."],
+        details: [...problems, "Fix: delete the file and re-run /senai-generate-sub-agents."],
       });
     }
   }
@@ -1051,7 +1051,7 @@ function checkGeneratedTeamContent(cwd: string, agentConfig: AgentConfig | null)
   if (found === 0) {
     items.push({
       status: "info",
-      message: "No generated team agents found. Run /senai-generate-agents to create them.",
+      message: "No generated team agents found. Run /senai-generate-sub-agents to create them.",
     });
   }
 

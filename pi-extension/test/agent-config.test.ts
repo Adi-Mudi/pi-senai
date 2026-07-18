@@ -108,4 +108,42 @@ describe("agent-config", () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("validateAgentConfig throws on missing agents field", () => {
+    const config = { version: 1, agents: null } as unknown as AgentConfig;
+    assert.throws(() => validateAgentConfig(config), /agents/);
+  });
+
+  it("validateAgentConfig throws on non-numeric version", () => {
+    const config = { version: "1", agents: {} } as unknown as AgentConfig;
+    assert.throws(() => validateAgentConfig(config), /version/);
+  });
+
+  it("validateMappedAgents ignores roles mapped to an empty string", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
+    const config: AgentConfig = { version: 1, agents: { implementer: "" } };
+    const errors = validateMappedAgents(tmpDir, config);
+    assert.deepStrictEqual(errors, []);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("saveAgentConfig and loadAgentConfig roundtrip preserves the mapping", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
+    const config: AgentConfig = {
+      version: 1,
+      agents: { planner: "my-planner", implementer: "worker", "scout-1": "my-scout" },
+    };
+    saveAgentConfig(tmpDir, config);
+    const loaded = loadAgentConfig(tmpDir);
+    assert.deepStrictEqual(loaded, config);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resolveAgentName with null config returns the default for every role", () => {
+    assert.strictEqual(resolveAgentName(null, "scout-1"), "scout");
+    assert.strictEqual(resolveAgentName(null, "implementer"), "worker");
+    assert.strictEqual(resolveAgentName(null, "security-gate"), "security-auditor");
+  });
 });

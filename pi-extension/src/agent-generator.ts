@@ -54,7 +54,12 @@ export interface WriteAgentsResult {
 }
 
 export function getBundledTechnologiesDir(): string {
-  // resources/ is at repo root; pi-extension/src/ is two levels below repo root
+  // resources/ is at repo root. Source layout: pi-extension/src is directly under repo root.
+  // Dist layout: pi-extension/src is under dist/. Check both so the function works in both.
+  const sourceLayout = path.resolve(__dirname, "../..", "resources", "technologies");
+  if (fs.existsSync(path.join(sourceLayout, "generic.md"))) {
+    return sourceLayout;
+  }
   return path.resolve(__dirname, "../../..", "resources", "technologies");
 }
 

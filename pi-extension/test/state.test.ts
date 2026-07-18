@@ -148,4 +148,28 @@ describe("state", () => {
     assert.strictEqual(loaded.currentStage, "none");
     assert.strictEqual(loaded.version, 1);
   });
+
+  it("resetState does not throw when the state file is missing", () => {
+    assert.doesNotThrow(() => resetState(tmpDir));
+  });
+
+  it("loadState migrates a non-numeric version safely", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({ version: "old", mission: "legacy" }));
+
+    const loaded = loadState(tmpDir);
+    assert.strictEqual(loaded.version, 1);
+    assert.strictEqual(loaded.mission, "legacy");
+    assert.strictEqual(loaded.currentStage, "none");
+  });
+
+  it("advanceStage from delivered reports no valid next stages", () => {
+    const state = { ...defaultState(), currentStage: "delivered" as const };
+    const result = advanceStage(tmpDir, state, "planning");
+    assert.strictEqual(result.ok, false);
+    if (!result.ok) {
+      assert.ok(result.reason.includes("(none)"), "reason should show (none) for empty transitions");
+    }
+  });
 });

@@ -6,6 +6,7 @@ import * as path from "node:path";
 import {
   getAgentsFilesConfigPath,
   loadAgentsFilesConfig,
+  migrateAgentsFilesConfig,
   saveAgentsFilesConfig,
   validateAgentsFilesConfig,
 } from "../src/agents-files-config.js";
@@ -120,5 +121,27 @@ describe("agents-files-config", () => {
     const parsed = JSON.parse(raw);
     assert.strictEqual(parsed.version, 2);
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadAgentsFilesConfig throws on version 3", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "senai", "agents_files.json"),
+      JSON.stringify({ version: 3, documents: {} }),
+      "utf8",
+    );
+    assert.throws(() => loadAgentsFilesConfig(tmpDir), /Unsupported agents_files config version 3/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("migrateAgentsFilesConfig returns empty documents when documents is undefined", () => {
+    const migrated = migrateAgentsFilesConfig({ version: 1 } as AgentsFilesConfig);
+    assert.deepStrictEqual(migrated, { version: 2, documents: {} });
+  });
+
+  it("validateAgentsFilesConfig rejects a documents array", () => {
+    const config = { version: 2, documents: ["x"] } as unknown as AgentsFilesConfig;
+    assert.throws(() => validateAgentsFilesConfig(config), /Unknown role/);
   });
 });

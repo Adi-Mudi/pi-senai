@@ -1331,4 +1331,80 @@ describe("doctor architecture validation", () => {
     assert.ok(item.details?.some((d) => d.includes("tools: line")));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("full-green project produces zero errors across all sections", () => {
+    const tmpDir = makeTmpDir("doctor-green-");
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: {
+        "scout-1": `${SLUG}-${ARCH}-planner`,
+        planner: `${SLUG}-${ARCH}-planner`,
+        implementer: `${SLUG}-${ARCH}-implementer`,
+        "reviewer-correctness": `${SLUG}-${ARCH}-reviewer-correctness`,
+        "reviewer-security": `${SLUG}-${ARCH}-reviewer-security`,
+        "reviewer-tests": `${SLUG}-${ARCH}-reviewer-tests`,
+        "code-review": `${SLUG}-${ARCH}-reviewer-correctness`,
+      },
+    });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "readme", path: "README.md" }],
+      additionalConstraints: [],
+    });
+    writeFile(
+      tmpDir,
+      path.join(".pi", "architecture-library", "modular-monolith.md"),
+      "---\nname: modular-monolith\n---\n# Modular Monolith",
+    );
+    saveTestProfile(tmpDir);
+    saveTestReport(tmpDir);
+    writeGeneratedSkills(tmpDir);
+    for (const role of GENERATED_ROLES) writeGeneratedAgent(tmpDir, role);
+    writeFile(tmpDir, path.join(".pi", "architect", "architecture.md"), "# Architecture");
+    writeGeneratedManifest(tmpDir, [
+      ...GENERATED_ROLES.map((r) => path.join(tmpDir, ".pi", "agents", `${SLUG}-${ARCH}-${r}.md`)),
+      ...["plan", "implement", "document", "deliver"].map((s) =>
+        path.join(tmpDir, ".pi", "skills", `${SLUG}-${ARCH}-${s}`, "SKILL.md"),
+      ),
+      path.join(tmpDir, ".pi", "architect", "architecture.md"),
+    ]);
+
+    const report = runSenaiDiagnostic(tmpDir);
+    assert.strictEqual(report.summary.error, 0, "no section may contain an error on a healthy project");
+    assert.strictEqual(report.ok, true);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("formatDiagnosticReport renders pass and fail verdicts", () => {
+    const passDir = makeTmpDir("doctor-verdict-pass-");
+    saveAgentConfig(passDir, { version: 1, agents: {} });
+    saveFilesConfig(passDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    writeFile(passDir, "src/index.ts");
+    saveAgentsFilesConfig(passDir, { version: 2, documents: {} });
+    const passText = formatDiagnosticReport(runSenaiDiagnostic(passDir));
+    assert.ok(passText.includes("✅ Configuration looks good."));
+    fs.rmSync(passDir, { recursive: true, force: true });
+
+    const failDir = makeTmpDir("doctor-verdict-fail-");
+    const failText = formatDiagnosticReport(runSenaiDiagnostic(failDir));
+    assert.ok(failText.includes("❌ Please fix the errors above"));
+    fs.rmSync(failDir, { recursive: true, force: true });
+  });
 });

@@ -150,4 +150,28 @@ describe("files-discovery", () => {
   it("formatSuggestion combines label and reason", () => {
     assert.strictEqual(formatSuggestion("src/", "common code folder"), "src/ (common code folder)");
   });
+
+  it("classifies a root-level code file into codeFiles", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "disc-root-code-"));
+    fs.writeFileSync(path.join(tmpDir, "app.py"), "print('hi')", "utf8");
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.ok(result.codeFiles.includes("app.py"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("classifies a root-level test file into testFiles", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "disc-root-test-"));
+    fs.writeFileSync(path.join(tmpDir, "foo.test.ts"), "// test", "utf8");
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.ok(result.testFiles.includes("foo.test.ts"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("classifies a root-level document into documentFiles", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "disc-root-doc-"));
+    fs.writeFileSync(path.join(tmpDir, "NOTES.md"), "# notes", "utf8");
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.ok(result.documentFiles.includes("NOTES.md"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

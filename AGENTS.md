@@ -59,7 +59,7 @@ npm test
 │   ├── agent-suggestions.ts # suggest agents per Senai role
 │   ├── agent-config.ts           # load/save/validate .pi/senai/agents.json
 │   ├── agent-registry.ts         # build agent registry prompt block
-│   ├── agent-generator.ts        # deterministic sub-agent generator (/senai-generate-agents)
+│   ├── agent-generator.ts        # deterministic sub-agent generator (/senai-generate-sub-agents)
 │   ├── files-config.ts           # load/save/validate .pi/senai/files.json
 │   └── agents-files-config.ts    # load/save/validate .pi/senai/agents_files.json
 ├── pi-extension/test/   # unit tests
@@ -131,7 +131,7 @@ The factory uses two deterministic tools to avoid LLM drift:
 
 ## Sub-agent generation
 
-`/senai-generate-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context.
+`/senai-generate-sub-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context. (`/senai-generate-agents` remains as an alias.)
 
 - Technology resources live in `resources/technologies/` (bundled) and `.pi/technologies/` (project overrides). Adding a technology means adding one markdown file with `id`, `name`, `keywords` frontmatter — no code change.
 - Every resource must be sourced from official documentation with cited URLs (see `_template.md`).

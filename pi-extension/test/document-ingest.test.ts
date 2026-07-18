@@ -225,4 +225,62 @@ describe("document-ingest", () => {
     assert.match(prompt, /prd/);
     assert.match(prompt, /\/out\.json/);
   });
+
+  it("readMapOutputs skips malformed files and keeps valid ones", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-mal-"));
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+    const valid = {
+      document: "a.md",
+      documentType: "prd",
+      functionalRequirements: [],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    fs.writeFileSync(path.join(mapDir, "good.json"), JSON.stringify(valid), "utf8");
+    fs.writeFileSync(path.join(mapDir, "bad.json"), "{ broken", "utf8");
+    const outputs = readMapOutputs(tmpDir);
+    assert.strictEqual(outputs.length, 1);
+    assert.strictEqual(outputs[0].document, "a.md");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("readMapOutputs returns an empty array when the map dir is missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-nodir-"));
+    assert.deepStrictEqual(readMapOutputs(tmpDir), []);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("buildIngestBatches returns an empty array for empty input", () => {
+    assert.deepStrictEqual(buildIngestBatches([], 4), []);
+  });
+
+  it("mergeMapOutputs deduplicates uncertainties and drops empty strings", () => {
+    const outputs = [
+      { document: "a", documentType: "prd", functionalRequirements: [], qualityAttributes: [], constraints: [], technicalConcerns: [], uncertainties: ["U1", ""] },
+      { document: "b", documentType: "prd", functionalRequirements: [], qualityAttributes: [], constraints: [], technicalConcerns: [], uncertainties: ["U1", "U2"] },
+    ] as any;
+    const merged = mergeMapOutputs(outputs);
+    assert.deepStrictEqual(merged.uncertainties, ["U1", "U2"]);
+  });
+
+  it("loadDocumentManifest returns null when missing and throws on unsupported version", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-manifest-"));
+    assert.strictEqual(loadDocumentManifest(tmpDir), null);
+    const manifestPath = getDocumentManifestPath(tmpDir);
+    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+    fs.writeFileSync(
+      manifestPath,
+      JSON.stringify({ version: 2, documents: [], mapOutputs: [], reducedDriversPath: "" }),
+      "utf8",
+    );
+    assert.throws(() => loadDocumentManifest(tmpDir), /Unsupported manifest version: 2/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("sanitizeDocumentPath collapses backslashes and repeated dashes", () => {
+    assert.strictEqual(sanitizeDocumentPath("docs\\sub\\PRD file!!.md"), "docs-sub-PRD-file-.md");
+  });
 });

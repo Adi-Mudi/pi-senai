@@ -276,4 +276,29 @@ describe("driver-extractor", () => {
     assert.strictEqual(normalized!.constraints[0].id, "C-1");
     assert.strictEqual(normalized!.technicalConcerns[0].id, "TC-1");
   });
+
+  it("normalizeDrivers returns null for non-object input", () => {
+    assert.strictEqual(normalizeDrivers(null), null);
+    assert.strictEqual(normalizeDrivers([1, 2, 3]), null);
+    assert.strictEqual(normalizeDrivers("drivers"), null);
+  });
+
+  it("mergeDrivers deduplicates uncertainties and keeps order", () => {
+    const a = { ...createEmptyDrivers(), uncertainties: ["U1", "U2"] };
+    const b = { ...createEmptyDrivers(), uncertainties: ["U2", "U3"] };
+    const merged = mergeDrivers(a, b);
+    assert.deepStrictEqual(merged.uncertainties, ["U1", "U2", "U3"]);
+  });
+
+  it("loadDrivers returns null for valid JSON with the wrong shape", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "drivers-shape-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"),
+      JSON.stringify({ foo: 1 }),
+      "utf8",
+    );
+    assert.strictEqual(loadDrivers(tmpDir), null);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

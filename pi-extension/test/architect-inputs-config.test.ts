@@ -83,4 +83,52 @@ describe("architect-inputs-config", () => {
     assert.deepStrictEqual(config.documents, []);
     assert.deepStrictEqual(config.additionalConstraints, []);
   });
+
+  it("validateArchitectInputsConfig rejects wrong version", () => {
+    const config = { version: 2, documents: [], additionalConstraints: [] } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(config), /version: 2/);
+  });
+
+  it("validateArchitectInputsConfig rejects non-array documents", () => {
+    const config = { version: 1, documents: "docs/PRD.md", additionalConstraints: [] } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(config), /documents/);
+  });
+
+  it("validateArchitectInputsConfig rejects a null document entry", () => {
+    const config = { version: 1, documents: [null], additionalConstraints: [] } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(config), /object/);
+  });
+
+  it("validateArchitectInputsConfig rejects an empty document path", () => {
+    const config = { version: 1, documents: [{ type: "prd", path: "" }], additionalConstraints: [] } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(config), /path/);
+  });
+
+  it("validateArchitectInputsConfig rejects invalid additionalConstraints", () => {
+    const notArray = { version: 1, documents: [], additionalConstraints: "keep it simple" } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(notArray), /additionalConstraints/);
+    const nonString = { version: 1, documents: [], additionalConstraints: [42] } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(nonString), /strings/);
+  });
+
+  it("loadArchitectInputsConfig throws on invalid JSON", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-inputs-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "architect-inputs.json"), "{ not json", "utf8");
+    assert.throws(() => loadArchitectInputsConfig(tmpDir), /Invalid architect inputs config/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("save and load roundtrip preserves documents and constraints", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-inputs-"));
+    const config: ArchitectInputsConfig = {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: ["Keep it simple"],
+    };
+    saveArchitectInputsConfig(tmpDir, config);
+    assert.deepStrictEqual(loadArchitectInputsConfig(tmpDir), config);
+    assert.strictEqual(isArchitectDocumentType("PRD"), false);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

@@ -226,4 +226,35 @@ describe("agent-discovery", () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("parseAgentFileFull parses comma-string tools into an array", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "comma-agent.md");
+    fs.writeFileSync(
+      filePath,
+      "---\nname: comma-agent\ndescription: Comma agent\ntools: read, write\n---\n",
+      "utf8",
+    );
+    const parsed = parseAgentFileFull(filePath);
+    assert.deepStrictEqual(parsed?.tools, ["read", "write"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discoverAgents returns built-ins when no project agents exist", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-none-"));
+    const agents = discoverAgents(tmpDir);
+    const names = agents.map((a) => a.name);
+    assert.ok(names.includes("scout"));
+    assert.ok(names.includes("planner"));
+    assert.ok(names.includes("security-auditor"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFile returns undefined for broken frontmatter", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-broken-"));
+    const filePath = path.join(tmpDir, "broken.md");
+    fs.writeFileSync(filePath, "---\nname: [unclosed\n---\nbody", "utf8");
+    assert.strictEqual(parseAgentFile(filePath), undefined);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

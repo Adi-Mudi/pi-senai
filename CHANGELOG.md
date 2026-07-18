@@ -16,12 +16,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Unit tests for all three sections.
 
 - Doctor final-authority upgrade.
-  - New sections: "Generated team agents" (mandate and technology craft present in `/senai-generate-agents` output), "Technology resources" (frontmatter validity, `generic` fallback required), "Agent skill references" (every skill named in an agent's `skills:` line exists and is a valid SKILL.md), "Agent file integrity" (frontmatter name matches filename, no tool-name typos, valid thinking level, non-empty body), and "Secret scan" (API keys, tokens, passwords, private keys in agent/skill/config files with file and line).
-  - Generated team agents are now drift-tracked: `/senai-generate-agents` merges their hashes into `.pi/architect/generated-manifest.json`.
+  - New sections: "Generated team agents" (mandate and technology craft present in `/senai-generate-sub-agents` output), "Technology resources" (frontmatter validity, `generic` fallback required), "Agent skill references" (every skill named in an agent's `skills:` line exists and is a valid SKILL.md), "Agent file integrity" (frontmatter name matches filename, no tool-name typos, valid thinking level, non-empty body), and "Secret scan" (API keys, tokens, passwords, private keys in agent/skill/config files with file and line).
+  - Generated team agents are now drift-tracked: `/senai-generate-sub-agents` merges their hashes into `.pi/architect/generated-manifest.json`.
   - Every doctor run saves the report to `.IDE_Plans/senai/doctor-report.md`.
 
 - Sub-agent generation.
-  - New slash command: `/senai-generate-agents` — generates project-specific sub-agents for the 14 non-architecture Senai roles (scouts 2–4, discussion, plan overview, test skeleton, linter, full test, the four doc writers, security gate, archive).
+  - New slash command: `/senai-generate-sub-agents` — generates project-specific sub-agents for the 14 non-architecture Senai roles (scouts 2–4, discussion, plan overview, test skeleton, linter, full test, the four doc writers, security gate, archive).
   - New source module: `agent-generator.ts` — fully deterministic assembly (role template + technology resource + architect report context); no LLM content generation.
   - New bundled technology resource library: `resources/technologies/` with `google-apps-script`, `python`, and `generic` resources plus a `_template.md`. Projects can add or override resources in `.pi/technologies/`; adding a technology requires no code change.
   - Every resource is sourced from official documentation with cited URLs.
@@ -89,6 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Renamed `/senai-generate-agents` to `/senai-generate-sub-agents` for clarity. The old name remains registered as an alias, so existing usage keeps working.
 - Renamed extension branding and all user-facing identifiers from Orchestra to Senai.
   - Slash commands now use `/senai-*`.
   - Runtime directories are `.IDE_Plans/senai` and `.pi/senai`.

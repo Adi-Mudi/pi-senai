@@ -1134,7 +1134,7 @@ describe("commands", () => {
     saveAgentConfig(tmpDir, { version: 1, agents: { ...DEFAULT_AGENTS, ...custom } });
 
     registerAgentGeneratorCommand(makeApi());
-    await commandHandlers["senai-generate-agents"]("", makeCtx());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
 
     assert.ok(notifications.some((n) => n.message.includes("Nothing to generate")));
     assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")));
@@ -1147,7 +1147,7 @@ describe("commands", () => {
     });
 
     registerAgentGeneratorCommand(makeApi());
-    await commandHandlers["senai-generate-agents"]("", makeCtx());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
 
     const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
     assert.ok(saved.agents["scout-2"].endsWith("-scout-2"), "scout-2 should be remapped to the generated agent");
@@ -1164,7 +1164,7 @@ describe("commands", () => {
     registerAgentGeneratorCommand(makeApi());
     const ctx = makeCtx();
     (ctx.ui as any).confirm = async () => false;
-    await commandHandlers["senai-generate-agents"]("", ctx);
+    await commandHandlers["senai-generate-sub-agents"]("", ctx);
 
     assert.ok(notifications.some((n) => n.message.includes("cancelled")));
     assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")));
@@ -1180,7 +1180,7 @@ describe("commands", () => {
     fs.writeFileSync(path.join(agentsDir, `${collisionName}.md`), "USER_OWNED_CONTENT", "utf8");
 
     registerAgentGeneratorCommand(makeApi());
-    await commandHandlers["senai-generate-agents"]("", makeCtx());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
 
     const content = fs.readFileSync(path.join(agentsDir, `${collisionName}.md`), "utf8");
     assert.strictEqual(content, "USER_OWNED_CONTENT", "user file must be preserved byte-for-byte");
@@ -1191,13 +1191,13 @@ describe("commands", () => {
 
   it("senai-generate-agents second run is a clean no-op", async () => {
     registerAgentGeneratorCommand(makeApi());
-    await commandHandlers["senai-generate-agents"]("", makeCtx());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
     const agentsDir = path.join(tmpDir, ".pi", "agents");
     const firstCount = fs.readdirSync(agentsDir).length;
     assert.ok(firstCount > 0);
 
     notifications = [];
-    await commandHandlers["senai-generate-agents"]("", makeCtx());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
 
     assert.ok(notifications.some((n) => n.message.includes("Nothing to generate")));
     assert.strictEqual(fs.readdirSync(agentsDir).length, firstCount);
@@ -1211,6 +1211,16 @@ describe("commands", () => {
     const content = fs.readFileSync(reportPath, "utf8");
     assert.ok(content.includes("Pi Senai Diagnostic Report"));
     assert.ok(sentMessages.some((m) => m.includes("Report saved to .IDE_Plans/senai/doctor-report.md")));
+  });
+
+  it("senai-generate-agents alias invokes the same handler as senai-generate-sub-agents", async () => {
+    registerAgentGeneratorCommand(makeApi());
+    assert.ok(commandHandlers["senai-generate-sub-agents"], "new name registered");
+    assert.ok(commandHandlers["senai-generate-agents"], "alias registered");
+    await commandHandlers["senai-generate-agents"]("", makeCtx());
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    assert.ok(fs.existsSync(agentsDir), "alias run should generate agents");
+    assert.ok(fs.readdirSync(agentsDir).length > 0);
   });
 });
 

@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { buildAgentRegistryBlock } from "../src/agent-registry.js";
+import { SENAI_ROLES } from "../src/agent-suggestions.js";
 import type { AgentConfig } from "../src/agent-config.js";
 
 describe("agent-registry", () => {
@@ -41,5 +42,11 @@ describe("agent-registry", () => {
   it("includes fallback instruction", () => {
     const block = buildAgentRegistryBlock(null);
     assert.ok(block.includes("If a role is not listed above, use the default agent name."));
+  });
+
+  it("lists one line per senai role", () => {
+    const block = buildAgentRegistryBlock(null);
+    const roleLines = block.split("\n").filter((line) => line.startsWith("- "));
+    assert.strictEqual(roleLines.length, SENAI_ROLES.length);
   });
 });
