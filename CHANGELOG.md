@@ -89,7 +89,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Renamed `/senai-generate-agents` to `/senai-generate-sub-agents` for clarity. The old name remains registered as an alias, so existing usage keeps working.
+- Renamed `/senai-generate-agents` to `/senai-generate-sub-agents` for clarity. The old name is no longer registered.
 - Renamed extension branding and all user-facing identifiers from Orchestra to Senai.
   - Slash commands now use `/senai-*`.
   - Runtime directories are `.IDE_Plans/senai` and `.pi/senai`.

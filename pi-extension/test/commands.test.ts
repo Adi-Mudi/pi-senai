@@ -1213,14 +1213,10 @@ describe("commands", () => {
     assert.ok(sentMessages.some((m) => m.includes("Report saved to .IDE_Plans/senai/doctor-report.md")));
   });
 
-  it("senai-generate-agents alias invokes the same handler as senai-generate-sub-agents", async () => {
+  it("senai-generate-agents is not registered after the rename", async () => {
     registerAgentGeneratorCommand(makeApi());
     assert.ok(commandHandlers["senai-generate-sub-agents"], "new name registered");
-    assert.ok(commandHandlers["senai-generate-agents"], "alias registered");
-    await commandHandlers["senai-generate-agents"]("", makeCtx());
-    const agentsDir = path.join(tmpDir, ".pi", "agents");
-    assert.ok(fs.existsSync(agentsDir), "alias run should generate agents");
-    assert.ok(fs.readdirSync(agentsDir).length > 0);
+    assert.strictEqual(commandHandlers["senai-generate-agents"], undefined, "old name must not be registered");
   });
 });
 

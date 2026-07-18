@@ -1547,7 +1547,7 @@ export function defaultArchitectSkill(): string {
 
 export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
   const command = {
-    description: "Generate project-specific sub-agents for the non-architecture Senai roles (alias: /senai-generate-agents)",
+    description: "Generate project-specific sub-agents for the non-architecture Senai roles",
     handler: async (_args: string, ctx: ExtensionContext) => {
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
 
@@ -1643,6 +1643,4 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
     },
   };
   pi.registerCommand("senai-generate-sub-agents", command);
-  // Alias kept for backwards compatibility.
-  pi.registerCommand("senai-generate-agents", command);
 }
