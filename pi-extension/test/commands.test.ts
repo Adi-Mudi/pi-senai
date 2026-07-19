@@ -32,6 +32,7 @@ import {
   saveArchitectInputsConfig,
 } from "../src/architect-inputs-config.js";
 import { saveArchitectReport, slugify } from "../src/architect.js";
+import { resolveSkillPath } from "../src/prompt.js";
 import { DEFAULT_AGENTS, type SenaiRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -1120,6 +1121,32 @@ describe("commands", () => {
 
     assert.ok(!sentMessages.some((m) => m.includes("<pi-senai-generate-architect>")));
     assert.ok(notifications.some((n) => n.message.includes("cancelled")));
+  });
+
+  it("registerArchitectCommand loads the bundled skill, not the fallback", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+
+    registerArchitectCommand(makeApi());
+    await commandHandlers["senai-generate-architect"]("", makeCtx());
+
+    assert.ok(
+      sentMessages.some((m) => m.includes("## Preconditions")),
+      "prompt should contain the real bundled skill",
+    );
+    assert.ok(
+      !sentMessages.some((m) => m.includes("Follow the sequence in Doc/architect-sequence.md.")),
+      "prompt should not contain the inline fallback",
+    );
+  });
+
+  it("resolveSkillPath resolves an existing skill file", () => {
+    const skillPath = resolveSkillPath("plan");
+    assert.ok(skillPath.endsWith(path.join("skills", "senai-plan.md")));
+    assert.ok(fs.existsSync(skillPath), `skill file should exist at ${skillPath}`);
   });
 
   it("senai-generate-agents reports nothing to do when all roles have custom agents", async () => {

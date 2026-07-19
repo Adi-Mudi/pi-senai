@@ -484,7 +484,7 @@ describe("doctor", () => {
     saveAgentConfig(tmpDir, {
       version: 1,
       agents: {
-        "reviewer-correctness": "read-only-reviewer",
+        "security-gate": "write-heavy-gate",
       },
     });
     saveFilesConfig(tmpDir, {
@@ -499,9 +499,9 @@ describe("doctor", () => {
     writeFile(tmpDir, "README.md");
     writeFile(tmpDir, "tests/index.test.ts");
 
-    writeAgent(tmpDir, "read-only-reviewer", {
-      name: "read-only-reviewer",
-      description: "Read-only reviewer",
+    writeAgent(tmpDir, "write-heavy-gate", {
+      name: "write-heavy-gate",
+      description: "Custom gate agent",
       tools: "read, write",
       output: "single",
     });
@@ -512,6 +512,122 @@ describe("doctor", () => {
 
     const mismatch = roleSection.items.find((i) => i.message.includes("read-only") && i.status === "warning");
     assert.ok(mismatch, "doctor should warn about read-only role with write tool");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports invalid agents.json without crashing", () => {
+    const tmpDir = makeTmpDir("doctor-invalid-agents-");
+
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    // Write an invalid agents config (malformed JSON).
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "{ not valid json", "utf8");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const configSection = report.sections.find((s) => s.title === "Configuration files");
+    assert.ok(configSection);
+
+    const invalidAgents = configSection.items.find((i) => i.message.includes("Invalid agent config"));
+    assert.ok(invalidAgents, "doctor should report invalid agents.json as an error instead of crashing");
+    assert.strictEqual(invalidAgents.status, "error");
+    assert.ok(invalidAgents.details?.some((d) => d.includes("/senai-configure-agents")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports invalid agents_files.json without crashing", () => {
+    const tmpDir = makeTmpDir("doctor-invalid-agents-files-");
+
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    // Write an invalid agents_files config (malformed JSON).
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"), "{ not valid json", "utf8");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const configSection = report.sections.find((s) => s.title === "Configuration files");
+    assert.ok(configSection);
+
+    const invalidAgentsFiles = configSection.items.find((i) => i.message.includes("Invalid agents_files config"));
+    assert.ok(invalidAgentsFiles, "doctor should report invalid agents_files.json as an error instead of crashing");
+    assert.strictEqual(invalidAgentsFiles.status, "error");
+    assert.ok(invalidAgentsFiles.details?.some((d) => d.includes("/senai-configure-agents-files")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writer roles accept write tools and require them", () => {
+    const tmpDir = makeTmpDir("doctor-writer-roles-");
+
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: {
+        "reviewer-correctness": "writer-reviewer",
+        planner: "read-only-planner",
+      },
+    });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["README.md"],
+      testPaths: ["tests/"],
+      excludedPaths: [".git/"],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    writeFile(tmpDir, "src/index.ts");
+    writeFile(tmpDir, "README.md");
+    writeFile(tmpDir, "tests/index.test.ts");
+
+    writeAgent(tmpDir, "writer-reviewer", {
+      name: "writer-reviewer",
+      description: "Reviewer that writes review files",
+      tools: "read, write",
+      output: "single",
+    });
+    writeAgent(tmpDir, "read-only-planner", {
+      name: "read-only-planner",
+      description: "Planner without write tool",
+      tools: "read",
+      output: "single",
+    });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const roleSection = report.sections.find((s) => s.title === "Agent-role capability fit");
+    assert.ok(roleSection);
+
+    const readonlyWarning = roleSection.items.find(
+      (i) => i.message.includes("writer-reviewer") && i.message.includes("read-only") && i.status === "warning",
+    );
+    assert.ok(!readonlyWarning, "writer role with write tool should not get a read-only warning");
+
+    const missingWrite = roleSection.items.find(
+      (i) => i.message.includes("read-only-planner") && i.message.includes("MISSING REQUIRED TOOLS"),
+    );
+    assert.ok(missingWrite, "writer role without write tool should be an error");
+    assert.strictEqual(missingWrite.status, "error");
+    assert.ok(missingWrite.details?.some((d) => d.includes("write")));
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

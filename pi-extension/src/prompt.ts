@@ -22,9 +22,16 @@ export interface StageContext {
   artifacts: StageArtifactPaths;
 }
 
-function resolveSkillPath(stage: string): string {
-  // skills/ is at repo root; pi-extension/src/ is two levels below repo root
-  return path.resolve(__dirname, "../../..", "skills", `senai-${stage}.md`);
+export function resolveSkillPath(stage: string): string {
+  // dist layout: dist/pi-extension/src -> repo root; source layout: pi-extension/src -> repo root
+  const candidates = [
+    path.resolve(__dirname, "../../..", "skills", `senai-${stage}.md`),
+    path.resolve(__dirname, "../..", "skills", `senai-${stage}.md`),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return candidates[0];
 }
 
 export function loadSkill(stage: string): string {

@@ -72,27 +72,21 @@ const BUILTIN_AGENT_NAMES = Array.from(new Set(Object.values(DEFAULT_AGENTS)));
 // (single source of truth); architecture-bound roles are listed explicitly.
 const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
   ...Object.fromEntries(GENERATED_ROLES.map((def) => [def.role, def.tools])),
-  "scout-1": ["read"],
-  planner: ["read"],
-  "reviewer-correctness": ["read"],
-  "reviewer-security": ["read"],
-  "reviewer-tests": ["read"],
+  "scout-1": ["read", "write"],
+  planner: ["read", "write"],
+  "reviewer-correctness": ["read", "write"],
+  "reviewer-security": ["read", "write"],
+  "reviewer-tests": ["read", "write"],
   implementer: ["read", "write", "edit"],
-  "code-review": ["read"],
+  "code-review": ["read", "write"],
 };
 
 const READONLY_ROLES: SenaiRole[] = [
-  "scout-1",
   "scout-2",
   "scout-3",
   "scout-4",
   "discussion",
-  "planner",
   "plan-overview",
-  "reviewer-correctness",
-  "reviewer-security",
-  "reviewer-tests",
-  "code-review",
   "security-gate",
 ];
 
@@ -108,7 +102,13 @@ const CONFLICTING_READONLY_PATTERNS = [
 export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const sections: DiagnosticSection[] = [];
 
-  const agentConfig = loadAgentConfig(cwd);
+  let agentConfig: AgentConfig | null = null;
+  let agentConfigError: string | null = null;
+  try {
+    agentConfig = loadAgentConfig(cwd);
+  } catch (err: any) {
+    agentConfigError = err.message;
+  }
 
   let filesConfig: FilesConfig | null = null;
   let filesConfigError: string | null = null;
@@ -118,9 +118,15 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
     filesConfigError = err.message;
   }
 
-  const agentsFilesConfig = loadAgentsFilesConfig(cwd);
+  let agentsFilesConfig: AgentsFilesConfig | null = null;
+  let agentsFilesConfigError: string | null = null;
+  try {
+    agentsFilesConfig = loadAgentsFilesConfig(cwd);
+  } catch (err: any) {
+    agentsFilesConfigError = err.message;
+  }
 
-  sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError));
+  sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
 
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
   sections.push(checkAgentMappings(resolvedAgents));
@@ -166,11 +172,19 @@ function checkConfigFiles(
   filesConfig: FilesConfig | null,
   agentsFilesConfig: AgentsFilesConfig | null,
   filesConfigError: string | null,
+  agentConfigError: string | null,
+  agentsFilesConfigError: string | null,
 ): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
   const agentPath = path.join(cwd, ".pi", "senai", "agents.json");
-  if (agentConfig) {
+  if (agentConfigError) {
+    items.push({
+      status: "error",
+      message: agentConfigError,
+      details: ["Run /senai-configure-agents to recreate the file."],
+    });
+  } else if (agentConfig) {
     items.push({ status: "ok", message: `agents.json found and valid at ${agentPath}` });
     if (agentConfig.version !== 1) {
       items.push({
@@ -204,7 +218,13 @@ function checkConfigFiles(
   }
 
   const agentsFilesPath = path.join(cwd, ".pi", "senai", "agents_files.json");
-  if (agentsFilesConfig) {
+  if (agentsFilesConfigError) {
+    items.push({
+      status: "error",
+      message: agentsFilesConfigError,
+      details: ["Run /senai-configure-agents-files to recreate the file."],
+    });
+  } else if (agentsFilesConfig) {
     items.push({
       status: "ok",
       message: `agents_files.json found and valid at ${agentsFilesPath}`,
@@ -335,7 +355,12 @@ function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): Dia
     const agent = resolved[role];
     const label = ROLE_LABELS[role];
 
-    if (agent.source === "not found" || !agent.frontmatter) continue;
+    // Default mappings and built-ins are the documented pre-generation
+    // fallback (Pi ships its planner/scout/reviewer agents read-only by
+    // design; the main session compensates writes). Capability checks apply
+    // to custom-mapped agents only.
+    const isDefaultMapping = agent.name === DEFAULT_AGENTS[role];
+    if (agent.source === "not found" || agent.source === "builtin" || isDefaultMapping || !agent.frontmatter) continue;
 
     const requiredTools = ROLE_REQUIRED_TOOLS[role] ?? [];
     const tools = agent.frontmatter.tools;

@@ -29,7 +29,7 @@ import {
   formatDiagnosticReport,
   runSenaiDiagnostic,
 } from "./doctor.js";
-import { buildStagePrompt } from "./prompt.js";
+import { buildStagePrompt, resolveSkillPath } from "./prompt.js";
 import {
   runListEditor,
   type ListEditorCustomAction,
@@ -1430,7 +1430,7 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
 
       if (!ensureAgentConfig(ctx.cwd, ctx)) return;
 
-      const skillPath = path.resolve(ctx.cwd, "skills", "senai-generate-architect.md");
+      const skillPath = resolveSkillPath("generate-architect");
       let skill = "";
       try {
         skill = fs.readFileSync(skillPath, "utf8").replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
