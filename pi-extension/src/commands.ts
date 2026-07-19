@@ -58,6 +58,7 @@ import { loadDrivers } from "./driver-extractor.js";
 import {
   areDriversStale,
   loadArchitectReport,
+  slugify,
   type ArchitectReport,
 } from "./architect.js";
 import {
@@ -1572,6 +1573,61 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
           "error",
         );
         return;
+      }
+
+      // When only the generic fallback matches, the user chooses: fetch real
+      // documentation, use generic explicitly, or cancel. Generic is never a
+      // silent default.
+      const onlyGeneric = matched.every((r) => r.id === "generic");
+      if (onlyGeneric) {
+        const hintText = stackHints.length > 0 ? ` (${stackHints.join(", ")})` : "";
+        const choice = await ctx.ui.select(`No technology resource matches this project${hintText}. What do you want to do?`, [
+          "Fetch from official docs (recommended)",
+          "Use generic resource",
+          "Cancel",
+        ]);
+        if (!choice || choice === "Cancel") {
+          ctx.ui.notify("Agent generation cancelled.", "info");
+          return;
+        }
+        if (choice === "Fetch from official docs (recommended)") {
+          let techHint = stackHints.join(" ").trim();
+          if (!techHint) {
+            const answer = await ctx.ui.input(
+              "Which technology should I fetch? (e.g., rust, django, react)",
+            );
+            techHint = (answer ?? "").trim();
+            if (!techHint) {
+              ctx.ui.notify("No technology given. Agent generation cancelled.", "info");
+              return;
+            }
+          }
+          const techId = slugify(techHint);
+          const resourcePath = `.pi/technologies/${techId}.md`;
+          const prompt = [
+            `<pi-senai-fetch-technology>`,
+            ``,
+            `Create a technology resource file for: ${techHint}`,
+            ``,
+            `Steps:`,
+            `1. Search the web for the OFFICIAL documentation of ${techHint} (official docs site, official guides, official API reference). Do not use blogs or unofficial sources.`,
+            `2. Fetch 2-4 official pages.`,
+            `3. Write ${resourcePath} following the template at resources/technologies/_template.md:`,
+            `   - YAML frontmatter: id: ${techId}, name: <human-readable name>, keywords: [<lowercase keywords including "${techId}">]`,
+            `   - Sections: ## Core rules, ## Testing patterns, ## Tooling and limits, ## Common mistakes`,
+            `   - Cite the official source URL for every section, like (source: https://...)`,
+            `   - Craft only: patterns, limits, testing, common mistakes. No generic advice.`,
+            `   - End with a "_Last updated: <date>_" line.`,
+            `4. Do NOT guess limits or quotas. If the official docs do not state something, leave it out.`,
+            ``,
+            `After writing the file, tell the user: "Technology resource created at ${resourcePath}. Re-run /senai-generate-sub-agents to generate your team."`,
+            ``,
+            `</pi-senai-fetch-technology>`,
+          ].join("\n");
+          pi.sendUserMessage(prompt);
+          return;
+        }
+        // "Use generic resource" falls through with the generic match.
       }
 
       const plans = planAgentGeneration(ctx.cwd, targets, matched, report);

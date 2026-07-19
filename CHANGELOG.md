@@ -28,6 +28,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Only roles on built-in defaults are generated; existing custom agents and mappings are never touched. One confirmation gate, then files are written to `.pi/agents/` and mapped in `agents.json`.
   - Unit tests for the generator module and the command.
 
+- Technology resource fetch + doctor technical validation.
+  - When no technology resource matches, `/senai-generate-sub-agents` now offers three choices instead of silently using generic: **Fetch from official docs** (recommended) — the agent searches official documentation and distills a real resource file into `.pi/technologies/<tech>.md` following `_template.md` with source URLs cited per section; **Use generic**; **Cancel**.
+  - The doctor "Technology resources" section now validates resources technically: template sections (core rules, testing patterns, tooling/limits or common mistakes) are required, at least one official source URL must be cited (the generic resource is exempt), and the resource id must appear in its keywords (separator-insensitive).
+
 - Document scope configuration.
   - New source modules: `files-config.ts` and `agents-files-config.ts`.
   - New slash commands: `/senai-configure-files`, `/senai-files`, `/senai-configure-agents-files`, `/senai-agents-files`.

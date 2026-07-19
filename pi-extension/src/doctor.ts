@@ -36,6 +36,7 @@ import {
   getBundledTechnologiesDir,
   getProjectSlug,
   getProjectTechnologiesDir,
+  parseKeywords,
 } from "./agent-generator.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
@@ -1068,13 +1069,32 @@ function checkTechnologyResources(cwd: string): DiagnosticSection {
         const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
         const id = String(frontmatter.id ?? "").trim();
         if (!id) problems.push("frontmatter is missing an id");
-        const keywords = frontmatter.keywords;
-        const hasKeywords =
-          (Array.isArray(keywords) && keywords.length > 0) ||
-          (typeof keywords === "string" && keywords.trim() !== "");
+        const keywords = parseKeywords(frontmatter.keywords);
+        const hasKeywords = keywords.length > 0;
         if (!hasKeywords) problems.push("frontmatter has no keywords (matching will never find it)");
+        const normalizeKey = (s: string) => s.toLowerCase().replace(/[-\s]+/g, " ").trim();
+        if (id && hasKeywords && !keywords.some((k) => normalizeKey(k) === normalizeKey(id))) {
+          problems.push(`keywords do not include the resource id "${id}" (matching by name will miss it)`);
+        }
         const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
         if (!body) problems.push("body is empty");
+
+        // Technical validation: craft sections and sourcing.
+        if (body) {
+          const missingSections: string[] = [];
+          if (!/^##\s+Core rules/im.test(body)) missingSections.push("## Core rules");
+          if (!/^##\s+Testing patterns/im.test(body)) missingSections.push("## Testing patterns");
+          if (!/^##\s+(Tooling and limits|Common mistakes)/im.test(body)) {
+            missingSections.push("## Tooling and limits or ## Common mistakes");
+          }
+          if (missingSections.length > 0) {
+            problems.push(`missing template section(s): ${missingSections.join(", ")}`);
+          }
+          if (id !== "generic" && !/https?:\/\//.test(body)) {
+            problems.push("no official source URL cited (sourcing rule)");
+          }
+        }
+
         if (label === "bundled" && id === "generic" && problems.length === 0) {
           bundledGenericFound = true;
         }

@@ -1088,6 +1088,52 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("resource check warns on missing template sections", () => {
+    const tmpDir = makeTmpDir("doctor-res-sections-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "technologies", "rust.md"),
+      "---\nid: rust\nname: Rust\nkeywords: [rust]\n---\n\nJust some prose, no sections. (source: https://doc.rust-lang.org/)",
+    );
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("rust.md"));
+    assert.ok(warning);
+    assert.ok(warning.details?.some((d) => d.includes("Core rules")));
+    assert.ok(warning.details?.some((d) => d.includes("Testing patterns")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check warns when no official source is cited", () => {
+    const tmpDir = makeTmpDir("doctor-res-nosrc-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "technologies", "rust.md"),
+      "---\nid: rust\nname: Rust\nkeywords: [rust]\n---\n\n## Core rules\n\n- x\n\n## Testing patterns\n\n- y\n\n## Tooling and limits\n\n- z\n",
+    );
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("rust.md"));
+    assert.ok(warning);
+    assert.ok(warning.details?.some((d) => d.includes("sourcing rule")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check warns when the id is missing from keywords", () => {
+    const tmpDir = makeTmpDir("doctor-res-idkey-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "technologies", "rust.md"),
+      "---\nid: rust\nname: Rust\nkeywords: [cargo]\n---\n\n## Core rules\n\n- x (source: https://doc.rust-lang.org/)\n\n## Testing patterns\n\n- y\n\n## Common mistakes\n\n- z\n",
+    );
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("rust.md"));
+    assert.ok(warning);
+    assert.ok(warning.details?.some((d) => d.includes("keywords do not include")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("skill reference check errors on a missing skill and accepts a valid one", () => {
     const tmpDir = makeTmpDir("doctor-skillref-");
     writeFile(
@@ -1219,7 +1265,7 @@ describe("doctor architecture validation", () => {
     writeFile(
       tmpDir,
       path.join(".pi", "technologies", "rust.md"),
-      '---\nid: rust\nname: Rust\nkeywords: "rust, cargo"\n---\n\nRust craft body.',
+      '---\nid: rust\nname: Rust\nkeywords: "rust, cargo"\n---\n\n## Core rules\n\n- x (source: https://doc.rust-lang.org/)\n\n## Testing patterns\n\n- y\n\n## Common mistakes\n\n- z\n',
     );
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Technology resources");

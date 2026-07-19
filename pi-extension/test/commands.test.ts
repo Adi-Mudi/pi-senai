@@ -1145,6 +1145,7 @@ describe("commands", () => {
       version: 1,
       agents: { ...DEFAULT_AGENTS, "code-review": "worker" },
     });
+    selectChoices = ["automation / scripts", "Use generic resource"];
 
     registerAgentGeneratorCommand(makeApi());
     await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
@@ -1161,6 +1162,7 @@ describe("commands", () => {
   });
 
   it("senai-generate-agents writes nothing when the user declines", async () => {
+    selectChoices = ["automation / scripts", "Use generic resource"];
     registerAgentGeneratorCommand(makeApi());
     const ctx = makeCtx();
     (ctx.ui as any).confirm = async () => false;
@@ -1173,6 +1175,7 @@ describe("commands", () => {
   });
 
   it("senai-generate-agents preserves an existing user file on name collision", async () => {
+    selectChoices = ["automation / scripts", "Use generic resource"];
     const slug = slugify(path.basename(tmpDir));
     const collisionName = `${slug}-scout-2`;
     const agentsDir = path.join(tmpDir, ".pi", "agents");
@@ -1190,6 +1193,7 @@ describe("commands", () => {
   });
 
   it("senai-generate-agents second run is a clean no-op", async () => {
+    selectChoices = ["automation / scripts", "Use generic resource"];
     registerAgentGeneratorCommand(makeApi());
     await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
     const agentsDir = path.join(tmpDir, ".pi", "agents");
@@ -1201,6 +1205,40 @@ describe("commands", () => {
 
     assert.ok(notifications.some((n) => n.message.includes("Nothing to generate")));
     assert.strictEqual(fs.readdirSync(agentsDir).length, firstCount);
+  });
+
+  it("senai-generate-agents uses generic when the user picks it explicitly", async () => {
+    selectChoices = ["automation / scripts", "Use generic resource"];
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.ok(saved.agents["scout-2"].endsWith("-scout-2"));
+    assert.ok(notifications.some((n) => n.message.includes("Generic")), "should mention the generic resource was used");
+  });
+
+  it("senai-generate-agents cancels when the user picks Cancel", async () => {
+    selectChoices = ["automation / scripts", "Cancel"];
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    assert.ok(notifications.some((n) => n.message.includes("cancelled")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")));
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(saved.agents["scout-2"], "scout");
+  });
+
+  it("senai-generate-agents sends the fetch prompt when the user picks Fetch", async () => {
+    selectChoices = ["automation / scripts", "Fetch from official docs (recommended)"];
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    assert.ok(sentMessages.some((m) => m.includes("<pi-senai-fetch-technology>")));
+    assert.ok(sentMessages.some((m) => m.includes(".pi/technologies/")));
+    assert.ok(sentMessages.some((m) => m.includes("OFFICIAL documentation")));
+    assert.ok(sentMessages.some((m) => m.includes("## Core rules")));
+    assert.ok(sentMessages.some((m) => m.includes("Re-run /senai-generate-sub-agents")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")), "no agents written on the fetch path");
   });
 
   it("senai-doctor writes the report artifact", async () => {

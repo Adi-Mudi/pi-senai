@@ -133,8 +133,8 @@ The factory uses two deterministic tools to avoid LLM drift:
 
 `/senai-generate-sub-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context.
 
-- Technology resources live in `resources/technologies/` (bundled) and `.pi/technologies/` (project overrides). Adding a technology means adding one markdown file with `id`, `name`, `keywords` frontmatter — no code change.
-- Every resource must be sourced from official documentation with cited URLs (see `_template.md`).
+- Technology resources live in `resources/technologies/` (bundled) and `.pi/technologies/` (project overrides). Adding a technology means adding one markdown file with `id`, `name`, `keywords` frontmatter — no code change. When nothing matches, the user chooses: fetch the resource from official documentation (distilled into `.pi/technologies/<tech>.md`), use `generic`, or cancel — generic is never a silent default.
+- Every resource must be sourced from official documentation with cited URLs and carry the template sections (core rules, testing patterns, tooling/limits, common mistakes). Doctor validates all of this in the "Technology resources" section, plus keyword matchability.
 - Only roles on built-in defaults are generated; existing custom agents and mappings are never touched. After one confirmation, files land in `.pi/agents/` and `agents.json` is updated.
 
 

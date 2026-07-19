@@ -67,7 +67,7 @@ export function getProjectTechnologiesDir(cwd: string): string {
   return path.join(cwd, ".pi", "technologies");
 }
 
-function parseKeywords(raw: unknown): string[] {
+export function parseKeywords(raw: unknown): string[] {
   if (Array.isArray(raw)) {
     return raw.map((k) => String(k).trim().toLowerCase()).filter(Boolean);
   }

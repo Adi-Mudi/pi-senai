@@ -227,7 +227,8 @@ Pi Senai can generate project-specific architecture agents and skills from your 
 `/senai-generate-sub-agents` creates project-specific sub-agents for the 14 non-architecture Senai roles (scouts 2–4, discussion, plan overview, test skeleton, linter, full test, the four doc writers, security gate, archive). The 7 architecture-bound roles are owned by `/senai-generate-architect` and are never generated here.
 
 - **Basic mode (default):** if no architect report exists, you answer 3–4 questions (project type, language, framework) and the full team is generated with sensible defaults. With an architect report, the generator reuses its tech stack and constraints.
-- **Technology resources:** agent craft comes from bundled resource files in `resources/technologies/` (`google-apps-script`, `python`, `generic`). The generator matches your tech stack against them and falls back to `generic`. Every resource is sourced from official documentation with cited URLs.
+- **Technology resources:** agent craft comes from bundled resource files in `resources/technologies/` (`google-apps-script`, `python`, `generic`). The generator matches your tech stack against them. Every resource is sourced from official documentation with cited URLs.
+- **No silent generic:** when no resource matches, you choose — **Fetch from official docs** (the agent searches official documentation and distills a real resource file into `.pi/technologies/<tech>.md`, cited per section; re-run the command to use it), **Use generic**, or **Cancel**.
 - **Safety:** only roles still on built-in defaults are generated. Existing custom agents are never overwritten, and existing custom mappings are never changed. After one confirmation, the new agents are written to `.pi/agents/` and mapped in `agents.json`.
 - Run `/senai-doctor` afterwards to validate the setup.
 
