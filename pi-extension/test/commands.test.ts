@@ -31,7 +31,7 @@ import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
 } from "../src/architect-inputs-config.js";
-import { slugify } from "../src/architect.js";
+import { saveArchitectReport, slugify } from "../src/architect.js";
 import { DEFAULT_AGENTS, type SenaiRole } from "../src/agent-suggestions.js";
 
 describe("commands", () => {
@@ -1239,6 +1239,115 @@ describe("commands", () => {
     assert.ok(sentMessages.some((m) => m.includes("## Core rules")));
     assert.ok(sentMessages.some((m) => m.includes("Re-run /senai-generate-sub-agents")));
     assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")), "no agents written on the fetch path");
+  });
+
+  it("senai-generate-agents skips the choice when a real resource matches", async () => {
+    const techDir = path.join(tmpDir, ".pi", "technologies");
+    fs.mkdirSync(techDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(techDir, "mytech.md"),
+      [
+        "---",
+        "id: mytech",
+        "name: My Tech",
+        "keywords: [mytech, automation]",
+        "---",
+        "",
+        "## Core rules",
+        "",
+        "1. MYTECH_CRAFT_MARKER_LINE (source: https://example.com/official)",
+        "",
+        "## Testing patterns",
+        "",
+        "1. Test with the official runner (source: https://example.com/official)",
+        "",
+        "## Tooling and limits",
+        "",
+        "1. Respect the official limits (source: https://example.com/official)",
+        "",
+        "## Common mistakes",
+        "",
+        "1. Do not guess behavior (source: https://example.com/official)",
+        "",
+      ].join("\n"),
+      "utf8",
+    );
+    // No selectChoices: every select falls back to options[0]. The project-type
+    // answer "automation / scripts" matches the seeded resource. If the
+    // onlyGeneric choice select were shown, options[0] would take the Fetch
+    // path and no agents would be written.
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.ok(saved.agents["scout-2"].endsWith("-scout-2"));
+    const agentFile = path.join(tmpDir, ".pi", "agents", `${saved.agents["scout-2"]}.md`);
+    const content = fs.readFileSync(agentFile, "utf8");
+    assert.ok(content.includes("## Technology craft (My Tech)"), "matched resource craft must be embedded");
+    assert.ok(content.includes("MYTECH_CRAFT_MARKER_LINE"));
+    assert.ok(!content.includes("Technology craft (Generic"), "generic resource must not be used");
+    assert.ok(!sentMessages.some((m) => m.includes("<pi-senai-fetch-technology>")), "no fetch prompt when a resource matches");
+  });
+
+  it("senai-generate-agents asks for the technology name when fetch has no hint", async () => {
+    selectChoices = ["", "Fetch from official docs (recommended)"];
+    inputs = ["", "", "rust"];
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    assert.ok(sentMessages.some((m) => m.includes("<pi-senai-fetch-technology>")));
+    assert.ok(sentMessages.some((m) => m.includes("rust")));
+    assert.ok(sentMessages.some((m) => m.includes(".pi/technologies/rust.md")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")), "no agents written on the fetch path");
+  });
+
+  it("senai-generate-agents cancels the fetch when the technology name is empty", async () => {
+    selectChoices = ["", "Fetch from official docs (recommended)"];
+    // All inputs empty: no language, no framework, no technology name.
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    assert.ok(notifications.some((n) => n.message.includes("No technology given. Agent generation cancelled.")));
+    assert.ok(!sentMessages.some((m) => m.includes("<pi-senai-fetch-technology>")), "no fetch prompt without a technology name");
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "agents")));
+  });
+
+  it("senai-generate-agents skips the basic questions when an architect report exists", async () => {
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "layered-monolith",
+      confidence: "high" as const,
+      missingResources: [],
+      reasoning: "Test report.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible" as const,
+      feasibilityReasoning: "Clear.",
+      techStack: ["python", "pytest"],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async () => {
+      throw new Error("select must not be called when a report exists");
+    };
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", ctx);
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.ok(saved.agents["scout-2"].endsWith("-scout-2"));
+    const agentFile = path.join(tmpDir, ".pi", "agents", `${saved.agents["scout-2"]}.md`);
+    const content = fs.readFileSync(agentFile, "utf8");
+    assert.ok(content.includes("## Technology craft (Python)"), "python craft from the report tech stack must be embedded");
+    assert.ok(content.includes("Follow PEP 8 style"));
+    assert.ok(!sentMessages.some((m) => m.includes("<pi-senai-fetch-technology>")));
   });
 
   it("senai-doctor writes the report artifact", async () => {
