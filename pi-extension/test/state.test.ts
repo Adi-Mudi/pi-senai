@@ -172,4 +172,118 @@ describe("state", () => {
       assert.ok(result.reason.includes("(none)"), "reason should show (none) for empty transitions");
     }
   });
+
+  it("loadState returns a version 1 state with missing fields as-is, but resets an invalid stage", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify({ version: 1 }));
+
+    // version 1 states skip migration entirely, so missing fields stay missing;
+    // only the stage is sanitized (undefined is not a valid stage).
+    const loaded = loadState(tmpDir);
+    assert.strictEqual(loaded.version, 1);
+    assert.strictEqual(loaded.mission, undefined);
+    assert.strictEqual(loaded.runId, undefined);
+    assert.strictEqual(loaded.currentStage, "none");
+  });
+
+  it("loadState throws when the JSON body is null", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, "null");
+
+    // NOTE: possible bug — see Doc/test-plan.md known issues
+    // JSON.parse("null") yields null and parsed.version throws before the
+    // version check can route to migrateState.
+    assert.throws(() => loadState(tmpDir), TypeError);
+  });
+
+  it("loadState migrates a JSON array body to the default state", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(statePath, JSON.stringify(["planning", "run-1"]));
+
+    // Arrays fail the version check, and migrateState finds no string fields
+    // on them, so the result is a plain default state.
+    const loaded = loadState(tmpDir);
+    assert.deepStrictEqual(loaded, defaultState());
+  });
+
+  it("loadState throws when the state path is a directory", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(statePath, { recursive: true });
+
+    assert.throws(
+      () => loadState(tmpDir),
+      (err: any) => err.code === "EISDIR",
+    );
+  });
+
+  it("advanceStage throws a TypeError for a garbage currentStage", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        mission: "Mission",
+        runId: "run-1",
+        currentStage: "bogus",
+        startedAt: "",
+        updatedAt: "",
+        stageResults: {},
+      }),
+    );
+
+    // A garbage stage is sanitized to "none" on load instead of crashing later.
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.currentStage, "none");
+    const result = advanceStage(tmpDir, state, "planning");
+    assert.ok(result.ok);
+  });
+
+  it("startRun called twice overwrites the previous state", () => {
+    const first = startRun(tmpDir, "First mission");
+    const second = startRun(tmpDir, "Second mission");
+    assert.notStrictEqual(first.runId, second.runId);
+
+    const loaded = loadState(tmpDir);
+    assert.strictEqual(loaded.runId, second.runId);
+    assert.strictEqual(loaded.mission, "Second mission");
+  });
+
+  it("startRun with an empty mission falls back to a -run suffix", () => {
+    const state = startRun(tmpDir, "");
+    assert.ok(state.runId.endsWith("-run"));
+    const loaded = loadState(tmpDir);
+    assert.strictEqual(loaded.runId, state.runId);
+  });
+
+  it("saveState throws when the senai directory is not writable", () => {
+    if (typeof process.getuid === "function" && process.getuid() === 0) {
+      // Root ignores file permission bits, so this case cannot be tested.
+      return;
+    }
+    const senaiDir = path.join(tmpDir, ".IDE_Plans/senai");
+    fs.mkdirSync(senaiDir, { recursive: true });
+    fs.chmodSync(senaiDir, 0o444);
+    try {
+      assert.throws(
+        () => saveState(tmpDir, defaultState()),
+        (err: any) => err.code === "EACCES",
+      );
+    } finally {
+      fs.chmodSync(senaiDir, 0o755);
+    }
+  });
+
+  it("resetState throws when the state path is a directory", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(statePath, { recursive: true });
+
+    assert.throws(
+      () => resetState(tmpDir),
+      (err: any) => err.code === "EISDIR" || err.code === "EPERM",
+    );
+  });
 });

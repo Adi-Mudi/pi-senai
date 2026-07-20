@@ -3,6 +3,7 @@ import * as path from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
+  autoMapArchitectureAgents,
   discoverArchitectureLibrary,
   generateAgentFiles,
   generateArchitectureDocs,
@@ -10,10 +11,12 @@ import {
   loadArchitectProfile,
   loadArchitectReport,
   removeStaleArchitectureArtifacts,
+  slugify,
   writeGeneratedManifest,
   type ArchitectureLibraryEntry,
 } from "./architect.js";
 import { getArchitectMapDir } from "./constants.js";
+import { loadAgentConfig } from "./agent-config.js";
 import {
   DOCUMENT_MANIFEST_FILE,
   mergeMapOutputs,
@@ -175,6 +178,10 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
         };
       }
 
+      // Validate agents.json before writing anything: a corrupted config would
+      // otherwise crash the auto-mapping step after artifacts were written.
+      loadAgentConfig(cwd);
+
       // Remove agents/skills left over from previous architecture runs before
       // generating the current set, so orphans never survive a re-run.
       const removedStaleArtifacts = removeStaleArchitectureArtifacts(cwd, profile);
@@ -185,12 +192,16 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
 
       const manifest = writeGeneratedManifest(cwd, [...createdDocs, ...createdAgents, ...createdSkills]);
 
+      const archId = architecture.id || slugify(architecture.name);
+      const mappedRoles = autoMapArchitectureAgents(cwd, profile, archId);
+
       const summary = {
         docs: createdDocs.map((p) => path.relative(cwd, p)),
         agents: createdAgents.map((p) => path.relative(cwd, p)),
         skills: createdSkills.map((p) => path.relative(cwd, p)),
         removedStaleArtifacts,
         manifestFiles: Object.keys(manifest.files).length,
+        mappedRoles,
       };
 
       return {

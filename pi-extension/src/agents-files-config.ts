@@ -53,7 +53,7 @@ export function saveAgentsFilesConfig(cwd: string, config: AgentsFilesConfig): v
 }
 
 export function validateAgentsFilesConfig(config: AgentsFilesConfig): void {
-  if (typeof config.version !== "number") {
+  if (typeof config.version !== "number" || config.version < 1) {
     throw new Error("Missing or invalid 'version' field; expected 2");
   }
   if (!config.documents || typeof config.documents !== "object") {

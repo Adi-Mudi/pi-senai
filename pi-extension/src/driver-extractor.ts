@@ -229,9 +229,10 @@ export function findDriverGaps(drivers: ArchitecturalDrivers): DriverGap[] {
     });
   }
 
-  const hasScale = drivers.qualityAttributes.some(
-    (qa) => qa.category.toLowerCase().includes("scale") || qa.category.toLowerCase().includes("performance"),
-  );
+  const hasScale = drivers.qualityAttributes.some((qa) => {
+    const category = qa.category.toLowerCase();
+    return category.includes("scale") || category.includes("scalability") || category.includes("performance");
+  });
   if (!hasScale) {
     gaps.push({
       category: "scale",

@@ -283,4 +283,82 @@ describe("document-ingest", () => {
   it("sanitizeDocumentPath collapses backslashes and repeated dashes", () => {
     assert.strictEqual(sanitizeDocumentPath("docs\\sub\\PRD file!!.md"), "docs-sub-PRD-file-.md");
   });
+
+  it("readMapOutputs ignores non-json files and subdirectories", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-nonjson-"));
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+    const valid = {
+      document: "a.md",
+      documentType: "prd",
+      functionalRequirements: [],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    fs.writeFileSync(path.join(mapDir, "good.json"), JSON.stringify(valid), "utf8");
+    fs.writeFileSync(path.join(mapDir, "notes.md"), "# not a map output", "utf8");
+    fs.mkdirSync(path.join(mapDir, "subdir"));
+
+    const outputs = readMapOutputs(tmpDir);
+    assert.strictEqual(outputs.length, 1);
+    assert.strictEqual(outputs[0].document, "a.md");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mergeMapOutputs drops a quality attribute whose id was already seen as a functional requirement", () => {
+    const outputs: ArchitectMapOutput[] = [
+      {
+        document: "docs/PRD.md",
+        documentType: "prd",
+        functionalRequirements: [{ id: "X-1", description: "Shared id requirement" }],
+        qualityAttributes: [{ id: "X-1", category: "scalability", description: "Shared id quality" }],
+        constraints: [],
+        technicalConcerns: [],
+        uncertainties: [],
+      },
+    ];
+    const merged = mergeMapOutputs(outputs);
+    // NOTE: seenIds is shared across categories, so the second occurrence is dropped.
+    assert.strictEqual(merged.functionalRequirements.length, 1);
+    assert.strictEqual(merged.functionalRequirements[0].id, "X-1");
+    assert.strictEqual(merged.qualityAttributes.length, 0);
+  });
+
+  it("mergeMapOutputs keeps only non-blank string uncertainties", () => {
+    const outputs = [
+      {
+        document: "a",
+        documentType: "prd",
+        functionalRequirements: [],
+        qualityAttributes: [],
+        constraints: [],
+        technicalConcerns: [],
+        uncertainties: [42, " ", "real"],
+      },
+    ] as any;
+    const merged = mergeMapOutputs(outputs);
+    assert.deepStrictEqual(merged.uncertainties, ["real"]);
+  });
+
+  it("loadDocumentManifest throws a wrapped error on malformed JSON", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "ingest-manifest-bad-"));
+    const manifestPath = getDocumentManifestPath(tmpDir);
+    fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+    fs.writeFileSync(manifestPath, "{ not valid", "utf8");
+    assert.throws(() => loadDocumentManifest(tmpDir), /Invalid document manifest/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("sanitizeDocumentPath strips leading and trailing dashes and maps spaces to dashes", () => {
+    assert.strictEqual(sanitizeDocumentPath("-my doc-"), "my-doc");
+    assert.strictEqual(sanitizeDocumentPath("  spaced out  "), "spaced-out");
+  });
+
+  it("buildIngestBatches rejects a zero, negative, or non-integer batch size", () => {
+    assert.throws(() => buildIngestBatches([1, 2], 0), /batchSize must be a positive integer/);
+    assert.throws(() => buildIngestBatches([1, 2], -3), /batchSize must be a positive integer/);
+    assert.throws(() => buildIngestBatches([1, 2], 1.5), /batchSize must be a positive integer/);
+  });
 });

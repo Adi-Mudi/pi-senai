@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- All 12 known issues from `Doc/test-plan.md` (found during the edge-case test round):
+  - `agent-registry.ts` — empty-string agent mappings now fall back to the default agent name.
+  - `agent-generator.ts` — an architect report with all-empty arrays no longer emits a bare `## Project context` header in generated agents.
+  - `agent-config.ts` — validation now rejects an `agents` array and non-string mapping values.
+  - `agents-files-config.ts` — config versions below 1 are rejected instead of being silently migrated.
+  - `architect-tools.ts` — `senai_finalize_architecture` validates `agents.json` before writing any artifacts, eliminating the partial-write crash hazard.
+  - `architect.ts` — `autoMapArchitectureAgents` no longer remaps a user's custom agent whose name starts with the project slug; stale detection requires the mapped agent file to be missing from disk.
+  - `document-ingest.ts` — `buildIngestBatches` throws on zero, negative, or non-integer batch sizes instead of looping forever.
+  - `files-discovery.ts` — uppercase file extensions are classified correctly; `isExcluded` requires a path-segment boundary (`"dist"` no longer excludes `distfoo.ts`); test-path matching is delimiter-aware (`latest/`, `contest.md` no longer match; `foo.test.ts`, `unit-tests/` still do).
+  - `files-config.ts` — v1 migration uses the same delimiter-aware test-path check via the shared `looksLikeTestPath` helper.
+  - `state.ts` — an invalid `currentStage` is reset to `"none"` on load instead of crashing `advanceStage` later.
+  - `driver-extractor.ts` — `findDriverGaps` recognizes `"scalability"` as scale coverage.
+
+### Changed
+
+- Setup sequence: generate commands now own `agents.json`.
+  - `/senai-generate-architect` and `/senai-generate-sub-agents` no longer require a pre-existing agent configuration. Both create or update `.pi/senai/agents.json` themselves.
+  - `senai_finalize_architecture` now auto-maps the seven architecture-bound roles (`scout-1`, `planner`, `implementer`, `reviewer-correctness`, `reviewer-security`, `reviewer-tests`, `code-review`) to the generated agents — roles still on built-in defaults or pointing at stale generated agents for the same project are remapped; other custom mappings are never touched.
+  - The role→agent mapping is now a single shared constant (`ARCHITECTURE_AGENT_MAPPING` in `architect.ts`) used by both the factory and doctor, so the writer and the checker can never drift apart.
+  - New one-time setup order: `/senai-configure-files` → `/senai-configure-architect-inputs` → `/senai-generate-architect` → `/senai-generate-sub-agents` → `/senai-configure-agents-files` → `/senai-doctor`. `/senai-configure-agents` is now an optional manual override for hand-picking custom agents. Stage commands still require all three config files.
+  - Unit tests for the auto-mapping (create, preserve custom, remap stale, no-op) and for running both generate commands without an existing `agents.json`.
+
 ### Added
 
 - Doctor architecture validation.

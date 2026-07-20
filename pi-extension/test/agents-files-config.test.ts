@@ -144,4 +144,56 @@ describe("agents-files-config", () => {
     const config = { version: 2, documents: ["x"] } as unknown as AgentsFilesConfig;
     assert.throws(() => validateAgentsFilesConfig(config), /Unknown role/);
   });
+
+  it("loadAgentsFilesConfig rejects version 0", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "senai", "agents_files.json"),
+      JSON.stringify({ version: 0, documents: { planner: { primary: "Doc/plan.md" } } }),
+      "utf8",
+    );
+
+    assert.throws(() => loadAgentsFilesConfig(tmpDir), /Invalid agents_files config/);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadAgentsFilesConfig wraps the error when the file content is JSON null", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"), "null", "utf8");
+
+    assert.throws(() => loadAgentsFilesConfig(tmpDir), /Invalid agents_files config/);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("validateAgentsFilesConfig rejects a string version", () => {
+    const config = { version: "2", documents: {} } as unknown as AgentsFilesConfig;
+    assert.throws(() => validateAgentsFilesConfig(config), /version/);
+  });
+
+  it("validateAgentsFilesConfig currently accepts a null documents entry", () => {
+    // Pin current behavior: a role mapped to null passes validation.
+    const config = { version: 2, documents: { planner: null } } as unknown as AgentsFilesConfig;
+    assert.doesNotThrow(() => validateAgentsFilesConfig(config));
+  });
+
+  it("save and load roundtrip preserves multiple roles with truth and reads", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    const config: AgentsFilesConfig = {
+      version: 2,
+      documents: {
+        planner: { primary: "Doc/plan.md", reads: ["Doc/a.md", "Doc/b.md"] },
+        implementer: { primary: "Doc/impl.md", reads: ["src/"] },
+        "security-gate": { reads: ["Doc/security.md"] },
+      },
+    };
+
+    saveAgentsFilesConfig(tmpDir, config);
+    assert.deepStrictEqual(loadAgentsFilesConfig(tmpDir), config);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

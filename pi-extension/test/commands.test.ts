@@ -1059,6 +1059,21 @@ describe("commands", () => {
     assert.ok(sentMessages.some((m) => m.includes("feasibility")));
   });
 
+  it("registerArchitectCommand sends prompt without agent config", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "senai", "agents.json"));
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+
+    registerArchitectCommand(makeApi());
+    await commandHandlers["senai-generate-architect"]("", makeCtx());
+
+    assert.ok(sentMessages.some((m) => m.includes("<pi-senai-generate-architect>")));
+    assert.ok(!notifications.some((n) => n.message.includes("No Pi Senai agent configuration found")));
+  });
+
   it("registerArchitectCommand asks to re-run when inputs changed and user confirms", async () => {
     saveArchitectInputsConfig(tmpDir, {
       version: 1,
@@ -1186,6 +1201,18 @@ describe("commands", () => {
     assert.ok(content.includes("## Technology craft"));
     assert.strictEqual(saved.agents["code-review"], "worker", "custom mapping must stay untouched");
     assert.ok(notifications.some((n) => n.message.includes("/senai-doctor")));
+  });
+
+  it("senai-generate-agents creates agents.json when none exists", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "senai", "agents.json"));
+    selectChoices = ["automation / scripts", "Use generic resource"];
+
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.ok(saved.agents["scout-2"].endsWith("-scout-2"), "generated role should be mapped in the new agents.json");
+    assert.ok(!notifications.some((n) => n.message.includes("No Pi Senai agent configuration found")));
   });
 
   it("senai-generate-agents writes nothing when the user declines", async () => {
@@ -1391,6 +1418,363 @@ describe("commands", () => {
     registerAgentGeneratorCommand(makeApi());
     assert.ok(commandHandlers["senai-generate-sub-agents"], "new name registered");
     assert.strictEqual(commandHandlers["senai-generate-agents"], undefined, "old name must not be registered");
+  });
+
+  it("senai-approve leaves state unchanged when the user declines", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    notifications.length = 0;
+    sentMessages.length = 0;
+
+    const ctx = makeCtx();
+    (ctx.ui as any).confirm = async () => false;
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+    assert.strictEqual(sentMessages.length, 0);
+    assert.ok(!notifications.some((n) => n.message.includes("approved")));
+  });
+
+  it("senai-approve reports an already delivered run", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
+
+    notifications.length = 0;
+    sentMessages.length = 0;
+    await commandHandlers["senai-approve"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Run is already delivered"));
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
+    assert.strictEqual(sentMessages.length, 0);
+  });
+
+  it("senai-reset reports when there is no active run and skips the confirm", async () => {
+    registerCommands(makeApi());
+    const ctx = makeCtx();
+    let confirmCalled = false;
+    (ctx.ui as any).confirm = async () => {
+      confirmCalled = true;
+      return true;
+    };
+
+    await commandHandlers["senai-reset"]("", ctx);
+
+    assert.ok(notifications[0].message.includes("No active senai run to reset"));
+    assert.strictEqual(notifications[0].type, "info");
+    assert.strictEqual(confirmCalled, false);
+  });
+
+  it("senai-reset keeps the state file when the user declines", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    notifications.length = 0;
+
+    const ctx = makeCtx();
+    (ctx.ui as any).confirm = async () => false;
+    await commandHandlers["senai-reset"]("", ctx);
+
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    assert.ok(fs.existsSync(statePath), "state file must still exist");
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+  });
+
+  it("checkStageArtifact fails when the run ID is missing", () => {
+    const state: SenaiState = { ...loadState(tmpDir), currentStage: "planning" };
+    const result = checkStageArtifact(state, "plan", makeCtx());
+    assert.strictEqual(result.ok, false);
+    assert.ok(notifications[0].message.includes("Run ID is missing"));
+    assert.strictEqual(notifications[0].type, "error");
+  });
+
+  it("senai-status omits the artifacts section when the run ID is empty", async () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        mission: "Mission",
+        runId: "",
+        currentStage: "planning",
+        startedAt: "2026-06-12T00:00:00Z",
+        updatedAt: "2026-06-12T00:00:00Z",
+        stageResults: {},
+      }),
+    );
+
+    registerCommands(makeApi());
+    await commandHandlers["senai-status"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("Stage: planning"));
+    assert.ok(!notifications[0].message.includes("Artifacts:"));
+  });
+
+  it("senai-document rejects running from the planned stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    let state = loadState(tmpDir);
+    state.currentStage = "planned";
+    state.updatedAt = new Date().toISOString();
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
+
+    // Create implement artifacts so only the stage restriction is tested.
+    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    fs.mkdirSync(path.dirname(implementPath), { recursive: true });
+    fs.writeFileSync(implementPath, "# Implement notes\n");
+
+    notifications.length = 0;
+    await commandHandlers["senai-document"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("can only run from 'implemented'"));
+    assert.strictEqual(notifications[0].type, "warning");
+    assert.strictEqual(loadState(tmpDir).currentStage, "planned");
+  });
+
+  it("senai-deliver rejects running from the implementing stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx()); // planning -> planned -> implementing
+
+    const state = loadState(tmpDir);
+    // Create document artifacts so only the stage restriction is tested.
+    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
+    fs.mkdirSync(path.dirname(documentPath), { recursive: true });
+    fs.writeFileSync(documentPath, "# Docs\n");
+
+    notifications.length = 0;
+    await commandHandlers["senai-deliver"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("can only run from 'documented'"));
+    assert.strictEqual(notifications[0].type, "warning");
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+  });
+
+  it("senai-agents warns when no agent configuration exists", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi"), { recursive: true, force: true });
+    registerAgentCommands(makeApi());
+
+    await commandHandlers["senai-agents"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("No agent configuration found"));
+    assert.ok(notifications[0].message.includes("/senai-configure-agents"));
+    assert.strictEqual(notifications[0].type, "warning");
+    assert.ok(!notifications[0].message.includes("Pi Senai Agent Registry"));
+  });
+
+  it("senai-files reports when no project files are configured", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "senai", "files.json"));
+    registerFilesCommands(makeApi());
+
+    await commandHandlers["senai-files"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("No project files configured"));
+    assert.ok(notifications[0].message.includes("/senai-configure-files"));
+    assert.strictEqual(notifications[0].type, "info");
+  });
+
+  it("senai-agents-files reports when no assignments are configured", async () => {
+    fs.rmSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"));
+    registerAgentsFilesCommands(makeApi());
+
+    await commandHandlers["senai-agents-files"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("No agent document assignments configured"));
+    assert.ok(notifications[0].message.includes("/senai-configure-agents-files"));
+    assert.strictEqual(notifications[0].type, "info");
+  });
+
+  it("senai-configure-agents saves a hand-picked agent via Choose different", async () => {
+    registerAgentCommands(makeApi());
+    const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
+
+    selectChoices.push("Choose different");
+    selectChoices.push("reviewer (builtin)");
+    for (let i = 1; i < roles.length; i++) {
+      selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
+    }
+
+    await commandHandlers["senai-configure-agents"]("", makeCtx());
+
+    const configPath = path.join(tmpDir, ".pi/senai/agents.json");
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.agents[roles[0]], "reviewer");
+    assert.strictEqual(saved.agents[roles[1]], DEFAULT_AGENTS[roles[1]]);
+  });
+
+  it("senai-configure-agents keeps the current value when a select is cancelled", async () => {
+    registerAgentCommands(makeApi());
+    const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
+
+    selectChoices.push(undefined as unknown as string);
+    for (let i = 1; i < roles.length; i++) {
+      selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
+    }
+
+    await commandHandlers["senai-configure-agents"]("", makeCtx());
+
+    const configPath = path.join(tmpDir, ".pi/senai/agents.json");
+    const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(saved.agents[roles[0]], DEFAULT_AGENTS[roles[0]]);
+    assert.strictEqual(saved.agents[roles[1]], DEFAULT_AGENTS[roles[1]]);
+  });
+
+  it("senai-configure-agents-files removes the role entry when truth is cleared with no reads", async () => {
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { planner: { primary: "Doc/planner.md" } },
+    });
+    registerAgentsFilesCommands(makeApi());
+
+    selectChoices.push(
+      "✅ planner: Planner (planner) — truth=Doc/planner.md",
+      "Clear truth",
+      "Back",
+      "⬜ Finish",
+    );
+
+    await commandHandlers["senai-configure-agents-files"]("", makeCtx());
+
+    const saved = loadAgentsFilesConfig(tmpDir);
+    assert.ok(saved);
+    assert.strictEqual(saved.documents.planner, undefined);
+    assert.deepStrictEqual(Object.keys(saved.documents), []);
+  });
+
+  it("senai-configure-files can add and then remove an excluded path", async () => {
+    fs.mkdirSync(path.join(tmpDir, "buildtmp"), { recursive: true });
+    registerFilesCommands(makeApi());
+
+    selectChoices.push(
+      "Edit excluded paths",
+      "Add excluded path",
+      "📂 buildtmp/",
+      "📁 Select this folder (buildtmp/)",
+      "✅ Remove: buildtmp/",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["senai-configure-files"]("", makeCtx());
+
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.excludedPaths, [".git/", "node_modules/"]);
+  });
+
+  it("senai-configure-files browser navigates into a subfolder and back to the parent", async () => {
+    fs.mkdirSync(path.join(tmpDir, "src", "components"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    registerFilesCommands(makeApi());
+
+    selectChoices.push(
+      "Edit code paths",
+      "Add custom path",
+      "📂 src/",
+      "⬆️ ../",
+      "📂 docs/",
+      "📁 Select this folder (docs/)",
+      "Back",
+      "Finish",
+    );
+
+    await commandHandlers["senai-configure-files"]("", makeCtx());
+
+    const saved = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(saved?.codePaths, ["docs/"]);
+  });
+
+  it("senai-generate-sub-agents falls back to basic questions when the architect report is corrupted", async () => {
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architect-report.json"),
+      "{ not valid json",
+    );
+    selectChoices = ["automation / scripts", "Use generic resource"];
+
+    const ctx = makeCtx();
+    const selectTitles: string[] = [];
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      selectTitles.push(title);
+      if (selectIndex >= selectChoices.length) return options[0];
+      return selectChoices[selectIndex++];
+    };
+
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", ctx);
+
+    assert.ok(selectTitles.includes("Project type?"), "basic questions should be asked");
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.ok(saved.agents["scout-2"].endsWith("-scout-2"));
+  });
+
+  it("senai-generate-sub-agents reports skipped files on a name collision", async () => {
+    selectChoices = ["automation / scripts", "Use generic resource"];
+    const slug = slugify(path.basename(tmpDir));
+    const collisionName = `${slug}-scout-2`;
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, `${collisionName}.md`), "USER_OWNED_CONTENT", "utf8");
+
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    assert.ok(
+      notifications.some((n) => n.message.includes("Skipped 1 existing file(s)")),
+      "notification should report the skipped collision",
+    );
+  });
+
+  it("senai-generate-architect adds the change note without a confirm when drivers are missing", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+
+    const ctx = makeCtx();
+    let confirmCalled = false;
+    (ctx.ui as any).confirm = async () => {
+      confirmCalled = true;
+      return true;
+    };
+
+    registerArchitectCommand(makeApi());
+    await commandHandlers["senai-generate-architect"]("", ctx);
+
+    assert.strictEqual(confirmCalled, false, "no confirm dialog when the drivers file is missing");
+    assert.ok(sentMessages.some((m) => m.includes("<pi-senai-generate-architect>")));
+    assert.ok(sentMessages.some((m) => m.includes("Note: Input documents have changed.")));
+  });
+
+  it("checkStageArtifact treats an empty implement directory as missing", () => {
+    const state = startRun(tmpDir, "Mission");
+    advanceStage(tmpDir, state, "planning");
+
+    // startRun creates the implement directory but leaves it empty.
+    const result = checkStageArtifact(loadState(tmpDir), "implement", makeCtx());
+    assert.strictEqual(result.ok, false);
+    assert.ok(notifications[0].message.includes("Implement artifacts not found"));
+  });
+
+  it("checkStageArtifact passes when the implement directory holds only a subdirectory", () => {
+    const state = startRun(tmpDir, "Mission");
+    advanceStage(tmpDir, state, "planning");
+
+    // dirHasFiles counts any entry, so a lone subdirectory is enough.
+    const nestedDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "nested");
+    fs.mkdirSync(nestedDir, { recursive: true });
+
+    const result = checkStageArtifact(loadState(tmpDir), "implement", makeCtx());
+    assert.strictEqual(result.ok, true);
   });
 });
 

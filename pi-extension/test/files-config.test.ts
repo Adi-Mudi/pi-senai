@@ -163,4 +163,89 @@ describe("files-config", () => {
       /strings/,
     );
   });
+
+  it("validateFilesConfig rejects non-array testPaths", () => {
+    assert.throws(
+      () => validateFilesConfig(makeV2Config({ testPaths: "x" } as any)),
+      /testPaths/,
+    );
+  });
+
+  it("loadFilesConfig throws wrapped error for non-object JSON content", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    const configPath = path.join(tmpDir, ".pi", "senai", "files.json");
+
+    fs.writeFileSync(configPath, "42", "utf8");
+    assert.throws(() => loadFilesConfig(tmpDir), /Invalid files config/);
+
+    fs.writeFileSync(configPath, "null", "utf8");
+    assert.throws(() => loadFilesConfig(tmpDir), /Invalid files config/);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadFilesConfig wraps the error when files.json path is a directory", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai", "files.json"), { recursive: true });
+    // EISDIR is not ENOENT, so the raw error must be wrapped, not returned as null.
+    assert.throws(() => loadFilesConfig(tmpDir), /Invalid files config/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("migrateFilesConfig routes uppercase DOCS/ files into inputDocuments", () => {
+    const v1: FilesConfigV1 = { version: 1, files: ["DOCS/PRD.md"] };
+    const v2 = migrateFilesConfig(v1);
+    assert.deepStrictEqual(v2.inputDocuments, ["DOCS/PRD.md"]);
+    assert.deepStrictEqual(v2.codePaths, []);
+    assert.deepStrictEqual(v2.testPaths, []);
+  });
+
+  it("migrateFilesConfig does not treat latest/ as a test folder", () => {
+    const v1: FilesConfigV1 = { version: 1, files: ["latest/"] };
+    const v2 = migrateFilesConfig(v1);
+    assert.deepStrictEqual(v2.testPaths, []);
+    assert.deepStrictEqual(v2.codePaths, ["latest/"]);
+  });
+
+  it("migrateFilesConfig routes test files by name into testPaths", () => {
+    const v1: FilesConfigV1 = { version: 1, files: ["src/foo.test.ts", "tests/"] };
+    const v2 = migrateFilesConfig(v1);
+    assert.deepStrictEqual(v2.testPaths, ["tests/", "src/foo.test.ts"].sort());
+  });
+
+  it("migrateFilesConfig uses the exact default excludedPaths list", () => {
+    const v1: FilesConfigV1 = { version: 1, files: [] };
+    const v2 = migrateFilesConfig(v1);
+    assert.deepStrictEqual(v2.excludedPaths, [
+      ".git/",
+      "node_modules/",
+      "__pycache__/",
+      ".venv/",
+      "venv/",
+      "dist/",
+      "build/",
+      "target/",
+      ".pi/",
+      ".idea/",
+      ".vscode/",
+    ]);
+  });
+
+  it("saveFilesConfig twice with different content: second write wins", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    saveFilesConfig(tmpDir, makeV2Config({ codePaths: ["first/"] }));
+    saveFilesConfig(tmpDir, makeV2Config({ codePaths: ["second/"] }));
+    const loaded = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(loaded?.codePaths, ["second/"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("roundtrips a unicode path unchanged", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    saveFilesConfig(tmpDir, makeV2Config({ inputDocuments: ["文档/設計.md"] }));
+    const loaded = loadFilesConfig(tmpDir);
+    assert.deepStrictEqual(loaded?.inputDocuments, ["文档/設計.md"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

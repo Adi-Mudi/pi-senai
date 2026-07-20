@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { looksLikeTestPath } from "./files-discovery.js";
 
 export const FILES_CONFIG_FILE = "files.json";
 
@@ -85,14 +86,14 @@ export function migrateFilesConfig(v1: FilesConfigV1): FilesConfig {
   for (const f of v1.files) {
     const lower = f.toLowerCase();
     if (f.endsWith("/")) {
-      if (lower.includes("test") || lower.includes("spec")) {
+      if (looksLikeTestPath(f)) {
         testPaths.push(f);
       } else {
         codePaths.push(f);
       }
     } else if (lower.startsWith("doc/") || lower.startsWith("docs/")) {
       inputDocuments.push(f);
-    } else if (lower.includes("test") || lower.includes("spec")) {
+    } else if (looksLikeTestPath(f)) {
       testPaths.push(f);
     } else {
       inputDocuments.push(f);

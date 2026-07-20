@@ -145,4 +145,43 @@ describe("index", () => {
     assert.strictEqual(registeredCommands.length, 0);
     delete process.env.PI_SUBAGENT_NAME;
   });
+
+  it("before_agent_start rejects when state.json is corrupted", async () => {
+    const api = makeApi();
+    piSenaiExtension(api);
+
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), "{ not valid json");
+
+    await assert.rejects(
+      () => eventHandlers["before_agent_start"]({ systemPrompt: "base prompt" }, makeCtx()),
+      /Unexpected token|Expected property name/,
+    );
+  });
+
+  it("before_agent_start still appends the status block to an empty system prompt", async () => {
+    const api = makeApi();
+    piSenaiExtension(api);
+
+    const state = {
+      version: 1,
+      mission: "Test",
+      runId: "run-1",
+      currentStage: "implementing",
+      startedAt: "2026-06-12T00:00:00Z",
+      updatedAt: "2026-06-12T00:00:00Z",
+      stageResults: {},
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+
+    const result = await eventHandlers["before_agent_start"](
+      { systemPrompt: "" },
+      makeCtx(),
+    );
+
+    assert.ok(result.systemPrompt.includes("<pi-senai_status>"));
+    assert.ok(result.systemPrompt.includes("Active stage: implementing"));
+    assert.ok(result.systemPrompt.includes("</pi-senai_status>"));
+  });
 });

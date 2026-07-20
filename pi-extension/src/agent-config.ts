@@ -43,10 +43,13 @@ export function validateAgentConfig(config: AgentConfig): void {
   if (typeof config.version !== "number") {
     throw new Error("Missing or invalid 'version' field");
   }
-  if (!config.agents || typeof config.agents !== "object") {
+  if (!config.agents || typeof config.agents !== "object" || Array.isArray(config.agents)) {
     throw new Error("Missing or invalid 'agents' field");
   }
-  for (const role of Object.keys(config.agents)) {
+  for (const [role, agentName] of Object.entries(config.agents)) {
+    if (agentName !== undefined && typeof agentName !== "string") {
+      throw new Error(`agents.${role} must be a string`);
+    }
     if (!SENAI_ROLES.includes(role as SenaiRole)) {
       throw new Error(
         `Unknown role "${role}". Allowed roles: ${SENAI_ROLES.map((r) => `${ROLE_LABELS[r]} (${r})`).join(", ")}`,

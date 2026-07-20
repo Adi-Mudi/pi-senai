@@ -23,23 +23,9 @@ Then restart Pi or run `/reload` so the extension is discovered.
 
 ## First-time setup
 
-Before you can run any stage, you must create three configuration files. Senai will block stage commands until these exist and are valid.
+Run these commands in order. The generate commands create your sub-agent team and the `agents.json` mapping for you — you do not need to create any config file by hand first.
 
-Run these commands in order:
-
-### 1. Configure agents
-
-```text
-/senai-configure-agents
-```
-
-This maps each Senai role to a subagent. It discovers agents from:
-
-- Your project's `.pi/agents/*.md` files.
-- Your user agent directory.
-- Built-in defaults: `scout`, `planner`, `worker`, `reviewer`, `security-auditor`.
-
-### 2. Configure project files
+### 1. Configure project files
 
 ```text
 /senai-configure-files
@@ -52,7 +38,31 @@ This selects:
 - Test paths.
 - Excluded paths.
 
-### 3. Configure agent document assignments
+### 2. Select architect inputs
+
+```text
+/senai-configure-architect-inputs
+```
+
+This picks the documents the architect agent reads.
+
+### 3. Generate the architecture
+
+```text
+/senai-generate-architect
+```
+
+This creates the architecture documents, five architecture agents, and four architecture skills. It also creates `.pi/senai/agents.json` and maps the seven architecture-bound roles automatically.
+
+### 4. Generate the sub-agent team
+
+```text
+/senai-generate-sub-agents
+```
+
+This generates agents for the remaining fourteen roles and maps them in `agents.json`. If you already have custom agents, they are skipped and never touched.
+
+### 5. Configure agent document assignments
 
 ```text
 /senai-configure-agents-files
@@ -60,7 +70,7 @@ This selects:
 
 This assigns truth documents and comparison documents to each role.
 
-### 4. Verify everything
+### 6. Verify everything
 
 ```text
 /senai-doctor
@@ -68,16 +78,13 @@ This assigns truth documents and comparison documents to each role.
 
 This checks all config files, mapped agents, file scopes, and runtime setup. It saves a full report to `.IDE_Plans/senai/doctor-report.md`.
 
-### Optional: generate architecture
-
-If you want a project-specific architecture agent and skills, run:
+### Optional: manual agent mapping
 
 ```text
-/senai-configure-architect-inputs
-/senai-generate-architect
+/senai-configure-agents
 ```
 
-This is a one-time setup step.
+You only need this if you want to hand-pick your own agents instead of the generated ones. It discovers agents from your project's `.pi/agents/*.md` files, your user agent directory, and the built-in defaults (`scout`, `planner`, `worker`, `reviewer`, `security-auditor`).
 
 ---
 

@@ -4,6 +4,7 @@ import {
   getArtifactPaths,
   getStatePath,
   makeRunId,
+  STAGES,
   STAGE_TRANSITIONS,
   type Stage,
 } from "./constants.js";
@@ -39,6 +40,10 @@ export function loadState(cwd: string): SenaiState {
     const parsed = JSON.parse(raw) as SenaiState;
     if (parsed.version !== CURRENT_VERSION) {
       return migrateState(parsed);
+    }
+    // A garbage stage would crash advanceStage later; reset to a safe value.
+    if (!(STAGES as string[]).includes(parsed.currentStage)) {
+      parsed.currentStage = "none";
     }
     return parsed;
   } catch (err: any) {
@@ -112,7 +117,9 @@ function migrateState(old: any): SenaiState {
   if (old && typeof old === "object") {
     if (typeof old.mission === "string") fresh.mission = old.mission;
     if (typeof old.runId === "string") fresh.runId = old.runId;
-    if (typeof old.currentStage === "string") fresh.currentStage = old.currentStage as Stage;
+    if (typeof old.currentStage === "string" && (STAGES as string[]).includes(old.currentStage)) {
+      fresh.currentStage = old.currentStage as Stage;
+    }
     if (typeof old.startedAt === "string") fresh.startedAt = old.startedAt;
     if (typeof old.updatedAt === "string") fresh.updatedAt = old.updatedAt;
     if (old.stageResults && typeof old.stageResults === "object") {

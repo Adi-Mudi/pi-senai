@@ -49,7 +49,12 @@ const PROJECT_ROOT_MARKERS = new Set([
   "pnpm-workspace.yaml", "lerna.json", "nx.json",
 ]);
 
-const TEST_PATTERNS = /test|spec|__tests__/i;
+const TEST_PATTERNS = /(^|[._\-/])(test|tests|testing|spec|specs|__tests__)(?=[._\-/]|$)/i;
+
+/** True when a path looks test-related (segment/delimiter aware). */
+export function looksLikeTestPath(p: string): boolean {
+  return TEST_PATTERNS.test(p.toLowerCase());
+}
 
 export function discoverProjectFiles(
   cwd: string,
@@ -96,7 +101,11 @@ export function safeReadDir(dir: string): fs.Dirent[] {
 }
 
 export function isExcluded(relative: string, excludedPaths: string[]): boolean {
-  return excludedPaths.some((ex) => relative === ex || relative.startsWith(ex));
+  return excludedPaths.some((ex) => {
+    if (relative === ex) return true;
+    const prefix = ex.endsWith("/") ? ex : `${ex}/`;
+    return relative.startsWith(prefix);
+  });
 }
 
 function classifyFolder(
@@ -149,7 +158,7 @@ function classifyFolder(
 
 function classifyFile(relative: string, result: FileDiscoveryResult): void {
   const lower = relative.toLowerCase();
-  const ext = path.extname(relative);
+  const ext = path.extname(relative).toLowerCase();
 
   if (TEST_PATTERNS.test(lower)) {
     result.testFiles.push(relative);

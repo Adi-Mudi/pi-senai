@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import { buildAgentRegistryBlock } from "../src/agent-registry.js";
-import { SENAI_ROLES } from "../src/agent-suggestions.js";
+import { SENAI_ROLES, DEFAULT_AGENTS } from "../src/agent-suggestions.js";
 import type { AgentConfig } from "../src/agent-config.js";
 
 describe("agent-registry", () => {
@@ -48,5 +48,12 @@ describe("agent-registry", () => {
     const block = buildAgentRegistryBlock(null);
     const roleLines = block.split("\n").filter((line) => line.startsWith("- "));
     assert.strictEqual(roleLines.length, SENAI_ROLES.length);
+  });
+
+  it("falls back to the default agent when a role is mapped to an empty string", () => {
+    const config: AgentConfig = { version: 1, agents: { planner: "" } };
+    const block = buildAgentRegistryBlock(config);
+    const line = block.split("\n").find((l) => l.startsWith("- Planner (planner)"));
+    assert.strictEqual(line, `- Planner (planner) (default) → ${DEFAULT_AGENTS.planner}`);
   });
 });

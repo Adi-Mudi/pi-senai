@@ -1569,4 +1569,527 @@ describe("doctor architecture validation", () => {
     assert.ok(failText.includes("❌ Please fix the errors above"));
     fs.rmSync(failDir, { recursive: true, force: true });
   });
+
+  it("config check warns on agents.json version 2 and silently migrates agents_files.json version 1", () => {
+    const tmpDir = makeTmpDir("doctor-config-version-");
+    saveAgentConfig(tmpDir, { version: 2, agents: {} });
+    // saveAgentsFilesConfig always writes version 2, so write the v1 file directly.
+    writeFile(tmpDir, path.join(".pi", "senai", "agents_files.json"), JSON.stringify({ version: 1, documents: {} }));
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Configuration files");
+
+    const agentsWarning = section.items.find(
+      (i) => i.status === "warning" && i.message.includes("agents.json version is 2; expected 1"),
+    );
+    assert.ok(agentsWarning, "agents.json version 2 should produce a version warning");
+
+    const agentsFilesOk = section.items.find(
+      (i) => i.status === "ok" && i.message.includes("agents_files.json found and valid"),
+    );
+    assert.ok(agentsFilesOk, "agents_files.json version 1 should still load");
+    // NOTE: version 1 is silently migrated to 2 on load, so no version warning is emitted.
+    assert.ok(
+      !section.items.some((i) => i.message.includes("agents_files.json version")),
+      "no agents_files.json version warning is emitted for a migrated v1 file",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mapping check notes a project agent shadowing a built-in with the same name", () => {
+    const tmpDir = makeTmpDir("doctor-shadow-");
+    writeAgent(tmpDir, "scout", {
+      name: "scout",
+      description: "Project scout overriding the built-in",
+      tools: "read",
+    });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent mapping sources");
+    const scoutItem = section.items.find((i) => i.message.includes("(scout-2)"));
+    assert.ok(scoutItem);
+    assert.strictEqual(scoutItem.status, "info");
+    assert.ok(
+      scoutItem.details?.some((d) => d.includes("a built-in agent with the same name is shadowed")),
+      "shadowed built-in should be noted",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mapping check errors when the agent file frontmatter is unreadable", () => {
+    const tmpDir = makeTmpDir("doctor-unreadable-");
+    // Missing description -> parseAgentFileFull returns undefined.
+    writeFile(tmpDir, path.join(".pi", "agents", "broken.md"), "---\nname: broken\n---\n\n# broken\n");
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-3": "broken" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent mapping sources");
+    const item = section.items.find((i) => i.message.includes("(scout-3)") && i.message.includes("broken"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.message.includes("frontmatter is unreadable"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("capability check reports info for a custom agent without a tools list", () => {
+    const tmpDir = makeTmpDir("doctor-no-tools-");
+    writeAgent(tmpDir, "no-tools-agent", {
+      name: "no-tools-agent",
+      description: "An agent that declares no tools",
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "no-tools-agent" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent-role capability fit");
+    const item = section.items.find((i) => i.message.includes("no-tools-agent"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "info");
+    assert.ok(item.message.includes("no explicit tools list"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("capability check warns on an explicit empty tools list", () => {
+    const tmpDir = makeTmpDir("doctor-empty-tools-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "empty-tools.md"),
+      ["---", "name: empty-tools", "description: Agent with empty tools", "tools: []", "---", "", "# empty-tools"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-3": "empty-tools" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent-role capability fit");
+    const item = section.items.find((i) => i.message.includes("empty-tools"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "warning");
+    assert.ok(item.message.includes("explicit tools list is empty"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("capability check warns for a read-only role holding write and for an output preference", () => {
+    const tmpDir = makeTmpDir("doctor-cap-warnings-");
+    writeAgent(tmpDir, "write-scout", {
+      name: "write-scout",
+      description: "Scout that can write",
+      tools: "read, write",
+    });
+    writeAgent(tmpDir, "output-scout", {
+      name: "output-scout",
+      description: "Scout with an output preference",
+      tools: "read",
+      output: "single",
+    });
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: { "scout-2": "write-scout", "scout-4": "output-scout" },
+    });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent-role capability fit");
+
+    const readonlyWarning = section.items.find(
+      (i) => i.message.includes("write-scout") && i.message.includes("has write tool but role is read-only"),
+    );
+    assert.ok(readonlyWarning);
+    assert.strictEqual(readonlyWarning.status, "warning");
+
+    const outputWarning = section.items.find(
+      (i) => i.message.includes("output-scout") && i.message.includes('has output="single"'),
+    );
+    assert.ok(outputWarning);
+    assert.strictEqual(outputWarning.status, "warning");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("file scope warns per category when nothing is configured", () => {
+    const tmpDir = makeTmpDir("doctor-scope-empty-");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Project file scope");
+    const warnings = section.items.filter((i) => i.status === "warning" && i.message.includes("none configured"));
+    assert.strictEqual(warnings.length, 3);
+    assert.ok(section.items.some((i) => i.message.includes("Code paths: none configured")));
+    assert.ok(section.items.some((i) => i.message.includes("Input documents: none configured")));
+    assert.ok(section.items.some((i) => i.message.includes("Test paths: none configured")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("file scope does not treat src and src/ as a conflict", () => {
+    const tmpDir = makeTmpDir("doctor-scope-edge-");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src"],
+      inputDocuments: [],
+      testPaths: ["src/"],
+      excludedPaths: [],
+    });
+    writeFile(tmpDir, "src/index.ts");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Project file scope");
+    assert.ok(
+      !section.items.some((i) => i.message.includes("Path conflicts")),
+      "trailing-slash variant of the same folder is not a conflict",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("file scope flags the same path listed twice as a conflict", () => {
+    const tmpDir = makeTmpDir("doctor-scope-dup-");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src", "src"],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    writeFile(tmpDir, "src/index.ts");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Project file scope");
+    const conflict = section.items.find((i) => i.message.includes("Path conflicts"));
+    assert.ok(conflict);
+    assert.strictEqual(conflict.status, "error");
+    assert.ok(conflict.details?.some((d) => d.includes("src overlaps src")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("agents_files check is ok when the truth document exists and is in the inputDocuments scope", () => {
+    const tmpDir = makeTmpDir("doctor-agents-files-ok-");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["docs/prd.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { "scout-1": { primary: "docs/prd.md" } } });
+    writeFile(tmpDir, "docs/prd.md", "# PRD");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent document assignments");
+    const item = section.items.find((i) => i.message.includes("truth document: docs/prd.md"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "ok");
+    assert.ok(item.details?.some((d) => d.includes("in the inputDocuments scope")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("agents_files check warns when the truth document exists outside the inputDocuments scope", () => {
+    const tmpDir = makeTmpDir("doctor-agents-files-scope-");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { "scout-1": { primary: "docs/prd.md" } } });
+    writeFile(tmpDir, "docs/prd.md", "# PRD");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent document assignments");
+    const item = section.items.find((i) => i.message.includes("truth document: docs/prd.md"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "warning");
+    assert.ok(item.details?.some((d) => d.includes("NOT in the inputDocuments scope")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("agents_files check errors on a missing comparison document", () => {
+    const tmpDir = makeTmpDir("doctor-agents-files-missing-");
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { "scout-1": { reads: ["docs/missing.md"] } } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent document assignments");
+    const item = section.items.find((i) => i.message.includes("comparison document MISSING: docs/missing.md"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("agents_files check reports info when no assignments exist", () => {
+    const tmpDir = makeTmpDir("doctor-agents-files-none-");
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent document assignments");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "info");
+    assert.ok(section.items[0].message.includes("No per-role document assignments configured"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("environment check is ok when running inside tmux", () => {
+    const tmpDir = makeTmpDir("doctor-env-tmux-");
+    const previous = process.env.TMUX;
+    process.env.TMUX = "1";
+    try {
+      const report = runSenaiDiagnostic(tmpDir);
+      const section = findSection(report, "Runtime environment");
+      assert.strictEqual(section.items.length, 1);
+      assert.strictEqual(section.items[0].status, "ok");
+      assert.ok(section.items[0].message.includes("tmux"));
+    } finally {
+      if (previous === undefined) {
+        delete process.env.TMUX;
+      } else {
+        process.env.TMUX = previous;
+      }
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup warns on non-high confidence and counts a non-empty library", () => {
+    const tmpDir = makeTmpDir("doctor-arch-confidence-");
+    saveTestProfile(tmpDir);
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: ARCH,
+      confidence: "medium",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+    writeFile(
+      tmpDir,
+      path.join(".pi", "architecture-library", "modular-monolith.md"),
+      "---\nname: modular-monolith\n---\n# Modular Monolith",
+    );
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture setup");
+
+    const confidence = section.items.find((i) => i.message.includes("medium confidence"));
+    assert.ok(confidence);
+    assert.strictEqual(confidence.status, "warning");
+
+    const library = section.items.find((i) => i.message.includes("Architecture library has 1 entries."));
+    assert.ok(library);
+    assert.strictEqual(library.status, "ok");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup errors when only some ADR files exist", () => {
+    const tmpDir = makeTmpDir("doctor-arch-adr-partial-");
+    saveTestProfile(tmpDir);
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: ARCH,
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [
+        { id: "0001", title: "First decision", context: "c", decision: "d", consequences: "x" },
+        { id: "0002", title: "Second decision", context: "c", decision: "d", consequences: "x" },
+      ],
+      constraints: [],
+    });
+    writeFile(tmpDir, path.join(".pi", "architect", "adrs", "0001-first-decision.md"), "# ADR 1");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture setup");
+    const item = section.items.find((i) => i.message.includes("Found 1 of 2 expected ADRs"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup warns when no ADR entry has a valid id and title", () => {
+    const tmpDir = makeTmpDir("doctor-arch-adr-invalid-");
+    saveTestProfile(tmpDir);
+    // A non-array adrs field survives loadArchitectReport untouched; iterating it
+    // yields no entries with a valid id/title, which triggers the warning branch.
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: ARCH,
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: "garbage" as unknown as [],
+      constraints: [],
+    });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture setup");
+    const item = section.items.find((i) => i.message.includes("none have a valid id and title"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "warning");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup errors on a misnamed architecture agent file", () => {
+    const tmpDir = makeTmpDir("doctor-arch-misnamed-");
+    saveTestProfile(tmpDir);
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", `${SLUG}-${ARCH}-wrongname.md`),
+      "---\nname: wrong\n---\n# wrong",
+    );
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture setup");
+    const item = section.items.find((i) => i.message.includes("misnamed architecture agents found"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.details?.some((d) => d.includes(`${SLUG}-${ARCH}-wrongname.md`)));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup errors when a configured input document is missing", () => {
+    const tmpDir = makeTmpDir("doctor-arch-missing-doc-");
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/missing.md" }],
+      additionalConstraints: [],
+    });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Architecture setup");
+    const item = section.items.find((i) => i.message.includes("configured architect input documents are missing"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.details?.some((d) => d.includes("docs/missing.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("team content check reports info when no generated team agents exist", () => {
+    const tmpDir = makeTmpDir("doctor-team-none-");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Generated team agents");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "info");
+    assert.ok(section.items[0].message.includes("No generated team agents found"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check reports ok when all resources are valid", () => {
+    const tmpDir = makeTmpDir("doctor-res-ok-");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    const okItem = section.items.find((i) => i.status === "ok" && i.message.includes("technology resource(s) valid"));
+    assert.ok(okItem, "bundled resources should produce a single ok item");
+    assert.ok(!section.items.some((i) => i.status === "warning"), "no warnings on a clean tree");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check catches an unparseable resource file", () => {
+    const tmpDir = makeTmpDir("doctor-res-unparseable-");
+    // A directory named *.md makes readFileSync throw, hitting the catch branch.
+    fs.mkdirSync(path.join(tmpDir, ".pi", "technologies", "bad.md"), { recursive: true });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("bad.md"));
+    assert.ok(warning);
+    assert.ok(warning.details?.some((d) => d.includes("could not be parsed")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("integrity check reports a single ok item when all agents are valid", () => {
+    const tmpDir = makeTmpDir("doctor-integrity-ok-");
+    writeAgent(tmpDir, "good-agent", {
+      name: "good-agent",
+      description: "A well-formed agent",
+      tools: "read",
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "good-agent" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent file integrity");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "ok");
+    assert.ok(section.items[0].message.includes("All mapped agent files are internally valid"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("secret scan flags each pattern with line numbers, scans skills, and skips unreadable files", () => {
+    const tmpDir = makeTmpDir("doctor-secret-patterns-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "leaky3.md"),
+      [
+        "---",
+        "name: leaky3",
+        "description: x",
+        "tools: read",
+        "---",
+        "# Config",
+        "-----BEGIN RSA PRIVATE KEY-----",
+        'api = "sk-ABCDEFGHIJKLMNOPQRSTUVWX"',
+        'google = "AIza12345678901234567890123"',
+        "password=hunter2secret",
+      ].join("\n"),
+    );
+    writeFile(tmpDir, path.join(".pi", "skills", "leaky-skill", "SKILL.md"), 'token = "ABCDEFGHIJKLMNOP"');
+    // A directory named *.md cannot be read as a file; the scan must skip it.
+    fs.mkdirSync(path.join(tmpDir, ".pi", "agents", "unreadable.md"));
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Secret scan");
+
+    const leaky = section.items.filter((i) => i.status === "warning" && i.message.includes("leaky3.md"));
+    assert.strictEqual(leaky.length, 4);
+    assert.ok(leaky.some((i) => i.message.includes(":7")), "BEGIN PRIVATE KEY line flagged");
+    assert.ok(leaky.some((i) => i.message.includes(":8")), "sk-... line flagged");
+    assert.ok(leaky.some((i) => i.message.includes(":9")), "AIza... line flagged");
+    assert.ok(leaky.some((i) => i.message.includes(":10")), "password= line flagged");
+
+    const skillWarning = section.items.find(
+      (i) => i.status === "warning" && i.message.includes(path.join("leaky-skill", "SKILL.md")),
+    );
+    assert.ok(skillWarning, "SKILL.md inside .pi/skills/<dir>/ is scanned");
+
+    assert.ok(
+      !section.items.some((i) => i.message.includes("unreadable.md")),
+      "unreadable files are skipped without crashing",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

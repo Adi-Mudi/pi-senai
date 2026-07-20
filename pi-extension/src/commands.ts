@@ -1428,8 +1428,6 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
         return;
       }
 
-      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
-
       const skillPath = resolveSkillPath("generate-architect");
       let skill = "";
       try {
@@ -1518,9 +1516,9 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
   const command = {
     description: "Generate project-specific sub-agents for the non-architecture Senai roles",
     handler: async (_args: string, ctx: ExtensionContext) => {
-      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
-
-      const config = loadAgentConfig(ctx.cwd)!;
+      // agents.json is optional here: this command creates/updates it.
+      // Roles without a mapping resolve to built-in defaults.
+      const config = loadAgentConfig(ctx.cwd) ?? { version: 1, agents: {} };
 
       // Target only roles still on built-in defaults. Custom agents and custom
       // mappings are never touched.

@@ -144,6 +144,13 @@ export function getProjectSlug(cwd: string): string {
 
 function buildProjectContextBlock(report: ArchitectReport | null): string {
   if (!report) return "";
+  if (
+    report.techStack.length === 0 &&
+    report.atomicFunctions.length === 0 &&
+    report.constraints.length === 0
+  ) {
+    return "";
+  }
   const lines: string[] = ["## Project context", ""];
   if (report.techStack.length > 0) {
     lines.push("Technology stack:");

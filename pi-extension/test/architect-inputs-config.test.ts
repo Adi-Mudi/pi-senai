@@ -131,4 +131,30 @@ describe("architect-inputs-config", () => {
     assert.strictEqual(isArchitectDocumentType("PRD"), false);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("validateArchitectInputsConfig rejects a non-string document path", () => {
+    const config = {
+      version: 1,
+      documents: [{ type: "prd", path: 42 }],
+      additionalConstraints: [],
+    } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(config), /non-empty 'path'/);
+  });
+
+  it("validateArchitectInputsConfig rejects a non-string entry inside additionalConstraints", () => {
+    const config = {
+      version: 1,
+      documents: [],
+      additionalConstraints: ["ok", 7],
+    } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(config), /must contain only strings/);
+  });
+
+  it("loadArchitectInputsConfig throws a wrapped error for JSON array content", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-inputs-array-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "architect-inputs.json"), "[1, 2]", "utf8");
+    assert.throws(() => loadArchitectInputsConfig(tmpDir), /Invalid architect inputs config/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

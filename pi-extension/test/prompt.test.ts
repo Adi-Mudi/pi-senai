@@ -217,4 +217,61 @@ describe("prompt", () => {
     assert.ok(prompt.includes("security-report.md"));
     assert.ok(prompt.includes("deliver-summary.md"));
   });
+
+  it("buildStagePrompt shows the no-files fallback when all files config arrays are empty", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+
+    const state = makeState("planning", "run-empty");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes("## Document Scope"));
+    assert.ok(prompt.includes("No default project files configured"));
+    assert.ok(!prompt.includes("Default project context"));
+  });
+
+  it("buildStagePrompt skips the per-agent section when documents are empty", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["README.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(!prompt.includes("Per-agent document assignments"));
+    assert.ok(prompt.includes("Default project context"));
+    assert.ok(prompt.includes("README.md"));
+  });
+
+  it("buildStagePrompt shows truth without reads when reads is an empty array", () => {
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { planner: { primary: "Doc/planner.md", reads: [] } },
+    });
+
+    const state = makeState("planning", "run-scope");
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+    assert.ok(prompt.includes('truth="Doc/planner.md"'));
+    assert.ok(!prompt.includes("reads="));
+  });
+
+  it("buildStagePrompt falls back to placeholder skill text for an unknown stage", () => {
+    const state = makeState("planning", "run-bogus");
+    const { prompt, skill } = buildStagePrompt(cwd, state, "bogus");
+    assert.ok(skill.includes("# Senai bogus stage"));
+    assert.ok(skill.includes("No detailed skill file found"));
+    assert.ok(prompt.includes('<pi-senai stage="bogus">'));
+    assert.ok(prompt.includes("No detailed skill file found"));
+  });
 });

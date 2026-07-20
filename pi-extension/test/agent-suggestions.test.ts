@@ -139,4 +139,83 @@ describe("agent-suggestions", () => {
       assert.ok(ROLE_LABELS[role] && ROLE_LABELS[role].length > 0, `Missing label for ${role}`);
     }
   });
+
+  it("returns undefined for an empty agents array", () => {
+    assert.strictEqual(suggestAgentForRole("planner", []), undefined);
+    assert.strictEqual(suggestAgentForRole("implementer", []), undefined);
+  });
+
+  it("matches keywords case-insensitively", () => {
+    const agents = [agent("GAS-CODER", "SECURITY AUDIT")];
+    assert.strictEqual(suggestAgentForRole("implementer", agents), "GAS-CODER");
+    assert.strictEqual(suggestAgentForRole("security-gate", agents), "GAS-CODER");
+  });
+
+  it("suggests scout-2 via the big keyword", () => {
+    const agents = [agent("gas-scout-big", "Big picture code scout")];
+    assert.strictEqual(suggestAgentForRole("scout-2", agents), "gas-scout-big");
+  });
+
+  it("suggests scout-3 via the dependency keyword", () => {
+    const agents = [agent("gas-scout-deps", "Dependency audit scout")];
+    assert.strictEqual(suggestAgentForRole("scout-3", agents), "gas-scout-deps");
+  });
+
+  it("suggests scout-4 via the doc keyword", () => {
+    const agents = [agent("gas-scout-docs", "Documentation coverage scout")];
+    assert.strictEqual(suggestAgentForRole("scout-4", agents), "gas-scout-docs");
+  });
+
+  it("suggests implementer via the worker keyword", () => {
+    const agents = [agent("senai-worker", "Worker for heavy lifting")];
+    assert.strictEqual(suggestAgentForRole("implementer", agents), "senai-worker");
+  });
+
+  it("does not suggest api-docs-writer when only the api keyword is present", () => {
+    const agents = [agent("api-helper", "API integration helper")];
+    assert.strictEqual(suggestAgentForRole("api-docs-writer", agents), undefined);
+  });
+
+  it("does not suggest security-gate without the audit keyword", () => {
+    const agents = [agent("security-scanner", "Security scanning agent")];
+    assert.strictEqual(suggestAgentForRole("security-gate", agents), undefined);
+  });
+
+  it("an x-planner agent without architecture falls through to the keyword pass", () => {
+    const agents = [agent("x-planner", "Task planner")];
+    assert.strictEqual(suggestAgentForRole("planner", agents), "x-planner");
+  });
+
+  it("an architecture planner beats an earlier x-planner without architecture", () => {
+    const agents = [
+      agent("x-planner", "Task planner"),
+      agent("proj-arch-planner", "Architecture-aware planner"),
+    ];
+    assert.strictEqual(suggestAgentForRole("planner", agents), "proj-arch-planner");
+  });
+
+  it("never suggests linter, other-docs-writer, or archive", () => {
+    // Pin: these roles can never be auto-suggested, regardless of the agents.
+    const agents = [
+      agent("linter-bot", "Linter and archive helper with all the docs"),
+      agent("docs-writer", "Writes other docs and archives stuff"),
+    ];
+    assert.strictEqual(suggestAgentForRole("linter", agents), undefined);
+    assert.strictEqual(suggestAgentForRole("other-docs-writer", agents), undefined);
+    assert.strictEqual(suggestAgentForRole("archive", agents), undefined);
+  });
+
+  it("returns the first matching agent in the array", () => {
+    const agents = [agent("first-coder", "Coder one"), agent("second-coder", "Coder two")];
+    assert.strictEqual(suggestAgentForRole("implementer", agents), "first-coder");
+  });
+
+  it("buildSuggestionMap omits unmatched roles", () => {
+    const agents = [agent("gas-coder", "Coder")];
+    const map = buildSuggestionMap(agents);
+    assert.strictEqual(map.implementer, "gas-coder");
+    assert.strictEqual(map.linter, undefined);
+    assert.ok(!("linter" in map));
+    assert.ok(!("archive" in map));
+  });
 });

@@ -21,6 +21,7 @@ import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
 import {
   ARCHITECT_ROLES,
   ARCHITECT_STAGES,
+  ARCHITECTURE_AGENT_MAPPING,
   discoverArchitectureLibrary,
   loadArchitectProfile,
   loadArchitectReport,
@@ -857,15 +858,24 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
 
 // Roles that must resolve to the generated architecture agents once an
 // architecture has been generated. scout-1 shares the generated planner agent.
-const ARCHITECTURE_MAPPED_ROLES: Array<{ role: SenaiRole; label: string; expectedSuffix: string }> = [
-  { role: "scout-1", label: "Scout Architecture", expectedSuffix: "planner" },
-  { role: "planner", label: "Architecture Planner", expectedSuffix: "planner" },
-  { role: "implementer", label: "Architecture Implementer", expectedSuffix: "implementer" },
-  { role: "reviewer-correctness", label: "Architecture Reviewer — Correctness", expectedSuffix: "reviewer-correctness" },
-  { role: "reviewer-security", label: "Architecture Reviewer — Security", expectedSuffix: "reviewer-security" },
-  { role: "reviewer-tests", label: "Architecture Reviewer — Tests", expectedSuffix: "reviewer-tests" },
-  { role: "code-review", label: "Architecture Code Review", expectedSuffix: "reviewer-correctness" },
-];
+// Role→suffix pairs come from ARCHITECTURE_AGENT_MAPPING (single source of
+// truth in architect.ts); labels below are doctor-only display text.
+const ARCHITECTURE_ROLE_LABELS: Record<string, string> = {
+  "scout-1": "Scout Architecture",
+  planner: "Architecture Planner",
+  implementer: "Architecture Implementer",
+  "reviewer-correctness": "Architecture Reviewer — Correctness",
+  "reviewer-security": "Architecture Reviewer — Security",
+  "reviewer-tests": "Architecture Reviewer — Tests",
+  "code-review": "Architecture Code Review",
+};
+
+const ARCHITECTURE_MAPPED_ROLES: Array<{ role: SenaiRole; label: string; expectedSuffix: string }> =
+  ARCHITECTURE_AGENT_MAPPING.map(({ role, suffix }) => ({
+    role,
+    label: ARCHITECTURE_ROLE_LABELS[role] ?? role,
+    expectedSuffix: suffix,
+  }));
 
 function checkArchitectureAgentMapping(cwd: string, agentConfig: AgentConfig | null): DiagnosticSection {
   const items: DiagnosticItem[] = [];

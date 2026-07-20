@@ -5,6 +5,7 @@ import { runRolePicker, type RolePickerItem } from "../src/ui/role-picker.js";
 
 const ENTER = "\r";
 const DOWN = "\x1b[B";
+const UP = "\x1b[A";
 
 function makeTheme() {
   return {
@@ -21,12 +22,16 @@ function makeTui() {
   } as unknown as import("@mariozechner/pi-tui").TUI;
 }
 
-function makeFallbackCtx(selects: (string | undefined)[]): ExtensionContext {
+function makeFallbackCtx(
+  selects: (string | undefined)[],
+  capturedSelectOptions?: string[][],
+): ExtensionContext {
   let index = 0;
   return {
     cwd: "/tmp",
     ui: {
-      select: async (_title: string, _options: string[]) => {
+      select: async (_title: string, options: string[]) => {
+        capturedSelectOptions?.push(options);
         return selects[index++] as string;
       },
     } as unknown as ExtensionUIContext,
@@ -94,6 +99,29 @@ describe("runRolePicker fallback", () => {
     const result = await runRolePicker(ctx, { title: "Test", items: ITEMS });
     assert.deepStrictEqual(result, { kind: "back" });
   });
+
+  it("offers only Finish when there are no items", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx(["⬜ Finish"], captured);
+    const result = await runRolePicker(ctx, { title: "Test", items: [] });
+    assert.deepStrictEqual(captured[0], ["⬜ Finish"]);
+    assert.deepStrictEqual(result, { kind: "finish" });
+  });
+
+  it("omits the agent suffix in the label when agent is an empty string", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx(["⬜ Finish"], captured);
+    const items: RolePickerItem[] = [
+      { id: "role-x", label: "Role X", agent: "", summary: "nothing", assigned: false },
+    ];
+    const result = await runRolePicker(ctx, { title: "Test", items });
+    assert.deepStrictEqual(captured[0], [
+      "⬜ role-x: Role X — nothing",
+      "⬜ Finish",
+    ]);
+    assert.ok(!captured[0][0].includes("()"));
+    assert.deepStrictEqual(result, { kind: "finish" });
+  });
 });
 
 describe("runRolePicker custom TUI", () => {
@@ -153,5 +181,132 @@ describe("runRolePicker custom TUI", () => {
     comp.handleInput(ENTER);
     const result = await promise;
     assert.deepStrictEqual(result, { kind: "role", role: "planner" });
+  });
+
+  it("wraps UP from the first item to the Finish row", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "Test", items: ITEMS });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    comp.handleInput(UP);
+    comp.handleInput(ENTER);
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "finish" });
+  });
+
+  it("wraps DOWN from the Finish row to the first item", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "Test", items: ITEMS });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    // Two items plus Finish = three rows; down three times wraps to index 0.
+    comp.handleInput(DOWN);
+    comp.handleInput(DOWN);
+    comp.handleInput(DOWN);
+    comp.handleInput(ENTER);
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "role", role: "scout-1" });
+  });
+
+  it("scrolls the window down and back up", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items = Array.from({ length: 20 }, (_, i) => ({
+      id: `role-${String(i).padStart(2, "0")}`,
+      label: `Role ${String(i).padStart(2, "0")}`,
+      agent: "worker",
+      summary: "s",
+      assigned: false,
+    }));
+    const promise = runRolePicker(ctx, { title: "Test", items, pageSize: 5 });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+
+    for (let i = 0; i < 6; i++) {
+      comp.handleInput(DOWN);
+    }
+    let lines = comp.render(80);
+    // Lower bound moved: selection is row 6, so the window starts at row 2.
+    assert.ok(lines.some((line) => line.includes("Role 06")));
+    assert.ok(!lines.some((line) => line.includes("Role 00")));
+    assert.ok(!lines.some((line) => line.includes("Role 01")));
+
+    for (let i = 0; i < 6; i++) {
+      comp.handleInput(UP);
+    }
+    lines = comp.render(80);
+    // Upper bound restored: the window starts at row 0 again.
+    assert.ok(lines.some((line) => line.includes("Role 00")));
+    assert.ok(!lines.some((line) => line.includes("Role 06")));
+
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("offers only the Finish row when there are no items", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "Test", items: [] });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    comp.handleInput(ENTER);
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "finish" });
+  });
+
+  it("falls back to the first item for an unknown initialSelectedId", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runRolePicker(ctx, {
+      title: "Test",
+      items: ITEMS,
+      initialSelectedId: "nope",
+    });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    comp.handleInput(ENTER);
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "role", role: "scout-1" });
+  });
+
+  it("ignores an unrecognized key and leaves the render unchanged", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "Test", items: ITEMS });
+    let resolved = false;
+    void promise.then(() => {
+      resolved = true;
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    const before = comp.render(80).join("\n");
+    comp.handleInput("x");
+    const after = comp.render(80).join("\n");
+    assert.strictEqual(after, before);
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.strictEqual(resolved, false);
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders a custom subtitle instead of the default tip", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runRolePicker(ctx, {
+      title: "Test",
+      items: ITEMS,
+      subtitle: "Pick one role per line.",
+    });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    assert.ok(lines.some((line) => line.includes("Pick one role per line.")));
+    assert.ok(!lines.some((line) => line.includes("Tip: scouts and reviewers")));
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders without crashing at a tiny width", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "Test", items: ITEMS });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(1);
+    assert.ok(lines.length > 0);
+    getDone()({ kind: "back" });
+    await promise;
   });
 });

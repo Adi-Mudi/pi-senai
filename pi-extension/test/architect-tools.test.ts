@@ -238,6 +238,69 @@ describe("architect-tools", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("finalize tool auto-maps architecture-bound roles in agents.json", async () => {
+    const tmpDir = makeTmpDir("arch-tools-automap-");
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "modular-monolith.md"),
+      "---\nname: modular-monolith\ncomplexity: low\nbest-for-drivers:\n  - small team\n---\n# Modular Monolith\n",
+      "utf8",
+    );
+
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.deepStrictEqual(result.details.mappedRoles, [
+      "scout-1",
+      "planner",
+      "implementer",
+      "reviewer-correctness",
+      "reviewer-security",
+      "reviewer-tests",
+      "code-review",
+    ]);
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(saved.agents["scout-1"], "test-project-modular-monolith-planner");
+    assert.strictEqual(saved.agents["planner"], "test-project-modular-monolith-planner");
+    assert.strictEqual(saved.agents["implementer"], "test-project-modular-monolith-implementer");
+    assert.strictEqual(saved.agents["reviewer-correctness"], "test-project-modular-monolith-reviewer-correctness");
+    assert.strictEqual(saved.agents["reviewer-security"], "test-project-modular-monolith-reviewer-security");
+    assert.strictEqual(saved.agents["reviewer-tests"], "test-project-modular-monolith-reviewer-tests");
+    assert.strictEqual(saved.agents["code-review"], "test-project-modular-monolith-reviewer-correctness");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("merge tool only merges configured documents and deletes stale map files", async () => {
     const tmpDir = makeTmpDir("arch-tools-stale-map-");
     const mapDir = getArchitectMapDir(tmpDir);
@@ -531,6 +594,196 @@ describe("architect-tools", () => {
       assert.strictEqual(actual, hash, `hash mismatch for ${rel}`);
     }
 
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("merge tool with an empty map dir writes an all-empty drivers file", async () => {
+    const tmpDir = makeTmpDir("arch-tools-merge-empty-");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.functionalRequirements, 0);
+    assert.strictEqual(result.details.qualityAttributes, 0);
+    assert.strictEqual(result.details.constraints, 0);
+    assert.strictEqual(result.details.technicalConcerns, 0);
+    assert.strictEqual(result.details.uncertainties, 0);
+
+    const driversPath = path.join(tmpDir, ".pi", "architect", "architectural-drivers.json");
+    assert.ok(fs.existsSync(driversPath), "merged drivers file should exist");
+    const saved = JSON.parse(fs.readFileSync(driversPath, "utf8"));
+    assert.deepStrictEqual(saved, {
+      functionalRequirements: [],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    });
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("merge tool deletes the legacy root architectural-drivers.json", async () => {
+    const tmpDir = makeTmpDir("arch-tools-legacy-root-");
+    const legacyDir = path.join(tmpDir, ".pi", "senai");
+    fs.mkdirSync(legacyDir, { recursive: true });
+    const oldMerged = path.join(legacyDir, "architectural-drivers.json");
+    fs.writeFileSync(oldMerged, JSON.stringify(createEmptyDrivers()), "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.ok(!fs.existsSync(oldMerged), "legacy merged file should be deleted");
+    assert.deepStrictEqual(result.details.deletedLegacy, [".pi/senai/architectural-drivers.json"]);
+    assert.strictEqual(result.details.functionalRequirements, 0, "old merged file is deleted, not merged");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("merge tool deletes a legacy file with valid JSON but unknown shape without merging it", async () => {
+    const tmpDir = makeTmpDir("arch-tools-legacy-shape-");
+    const legacyDir = path.join(tmpDir, ".pi", "senai");
+    fs.mkdirSync(legacyDir, { recursive: true });
+    const legacyFile = path.join(legacyDir, "drivers-weird.json");
+    fs.writeFileSync(legacyFile, JSON.stringify({ foo: 1 }), "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.ok(!fs.existsSync(legacyFile), "unknown-shape legacy file should be deleted");
+    assert.deepStrictEqual(result.details.deletedLegacy, [".pi/senai/drivers-weird.json"]);
+    assert.strictEqual(result.details.functionalRequirements, 0);
+    assert.strictEqual(result.details.qualityAttributes, 0);
+    assert.strictEqual(result.details.constraints, 0);
+    assert.strictEqual(result.details.technicalConcerns, 0);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function saveFinalizeFixtures(
+    tmpDir: string,
+    options: { profileArch: string; reportArch: string; libraryName: string },
+  ): void {
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "entry.md"),
+      `---\nname: ${options.libraryName}\ncomplexity: low\nbest-for-drivers:\n  - small team\n---\n# Entry\n`,
+      "utf8",
+    );
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: options.profileArch,
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: options.reportArch,
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+  }
+
+  it("finalize tool resolves the architecture via the report when the profile id is not in the library", async () => {
+    const tmpDir = makeTmpDir("arch-tools-report-fallback-");
+    saveFinalizeFixtures(tmpDir, {
+      profileArch: "custom-arch",
+      reportArch: "modular-monolith",
+      libraryName: "modular-monolith",
+    });
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.error, undefined);
+    assert.strictEqual(result.details.agents.length, 5);
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, ".pi", "agents", "test-project-modular-monolith-planner.md")),
+      "agents are named after the resolved library entry id",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finalize tool resolves the architecture by entry name matching the profile selection", async () => {
+    const tmpDir = makeTmpDir("arch-tools-name-match-");
+    saveFinalizeFixtures(tmpDir, {
+      profileArch: "Modular Monolith",
+      reportArch: "something-else",
+      libraryName: "Modular Monolith",
+    });
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.error, undefined);
+    assert.strictEqual(result.details.agents.length, 5);
+    assert.ok(
+      fs.existsSync(path.join(tmpDir, ".pi", "agents", "test-project-modular-monolith-planner.md")),
+      "agent names use the slugified library entry id",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finalize tool rejects when agents.json is corrupted, before writing any artifacts", async () => {
+    const tmpDir = makeTmpDir("arch-tools-corrupt-agents-");
+    saveFinalizeFixtures(tmpDir, {
+      profileArch: "modular-monolith",
+      reportArch: "modular-monolith",
+      libraryName: "modular-monolith",
+    });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "{ not valid json", "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    await assert.rejects(
+      () => tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir)),
+      /Invalid agent config/,
+    );
+    assert.ok(
+      !fs.existsSync(path.join(tmpDir, ".pi", "architect", "architecture.md")),
+      "no architecture docs written when the config is corrupted",
+    );
+    assert.ok(
+      !fs.existsSync(path.join(tmpDir, ".pi", "agents")),
+      "no agents written when the config is corrupted",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finalize tool rejects when architect-profile.json is malformed", async () => {
+    const tmpDir = makeTmpDir("arch-tools-bad-profile-");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architect-profile.json"), "{ not valid", "utf8");
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    await assert.rejects(
+      () => tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir)),
+      /Invalid architect profile/,
+    );
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

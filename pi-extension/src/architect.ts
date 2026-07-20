@@ -6,6 +6,8 @@ import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
 import { getArchitectInputsConfigPath } from "./architect-inputs-config.js";
 import { getDriversPath, type ArchitecturalDrivers } from "./driver-extractor.js";
 import { getArchitectStateDir } from "./constants.js";
+import { loadAgentConfig, resolveAgentName, saveAgentConfig } from "./agent-config.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "./agent-suggestions.js";
 
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
 export const ARCHITECT_REPORT_FILE = "architect-report.json";
@@ -89,6 +91,18 @@ export const ARCHITECT_ROLES = [
 ] as const;
 
 export const ARCHITECT_STAGES = ["plan", "implement", "document", "deliver"] as const;
+
+/** Maps each architecture-bound Senai role to its generated agent name suffix.
+ *  Single source of truth — doctor.ts derives its checks from this. */
+export const ARCHITECTURE_AGENT_MAPPING: Array<{ role: SenaiRole; suffix: string }> = [
+  { role: "scout-1", suffix: "planner" },
+  { role: "planner", suffix: "planner" },
+  { role: "implementer", suffix: "implementer" },
+  { role: "reviewer-correctness", suffix: "reviewer-correctness" },
+  { role: "reviewer-security", suffix: "reviewer-security" },
+  { role: "reviewer-tests", suffix: "reviewer-tests" },
+  { role: "code-review", suffix: "reviewer-correctness" },
+];
 
 // Maps each generated architecture role to the stage skill it should reference.
 // Reviewers act in the plan stage: their review artifacts live under plan/reviews/.
@@ -411,6 +425,34 @@ export function generateAgentFiles(
   }
 
   return created;
+}
+
+/** Auto-map architecture-bound roles in agents.json to the generated agents.
+ *  Remaps roles still on built-in defaults or pointing at previously generated
+ *  agents for this project (stale after an architecture change). Never touches
+ *  other custom mappings. Creates agents.json if missing. Returns mapped roles. */
+export function autoMapArchitectureAgents(cwd: string, profile: ArchitectProfile, archId: string): SenaiRole[] {
+  const config = loadAgentConfig(cwd) ?? { version: 1, agents: {} };
+  const agents = { ...config.agents } as Record<string, string>;
+  const mapped: SenaiRole[] = [];
+  for (const { role, suffix } of ARCHITECTURE_AGENT_MAPPING) {
+    const expected = `${profile.projectSlug}-${archId}-${suffix}`;
+    const current = resolveAgentName(config, role);
+    const isDefault = current === DEFAULT_AGENTS[role];
+    // Stale = looks generated for this project but the agent file is gone
+    // (e.g. removed by removeStaleArchitectureArtifacts on a re-run). A user's
+    // own slug-prefixed agent file on disk is never treated as stale.
+    const agentFileExists = fs.existsSync(path.join(cwd, ".pi", "agents", `${current}.md`));
+    const isStaleGenerated = current.startsWith(`${profile.projectSlug}-`) && !agentFileExists;
+    if (!isDefault && !isStaleGenerated) continue;
+    if (agents[role] === expected) continue;
+    agents[role] = expected;
+    mapped.push(role);
+  }
+  if (mapped.length > 0) {
+    saveAgentConfig(cwd, { ...config, agents });
+  }
+  return mapped;
 }
 
 export function generateSkillFiles(
