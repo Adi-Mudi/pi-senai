@@ -24,6 +24,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Sequence-consistency sweep: all design docs and user-facing hints now match the generate-first setup order.
+  - `Doc/architect-sequence.md` no longer lists the three config files as preconditions for `/senai-generate-architect`; `Doc/senai-sequence.md` Rule 10 states the new one-time setup order; `Doc/senai-full-sequence.md` documents that the generate commands create `agents.json`; command lists gained `/senai-configure-architect-inputs` and `/senai-generate-architect`; next-step hints no longer skip `/senai-generate-sub-agents`.
+  - Doctor's missing-`agents.json` hint names the generate commands as the primary fix; the architecture-mapping fix hint mentions re-running `/senai-generate-architect` for default/stale roles.
+  - Config-missing notifications in stage commands and `/senai-agents` mention the generation path alongside `/senai-configure-agents`.
+  - `formatStageStatus` now lists `/senai-approve` (the primary flow command) in the run-status block.
+
 - Setup sequence: generate commands now own `agents.json`.
   - `/senai-generate-architect` and `/senai-generate-sub-agents` no longer require a pre-existing agent configuration. Both create or update `.pi/senai/agents.json` themselves.
   - `senai_finalize_architecture` now auto-maps the seven architecture-bound roles (`scout-1`, `planner`, `implementer`, `reviewer-correctness`, `reviewer-security`, `reviewer-tests`, `code-review`) to the generated agents — roles still on built-in defaults or pointing at stale generated agents for the same project are remapped; other custom mappings are never touched.

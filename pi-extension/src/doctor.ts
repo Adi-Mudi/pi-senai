@@ -197,7 +197,7 @@ function checkConfigFiles(
     items.push({
       status: "error",
       message: `agents.json missing or invalid at ${agentPath}`,
-      details: ["Run /senai-configure-agents to create it."],
+      details: ["Run /senai-generate-sub-agents (or /senai-generate-architect) to create it, or /senai-configure-agents to configure agents manually."],
     });
   }
 
@@ -905,7 +905,7 @@ function checkArchitectureAgentMapping(cwd: string, agentConfig: AgentConfig | n
       items.push({
         status: "error",
         message: `${label} (${role}) is mapped to "${actual}" but the architecture factory generated "${expected}".`,
-        details: [`Fix: run /senai-configure-agents and map ${role} to ${expected}.`],
+        details: [`Fix: re-run /senai-generate-architect to auto-map default or stale roles, or run /senai-configure-agents to map ${role} to ${expected} manually.`],
       });
     }
   }

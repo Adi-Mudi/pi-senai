@@ -261,7 +261,7 @@ Generated skills:
   - <project>-<architecture-id>-implement
   ...
 
-Next: run /senai-doctor to verify, then /senai-plan <mission>.
+Next: run /senai-generate-sub-agents to generate the remaining roles. Then make sure files.json and agents_files.json exist (/senai-configure-files, /senai-configure-agents-files), run /senai-doctor to verify, then /senai-plan <mission>.
 ```
 
 ## Error handling

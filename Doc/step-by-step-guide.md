@@ -68,6 +68,12 @@ Before you run any stage, three configuration files must exist (`agents.json`, `
    /senai-configure-agents-files
    ```
 
+6. **Verify the setup** — run a full diagnostic and check the report:
+
+   ```text
+   /senai-doctor
+   ```
+
 `/senai-configure-agents` is optional: use it only to hand-pick your own agents instead of the generated ones.
 
 Check the current settings anytime with `/senai-agents`, `/senai-files`, and `/senai-agents-files`.

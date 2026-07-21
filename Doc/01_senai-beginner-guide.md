@@ -159,6 +159,7 @@ Clears the current run state so you can begin a new mission.
 | `/senai-doctor` | Run a full diagnostic check. |
 | `/senai-configure-architect-inputs` | Select documents for the architect. |
 | `/senai-generate-architect` | Generate a project-specific architecture agent and skills. |
+| `/senai-generate-sub-agents` | Generate sub-agents for the remaining 14 roles and map them in `agents.json`. |
 | `/senai-plan <mission>` | Start the Plan stage. |
 | `/senai-approve` | Approve the current stage and start the next one. |
 | `/senai-implement` | Start the Implement stage manually. |

@@ -19,14 +19,13 @@ Generate a project-specific architecture agent and matching skills by reading th
 
 Before running `/senai-generate-architect`:
 
-1. Pi Senai must be configured:
-   - `.pi/senai/agents.json`
-   - `.pi/senai/files.json`
-   - `.pi/senai/agents_files.json`
-2. Architect inputs must be configured:
+1. Architect inputs must be configured:
    - `.pi/senai/architect-inputs.json`
-3. Architecture library should exist:
+2. Architecture library should exist:
    - `.pi/architecture-library/*.md`
+
+No other configuration is required up front: the command creates or updates
+`.pi/senai/agents.json` itself and auto-maps the seven architecture-bound roles.
 
 If architect inputs are missing, the command tells the user to run `/senai-configure-architect-inputs` first.
 
@@ -487,7 +486,7 @@ Generated skills:
   - inventory-modular-monolith-plan
   - inventory-modular-monolith-implement
 
-Next: run /senai-doctor to verify, then /senai-plan <mission>.
+Next: run /senai-generate-sub-agents to generate the remaining roles. Then make sure files.json and agents_files.json exist (/senai-configure-files, /senai-configure-agents-files), run /senai-doctor to verify, then /senai-plan <mission>.
 ```
 
 ---

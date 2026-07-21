@@ -49,6 +49,8 @@ Configuration commands:
 - `/senai-files` — show the configured project file list.
 - `/senai-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/senai/agents_files.json`.
 - `/senai-agents-files` — show configured document assignments per role.
+- `/senai-configure-architect-inputs` — select the documents and constraints the architect agent reads (`.pi/senai/architect-inputs.json`).
+- `/senai-generate-architect` — generate the project architecture, five architecture agents, and four architecture skills; creates or updates `.pi/senai/agents.json` and auto-maps the seven architecture-bound roles.
 - `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, runtime environment, and the architecture factory output (agent mapping, generated agent content, drift).
 - `/senai-generate-sub-agents` — generate project-specific sub-agents for the 14 non-architecture roles from bundled technology resources (basic mode: 3–4 questions). Only roles on built-in defaults are generated; one confirmation before writing and mapping.
 
@@ -81,6 +83,8 @@ A typical config looks like:
   }
 }
 ```
+
+`agents.json` is normally created for you: `/senai-generate-architect` creates or updates it and auto-maps the seven architecture-bound roles, and `/senai-generate-sub-agents` maps the remaining fourteen roles (creating the file if missing). `/senai-configure-agents` is the optional manual override for hand-picking your own agents.
 
 Only roles that differ from the default need to be listed. Defaults are:
 

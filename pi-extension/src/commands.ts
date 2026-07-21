@@ -486,7 +486,7 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
   const config = loadAgentConfig(cwd);
   if (!config) {
     ctx.ui.notify(
-      "No Pi Senai agent configuration found. Please run /senai-configure-agents first.",
+      "No Pi Senai agent configuration found. Run /senai-generate-sub-agents to generate your team, or /senai-configure-agents to configure agents manually.",
       "warning",
     );
     return false;
@@ -534,7 +534,7 @@ export function registerAgentCommands(pi: ExtensionAPI) {
       const config = loadAgentConfig(ctx.cwd);
       if (!config) {
         ctx.ui.notify(
-          "No agent configuration found. Run /senai-configure-agents first.",
+          "No agent configuration found. Run /senai-generate-sub-agents or /senai-configure-agents to create it.",
           "warning",
         );
         return;

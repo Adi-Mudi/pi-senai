@@ -178,6 +178,7 @@ export function formatStageStatus(state: {
     ``,
     `Available commands:`,
     `  /senai-plan <mission>`,
+    `  /senai-approve`,
     `  /senai-implement`,
     `  /senai-document`,
     `  /senai-deliver`,
