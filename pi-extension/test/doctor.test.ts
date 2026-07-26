@@ -2093,3 +2093,130 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("doctor setup progress", () => {
+  const PROGRESS_SLUG = "testproj";
+
+  function findProgress(report: ReturnType<typeof runSenaiDiagnostic>) {
+    const section = report.sections.find((s) => s.title === "Setup progress");
+    assert.ok(section, "Setup progress section should exist");
+    return section;
+  }
+
+  function guidanceMessage(section: { items: Array<{ status: string; message: string }> }): string {
+    const item = section.items.find(
+      (i) => i.message.includes("Next: run") || i.message.includes("Setup complete"),
+    );
+    assert.ok(item, "a guidance item should exist");
+    return item.message;
+  }
+
+  function writeMinimalReport(cwd: string): void {
+    saveArchitectReport(cwd, {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "ok",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "ok",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+  }
+
+  function setupThrough(step: number): string {
+    const tmpDir = makeTmpDir("doctor-progress-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: PROGRESS_SLUG }), "utf8");
+    if (step >= 1) {
+      saveFilesConfig(tmpDir, { version: 2, codePaths: [], inputDocuments: [], testPaths: [], excludedPaths: [] });
+    }
+    if (step >= 2) {
+      saveArchitectInputsConfig(tmpDir, { version: 1, documents: [], additionalConstraints: [] });
+    }
+    if (step >= 3) {
+      writeMinimalReport(tmpDir);
+    }
+    if (step >= 4) {
+      saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": `${PROGRESS_SLUG}-scout-2` } });
+      writeAgent(tmpDir, `${PROGRESS_SLUG}-scout-2`, {
+        name: `${PROGRESS_SLUG}-scout-2`,
+        description: "generated team agent",
+      });
+    }
+    if (step >= 5) {
+      saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    }
+    return tmpDir;
+  }
+
+  it("empty project points at /senai-configure-files and leads the report", () => {
+    const tmpDir = setupThrough(0);
+    const report = runSenaiDiagnostic(tmpDir);
+    assert.strictEqual(report.sections[0].title, "Setup progress", "progress section is first");
+    const section = findProgress(report);
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-files"));
+    assert.ok(section.items.some((i) => i.message.startsWith("1. Project files configured — pending")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("with only files.json the next step is /senai-configure-architect-inputs", () => {
+    const tmpDir = setupThrough(1);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-architect-inputs"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("with architect inputs done the next step is /senai-generate-architect", () => {
+    const tmpDir = setupThrough(2);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-generate-architect"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("with an architect report the next step is /senai-generate-sub-agents", () => {
+    const tmpDir = setupThrough(3);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-generate-sub-agents"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("with a generated team agent the next step is /senai-configure-agents-files", () => {
+    const tmpDir = setupThrough(4);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-agents-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("fully configured project reports setup complete", () => {
+    const tmpDir = setupThrough(5);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Setup complete — run /senai-plan <mission>"));
+    assert.ok(section.items.some((i) => i.message.startsWith("7. First run — ready")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("emits no error items, so the verdict is unaffected", () => {
+    const tmpDir = setupThrough(0);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(!section.items.some((i) => i.status === "error"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("counts completed checks in the guidance line", () => {
+    const tmpDir = setupThrough(2);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("2/5 checks complete"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

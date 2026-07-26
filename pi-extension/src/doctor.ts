@@ -127,6 +127,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
     agentsFilesConfigError = err.message;
   }
 
+  sections.push(checkSetupProgress(cwd));
   sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
 
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
@@ -165,6 +166,91 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const ok = summary.error === 0;
 
   return { ok, summary, sections };
+}
+
+/** Setup-progress guide: detects which of the documented one-time setup steps
+ *  are complete and names the one next command. Guidance only — never emits
+ *  errors, so it cannot change the report's pass/fail verdict. */
+function checkSetupProgress(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  let filesDone = false;
+  try {
+    filesDone = loadFilesConfig(cwd) !== null;
+  } catch {
+    filesDone = false; // corrupted counts as not done; the config section reports it
+  }
+
+  let inputsDone = false;
+  try {
+    inputsDone = loadArchitectInputsConfig(cwd) !== null;
+  } catch {
+    inputsDone = false;
+  }
+
+  let architectDone = false;
+  try {
+    architectDone = loadArchitectReport(cwd) !== null;
+  } catch {
+    architectDone = false;
+  }
+
+  let agentsDone = false;
+  try {
+    const agentConfig = loadAgentConfig(cwd);
+    if (agentConfig) {
+      const slug = getProjectSlug(cwd);
+      agentsDone = GENERATED_ROLES.some((def) => {
+        const expectedName = `${slug}-${def.role}`;
+        return (
+          resolveAgentName(agentConfig, def.role as SenaiRole) === expectedName &&
+          fs.existsSync(path.join(cwd, ".pi", "agents", `${expectedName}.md`))
+        );
+      });
+    }
+  } catch {
+    agentsDone = false;
+  }
+
+  let agentsFilesDone = false;
+  try {
+    agentsFilesDone = loadAgentsFilesConfig(cwd) !== null;
+  } catch {
+    agentsFilesDone = false;
+  }
+
+  const steps: Array<{ done: boolean; label: string; command: string }> = [
+    { done: filesDone, label: "Project files configured", command: "/senai-configure-files" },
+    { done: inputsDone, label: "Architect inputs selected", command: "/senai-configure-architect-inputs" },
+    { done: architectDone, label: "Architecture generated", command: "/senai-generate-architect" },
+    { done: agentsDone, label: "Sub-agent team generated", command: "/senai-generate-sub-agents" },
+    { done: agentsFilesDone, label: "Agent documents assigned", command: "/senai-configure-agents-files" },
+  ];
+
+  const completed = steps.filter((s) => s.done).length;
+  const allDone = completed === steps.length;
+
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    items.push({
+      status: step.done ? "ok" : "info",
+      message: `${i + 1}. ${step.label} — ${step.done ? "done" : `pending (run ${step.command})`}`,
+    });
+  }
+  items.push({ status: "info", message: "6. Doctor verification — this command" });
+  items.push({
+    status: allDone ? "ok" : "info",
+    message: `7. First run — ${allDone ? "ready (/senai-plan <mission>)" : "pending"}`,
+  });
+
+  if (allDone) {
+    items.push({ status: "ok", message: "Setup complete — run /senai-plan <mission> to start your first run." });
+  } else {
+    const next = steps.find((s) => !s.done)!;
+    items.push({ status: "info", message: `Setup progress: ${completed}/5 checks complete. Next: run ${next.command}.` });
+  }
+
+  return { title: "Setup progress", items };
 }
 
 function checkConfigFiles(

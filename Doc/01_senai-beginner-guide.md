@@ -76,7 +76,7 @@ This assigns truth documents and comparison documents to each role.
 /senai-doctor
 ```
 
-This checks all config files, mapped agents, file scopes, and runtime setup. It saves a full report to `.IDE_Plans/senai/doctor-report.md`.
+This checks all config files, mapped agents, file scopes, and runtime setup. The report opens with a **Setup progress** section that shows which steps are done and names the one next command — so you can run `/senai-doctor` after every step and follow the arrow. It saves a full report to `.IDE_Plans/senai/doctor-report.md`.
 
 ### Optional: manual agent mapping
 

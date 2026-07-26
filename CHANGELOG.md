@@ -39,6 +39,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Doctor setup-progress guidance.
+  - Every `/senai-doctor` report now opens with a "Setup progress" section: the 7 one-time setup steps marked done or pending, a completed-checks count, and a `Next: run <command>` line naming the exact next command (or "Setup complete — run /senai-plan <mission>").
+  - Detection is read-only and mirrors the documented setup order (`/senai-configure-files` → `/senai-configure-architect-inputs` → `/senai-generate-architect` → `/senai-generate-sub-agents` → `/senai-configure-agents-files`). Guidance only — the section never emits errors, so the report's pass/fail verdict is unchanged.
+  - 8 new tests cover every step transition, first-position placement, and the no-error guarantee.
+
 - Doctor architecture validation.
   - New `/senai-doctor` section "Architecture agent mapping": once an architecture is generated, the seven architecture-bound roles (`scout-1`, `planner`, `implementer`, `reviewer-correctness`, `reviewer-security`, `reviewer-tests`, `code-review`) must resolve to the generated `<project>-<architecture>-<role>` agents. `code-review` shares the generated reviewer-correctness agent, so Implement-stage code reviews also check architecture conformance. Mismatches are errors with the exact `/senai-configure-agents` fix. Display names are explicit (e.g., "Scout Architecture (scout-1)").
   - New `/senai-doctor` section "Generated agent content": opens each generated agent file and verifies the `tools`/`skills` frontmatter, that the referenced skill folder exists, and that the body still references `.pi/architect/architecture.md`, the ADRs, and the forbidden patterns section.
