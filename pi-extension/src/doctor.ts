@@ -706,8 +706,20 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     });
   }
 
-  const inputsConfig = loadArchitectInputsConfig(cwd);
-  if (!inputsConfig) {
+  let inputsConfig: ReturnType<typeof loadArchitectInputsConfig> = null;
+  let inputsConfigError: string | null = null;
+  try {
+    inputsConfig = loadArchitectInputsConfig(cwd);
+  } catch (err: any) {
+    inputsConfigError = err.message;
+  }
+  if (inputsConfigError) {
+    items.push({
+      status: "error",
+      message: inputsConfigError,
+      details: ["Run /senai-configure-architect-inputs to recreate it, or fix the JSON manually."],
+    });
+  } else if (!inputsConfig) {
     items.push({
       status: "info",
       message: "No architect inputs configured. Run /senai-configure-architect-inputs to set them.",

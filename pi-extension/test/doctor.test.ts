@@ -9,6 +9,7 @@ import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
 import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest } from "../src/architect.js";
+import { getProjectSlug } from "../src/agent-generator.js";
 import { createEmptyDrivers } from "../src/driver-extractor.js";
 
 function makeTmpDir(prefix: string): string {
@@ -2217,6 +2218,123 @@ describe("doctor setup progress", () => {
     const tmpDir = setupThrough(2);
     const section = findProgress(runSenaiDiagnostic(tmpDir));
     assert.ok(guidanceMessage(section).includes("2/5 checks complete"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function corrupt(cwd: string, relPath: string): void {
+    writeFile(cwd, relPath, "{ not valid json");
+  }
+
+  it("corrupted files.json leaves step 1 pending", () => {
+    const tmpDir = setupThrough(1);
+    corrupt(tmpDir, ".pi/senai/files.json");
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("corrupted architect-inputs.json leaves step 2 pending and is reported, not fatal", () => {
+    const tmpDir = setupThrough(2);
+    corrupt(tmpDir, ".pi/senai/architect-inputs.json");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findProgress(report);
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-architect-inputs"));
+    const setup = report.sections.find((s) => s.title === "Architecture setup");
+    assert.ok(
+      setup?.items.some((i) => i.status === "error" && i.message.includes("Invalid architect inputs config")),
+      "corrupted inputs config is reported as an error item instead of crashing doctor",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("corrupted architect report leaves step 3 pending", () => {
+    const tmpDir = setupThrough(3);
+    corrupt(tmpDir, ".pi/architect/architect-report.json");
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-generate-architect"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("corrupted agents.json leaves step 4 pending", () => {
+    const tmpDir = setupThrough(4);
+    corrupt(tmpDir, ".pi/senai/agents.json");
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-generate-sub-agents"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("corrupted agents_files.json leaves step 5 pending", () => {
+    const tmpDir = setupThrough(5);
+    corrupt(tmpDir, ".pi/senai/agents_files.json");
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-agents-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mapped team agent with a missing agent file leaves step 4 pending", () => {
+    const tmpDir = setupThrough(3);
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": `${PROGRESS_SLUG}-scout-2` } });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-generate-sub-agents"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("agents.json with only custom mappings leaves step 4 pending", () => {
+    const tmpDir = setupThrough(3);
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "my-custom-scout" } });
+    writeAgent(tmpDir, "my-custom-scout", { name: "my-custom-scout", description: "custom" });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-generate-sub-agents"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("out-of-order completion still points at the first incomplete step", () => {
+    const tmpDir = makeTmpDir("doctor-progress-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: PROGRESS_SLUG }), "utf8");
+    saveArchitectInputsConfig(tmpDir, { version: 1, documents: [], additionalConstraints: [] });
+    writeMinimalReport(tmpDir);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("a generated agent from a different project slug does not count", () => {
+    const tmpDir = setupThrough(3);
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "other-proj-scout-2" } });
+    writeAgent(tmpDir, "other-proj-scout-2", { name: "other-proj-scout-2", description: "other project" });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-generate-sub-agents"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("detects the team agent via the folder-name slug when package.json is absent", () => {
+    const tmpDir = makeTmpDir("doctor-progress-");
+    saveFilesConfig(tmpDir, { version: 2, codePaths: [], inputDocuments: [], testPaths: [], excludedPaths: [] });
+    saveArchitectInputsConfig(tmpDir, { version: 1, documents: [], additionalConstraints: [] });
+    writeMinimalReport(tmpDir);
+    const slug = getProjectSlug(tmpDir);
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": `${slug}-scout-2` } });
+    writeAgent(tmpDir, `${slug}-scout-2`, { name: `${slug}-scout-2`, description: "generated" });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-agents-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("step 6 is always shown and step 7 stays pending mid-sequence", () => {
+    const tmpDir = setupThrough(2);
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    const step6 = section.items.find((i) => i.message.startsWith("6. Doctor verification"));
+    assert.ok(step6, "step 6 row exists");
+    assert.strictEqual(step6.status, "info");
+    assert.ok(section.items.some((i) => i.message.startsWith("7. First run — pending")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("the formatted report renders the progress section and guidance", () => {
+    const tmpDir = setupThrough(0);
+    const text = formatDiagnosticReport(runSenaiDiagnostic(tmpDir));
+    assert.ok(text.includes("## Setup progress"));
+    assert.ok(text.includes("Next: run /senai-configure-files"));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

@@ -61,6 +61,13 @@ Legend: **(+N)** = tests added in this round.
 | `list-editor.test.ts` (+15) | Fallback pagination, cancelled select, filter hide/clear, empty items, forceFallback; TUI escape, placeholder, focus transitions both directions, cursor clamp, duplicate add, filter label, unknown keys. |
 | `role-picker.test.ts` (+10) | Wrap-around both directions; scroll window both bounds; empty items; unknown initialSelectedId; unknown keys; fallback empty items; label without agent; custom subtitle; tiny width. |
 
+### Feature: doctor setup progress (added 2026-07-20)
+
+| Test file | Focus of added tests |
+| --- | --- |
+| `doctor.test.ts` (+8 base) | Every step transition (empty → fully configured), first-position placement, progress count, no-error guarantee. |
+| `doctor.test.ts` (+12 edge) | All 5 corrupted-config catch branches; mapped-but-missing agent file; custom-only mappings; out-of-order completion (first incomplete step wins); different-project slug; folder-name slug fallback; step 6/7 row states; formatted report output. |
+
 ---
 
 ## 3. Known issues — ALL FIXED (2026-07-20)
@@ -81,6 +88,7 @@ All 12 issues found during the edge-case round have been fixed in source and the
 | 10 | `files-discovery.ts` | `isExcluded("distfoo.ts", ["dist"])` over-matched on prefix. | **FIXED** — path-segment boundary required. |
 | 11 | `files-discovery.ts` + `files-config.ts` | Substring test matching: `latest/`, `contest.md` matched "test"; same bug in `migrateFilesConfig`. | **FIXED** — delimiter-aware `TEST_PATTERNS` + shared `looksLikeTestPath` helper used by both files. |
 | 12 | `driver-extractor.ts` | `findDriverGaps` did not treat category `"scalability"` as scale coverage. | **FIXED** — `"scalability"` is recognized alongside `"scale"` and `"performance"`. |
+| 13 | `doctor.ts` | `checkArchitectureSetup` called `loadArchitectInputsConfig` unguarded — a corrupted `architect-inputs.json` crashed the entire doctor run. | **FIXED** (2026-07-20) — guarded like the neighboring `loadDrivers` block; corrupted config is now reported as an error item with a fix hint. |
 
 ---
 
@@ -113,6 +121,7 @@ node --test dist/pi-extension/test/<file>.test.js   # single file
 - Tests before the edge-case round: 485 (all passing).
 - Edge-case round: +198 tests → 683 (all passing).
 - Bugfix round (2026-07-20): all 12 known issues fixed in source; pinned tests updated to assert fixed behavior; guard tests added. Final: **686 tests, 686 passing, 0 failures**.
+- Doctor guidance round (2026-07-20): setup-progress section added (8 base tests) + 12 edge tests; issue 13 (doctor crash on corrupted architect-inputs) found by an edge test and fixed. Final: **706 tests, 706 passing, 0 failures**.
 - Deviations recorded during the edge-case round:
   - `loadState` with a JSON `null` body throws (pinned) rather than returning the default state.
   - `getArtifactPaths` returns 19 fields (the interface has 19, not 18 as first estimated).
