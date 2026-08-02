@@ -162,6 +162,8 @@ This command deep-scans your project and suggests real files and folders. It spl
 
 The scanner recognizes both standard folder names (like `src/`, `docs/`, `tests/`) and custom names by looking at the file types inside each folder. If you select a folder, the tool will not let you also select a file inside it, and vice versa, to avoid conflicts.
 
+The picker shows two clear sections: `✅ Selected (N)` pinned on top and `💡 Suggestions (N)` below, with uniform markers — Enter toggles an item between the groups. Long paths are middle-truncated so the filename always stays visible, and the focused row shows its full path in a detail line below the list.
+
 Configure document assignments for each role:
 
 ```

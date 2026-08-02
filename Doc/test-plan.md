@@ -135,6 +135,7 @@ node --test dist/pi-extension/test/<file>.test.js   # single file
 - Doctor guidance round (2026-07-20): setup-progress section added (8 base tests) + 12 edge tests; issue 13 (doctor crash on corrupted architect-inputs) found by an edge test and fixed. Final: **706 tests, 706 passing, 0 failures**.
 - Document-scope guidance round (2026-07-28): suggestion module + curated picker added; step-5 detection strengthened (empty assignments stay pending). Base + edge coverage added. Final: **735 tests, 735 passing, 0 failures**.
 - Picker needs + suggestions round (2026-08-02): +11 tests → **814 tests, 814 passing, 0 failures**.
+- List editor Option A round (2026-08-02): +12 tests → **826 tests, 826 passing, 0 failures**.
 - Deviations recorded during the edge-case round:
   - `loadState` with a JSON `null` body throws (pinned) rather than returning the default state.
   - `getArtifactPaths` returns 19 fields (the interface has 19, not 18 as first estimated).
@@ -215,3 +216,27 @@ Scope: unit + edge coverage for the needs-labels and dynamic-suggestions feature
 - Needs values for 3 roles, scout-1 need, undefined for code scouts (3 tests)
 - Needs rendering in both pickers, unset-needs omission (2 tests)
 - Typed-RTM suggestion row, assigned-row suggestion hiding (2 tests)
+
+## 10. List editor Option A round (2026-08-02)
+
+Scope: the custom list editor rebuilt as Option A — `✅ Selected (N)` pinned on top,
+`💡 Suggestions (N)` below, uniform markers, Enter toggles — plus long-path handling
+(`truncateMiddle`, focused-row detail line). `runCustomListEditor` moved from
+`SelectList` to the role-picker manual-render pattern; the fallback editor is
+unchanged, so `commands.test.ts` needed no changes.
+
+### Unit/edge tests per function
+
+| Function / sub-function | Cases | Edge cases covered |
+|---|---|---|
+| `truncateMiddle` | 7 | fits, long dirs (filename whole), oversized filename (tail kept), exact boundary, widths 0/1/2, trailing-slash folder, same-head pairs stay distinguishable |
+| `render` (sections) | 2 | headers with counts, Selected pinned top; uniform ✅/⬜ markers, no `Suggest:`/`Remove:` prefix swap |
+| `toggleFocused` | 1 | suggestion → selected → suggestion round trip with counts |
+| `detailLines` | 1 | full untruncated path of the focused row at width 40, row itself truncated |
+| `render` (narrow) | 1 | widths 20 and 1 — no crash, rows still identifiable |
+
+### Adapted existing tests (14, custom TUI describe)
+
+SelectList-internal assertions re-pointed at rendered lines: `(no items)` →
+section placeholders (`Selected (0)` / `Suggestions (0)` / `(none)`), label
+assertions updated for uniform markers. Fallback describe untouched.

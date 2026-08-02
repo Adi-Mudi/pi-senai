@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { ExtensionContext, ExtensionUIContext } from "@mariozechner/pi-coding-agent";
-import { runListEditor, type ListEditorAction } from "../src/ui/list-editor.js";
+import { runListEditor, truncateMiddle, type ListEditorAction } from "../src/ui/list-editor.js";
 
 const ENTER = "\r";
 const DOWN = "\x1b[B";
@@ -262,7 +262,7 @@ describe("runListEditor custom TUI", () => {
     comp.handleInput(ENTER);
 
     const line = selectedLine(comp.render(80));
-    assert.ok(line?.includes("✅ Remove: a"), `expected a to be selected after adding, got: ${line}`);
+    assert.ok(line?.includes("✅ a"), `expected a to be selected after adding, got: ${line}`);
 
     getDone()({ kind: "back" });
     const result = await promise;
@@ -380,14 +380,22 @@ describe("runListEditor custom TUI", () => {
     assert.deepStrictEqual(result, { kind: "back" });
   });
 
-  it("renders a placeholder when there is no content", async () => {
+  it("renders empty section placeholders when there is no content", async () => {
     const { ctx, getComponent, getDone } = makeTuiCtx();
     const promise = runListEditor(ctx, { title: "Test", items: [] });
     const comp = getComponent() as { render: (width: number) => string[] };
     const lines = comp.render(80);
     assert.ok(
-      lines.some((line) => line.includes("(no items)")),
-      `expected a (no items) placeholder, got:\n${lines.join("\n")}`,
+      lines.some((line) => line.includes("Selected (0)")),
+      `expected an empty Selected section, got:\n${lines.join("\n")}`,
+    );
+    assert.ok(
+      lines.some((line) => line.includes("Suggestions (0)")),
+      `expected an empty Suggestions section, got:\n${lines.join("\n")}`,
+    );
+    assert.ok(
+      lines.some((line) => line.includes("(none)")),
+      `expected a (none) placeholder, got:\n${lines.join("\n")}`,
     );
     getDone()({ kind: "back" });
     await promise;
@@ -451,8 +459,8 @@ describe("runListEditor custom TUI", () => {
     comp.handleInput(ENTER);
     const lines = comp.render(80);
     assert.ok(
-      lines.some((line) => line.includes("(no items)")),
-      `expected a (no items) placeholder, got:\n${lines.join("\n")}`,
+      lines.some((line) => line.includes("(none)")),
+      `expected a (none) placeholder, got:\n${lines.join("\n")}`,
     );
     getDone()({ kind: "back" });
     const result = await promise;
@@ -473,7 +481,8 @@ describe("runListEditor custom TUI", () => {
     comp.handleInput(DOWN);
     comp.handleInput(ENTER);
     const lines = comp.render(80);
-    assert.ok(!lines.some((line) => line.includes("⬜ Suggest: a")));
+    assert.ok(lines.some((line) => line.includes("✅ a")), "a moved to the selected group");
+    assert.ok(!lines.some((line) => line.includes("⬜ a")), "a no longer offered as a suggestion");
     // Back out: UP returns to the action bar, ENTER on Back finishes.
     comp.handleInput(UP);
     comp.handleInput(ENTER);
@@ -521,5 +530,166 @@ describe("runListEditor custom TUI", () => {
     getDone()({ kind: "back" });
     const result = await promise;
     assert.deepStrictEqual(result, { kind: "back" });
+  });
+});
+
+describe("truncateMiddle", () => {
+  it("returns the path unchanged when it fits", () => {
+    assert.strictEqual(truncateMiddle("docs/a.md", 20), "docs/a.md");
+  });
+
+  it("keeps the full filename visible when directories are long", () => {
+    const result = truncateMiddle("very/long/directory/structure/file.md", 20);
+    assert.strictEqual(result.length, 20);
+    assert.ok(result.includes("…"), "middle marker present");
+    assert.ok(result.endsWith("file.md"), "filename fully visible");
+  });
+
+  it("keeps the filename tail when the filename alone is too long", () => {
+    const result = truncateMiddle("dir/a_very_long_file_name_that_exceeds.md", 15);
+    assert.strictEqual(result.length, 15);
+    assert.ok(result.startsWith("…"), "head-truncated");
+    assert.ok(result.endsWith("exceeds.md"), "filename tail and extension visible");
+  });
+
+  it("handles the exact-fit boundary", () => {
+    assert.strictEqual(truncateMiddle("abcde", 5), "abcde", "length == width stays unchanged");
+    const truncated = truncateMiddle("abcde", 4);
+    assert.strictEqual(truncated.length, 4, "length == width+1 gets truncated");
+  });
+
+  it("never crashes at tiny widths", () => {
+    assert.strictEqual(truncateMiddle("some/path.md", 1), "…");
+    assert.strictEqual(truncateMiddle("some/path.md", 0), "");
+    const two = truncateMiddle("some/path.md", 2);
+    assert.ok(two.length <= 2);
+  });
+
+  it("keeps the folder name for trailing-slash paths", () => {
+    const result = truncateMiddle("PRD_doc/very/deep/folder/", 15);
+    assert.strictEqual(result.length, 15);
+    assert.ok(result.includes("folder"), "folder name still visible");
+  });
+
+  it("keeps same-head paths distinguishable by filename", () => {
+    const a = truncateMiddle("shared/really/long/common/prefix/alpha.md", 25);
+    const b = truncateMiddle("shared/really/long/common/prefix/beta.md", 25);
+    assert.ok(a.includes("alpha.md"));
+    assert.ok(b.includes("beta.md"));
+    assert.notStrictEqual(a, b, "rows must stay distinguishable");
+  });
+});
+
+describe("runListEditor Option A sections", () => {
+  it("renders section headers with counts, selected on top", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [
+        { id: "r1", kind: "selected", label: "a", value: "a" },
+        { id: "r2", kind: "selected", label: "b", value: "b" },
+        { id: "s1", kind: "suggestion", label: "c", value: "c" },
+      ],
+    });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    const selIdx = lines.findIndex((l) => l.includes("Selected (2)"));
+    const sugIdx = lines.findIndex((l) => l.includes("Suggestions (1)"));
+    assert.ok(selIdx !== -1, "Selected header with count");
+    assert.ok(sugIdx !== -1, "Suggestions header with count");
+    assert.ok(selIdx < sugIdx, "Selected section pinned above Suggestions");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("uses uniform markers and drops the Suggest/Remove prefixes", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [
+        { id: "r1", kind: "selected", label: "a", value: "a" },
+        { id: "s1", kind: "suggestion", label: "b", value: "b" },
+      ],
+    });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    assert.ok(lines.some((l) => l.includes("✅ a")), "selected row carries ✅");
+    assert.ok(lines.some((l) => l.includes("⬜ b")), "suggestion row carries ⬜");
+    assert.ok(
+      !lines.some((l) => l.includes("Suggest:") || l.includes("Remove:")),
+      "no per-row prefix swap",
+    );
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("toggles a row into the selected group and back", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [{ id: "s1", kind: "suggestion", label: "a", value: "a" }],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    // Into the content list, add the suggestion.
+    comp.handleInput(DOWN);
+    comp.handleInput(ENTER);
+    let lines = comp.render(80);
+    assert.ok(lines.some((l) => l.includes("Selected (1)")), "added to the selected group");
+    assert.ok(lines.some((l) => l.includes("✅ a")));
+
+    // Toggle it back out.
+    comp.handleInput(ENTER);
+    lines = comp.render(80);
+    assert.ok(lines.some((l) => l.includes("Selected (0)")), "removed from the selected group");
+    assert.ok(lines.some((l) => l.includes("⬜ a")), "back in suggestions");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("shows the full path of the focused row in the detail line", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const longPath = "docs/very/long/path/to/the/real_file_name.md";
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [{ id: "s1", kind: "suggestion", label: longPath, value: longPath }],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    comp.handleInput(DOWN); // focus the content row
+    const lines = comp.render(40);
+    const rowLine = lines.find((l) => l.includes("real_file_name.md") && l.includes("⬜"));
+    assert.ok(rowLine?.includes("…"), "row is truncated at width 40");
+    assert.ok(
+      lines.some((l) => l.startsWith(" 📄 docs/very/long/path")),
+      "detail line starts the full untruncated path",
+    );
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders without crashing at narrow widths", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [
+        { id: "s1", kind: "suggestion", label: "docs/very/long/path/to/the/real_file_name.md", value: "docs/very/long/path/to/the/real_file_name.md" },
+      ],
+    });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const at20 = comp.render(20);
+    assert.ok(at20.length > 0, "renders at width 20");
+    assert.ok(
+      at20.some((l) => l.includes("…") && l.includes("file_name.md")),
+      "rows still identifiable at width 20 (truncation marker + filename tail)",
+    );
+    const at1 = comp.render(1);
+    assert.ok(at1.length > 0, "renders at width 1");
+    getDone()({ kind: "back" });
+    await promise;
   });
 });

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- `/senai-configure-files`, `/senai-configure-agents-files`, and `/senai-configure-architect-inputs` list editors now show two clear sections — `✅ Selected (N)` pinned on top and `💡 Suggestions (N)` below — with uniform markers instead of the mixed `Suggest:`/`Remove:` rows. Long paths are middle-truncated with the filename always visible, and the focused row shows its full path in a detail line below the list.
 - `/senai-configure-agents-files` now hides the four sequence-orchestrated roles (discussion, planner, code-review, security-gate) — their primary input is stage artifacts and Senai runs them automatically. The picker shows the 7 scout/reviewer roles (`PICKER_ROLES`). Hidden roles stay assignable via `agents_files.json`, and doctor keeps suggesting documents for them.
 
 ### Added
