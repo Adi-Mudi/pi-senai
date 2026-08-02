@@ -26,6 +26,25 @@ export const SENAI_ROLES = [
 
 export type SenaiRole = (typeof SENAI_ROLES)[number];
 
+/** Roles whose job is reading project documents. Only these appear in the
+ *  agents-files picker and in doctor's assignment suggestions. The remaining
+ *  roles consume stage artifacts (plan, scout reports, code) and normally
+ *  need no document assignments. The config format still accepts every role
+ *  for advanced hand-editing. */
+export const DOCUMENT_ROLES: SenaiRole[] = [
+  "scout-1",
+  "scout-2",
+  "scout-3",
+  "scout-4",
+  "discussion",
+  "planner",
+  "reviewer-correctness",
+  "reviewer-security",
+  "reviewer-tests",
+  "code-review",
+  "security-gate",
+];
+
 export const DEFAULT_AGENTS: Record<SenaiRole, string> = {
   "scout-1": "scout",
   "scout-2": "scout",

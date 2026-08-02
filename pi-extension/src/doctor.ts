@@ -18,6 +18,7 @@ import {
   type SenaiRole,
 } from "./agent-suggestions.js";
 import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
+import { suggestTruthDocuments } from "./document-suggestions.js";
 import {
   ARCHITECT_ROLES,
   ARCHITECT_STAGES,
@@ -214,7 +215,14 @@ function checkSetupProgress(cwd: string): DiagnosticSection {
 
   let agentsFilesDone = false;
   try {
-    agentsFilesDone = loadAgentsFilesConfig(cwd) !== null;
+    // Done means at least one real assignment (truth or reads) — an empty
+    // agents_files.json means the step was never actually performed.
+    const agentsFilesConfig = loadAgentsFilesConfig(cwd);
+    agentsFilesDone =
+      agentsFilesConfig !== null &&
+      Object.values(agentsFilesConfig.documents).some(
+        (docs) => docs?.primary !== undefined || (docs?.reads?.length ?? 0) > 0,
+      );
   } catch {
     agentsFilesDone = false;
   }
@@ -648,6 +656,23 @@ function checkAgentsFiles(
         }
       }
     }
+  }
+
+  // Suggest, don't force: recommended roles without a truth document get a
+  // warning with concrete suggestions; the user approves by running
+  // /senai-configure-agents-files. Assignments stay optional.
+  const suggestions = suggestTruthDocuments(cwd).filter(
+    (s) => !config.documents[s.role]?.primary,
+  );
+  if (suggestions.length > 0) {
+    items.push({
+      status: "warning",
+      message: `${suggestions.length} recommended role(s) have no truth document.`,
+      details: [
+        ...suggestions.map((s) => `${ROLE_LABELS[s.role]} (${s.role}) → ${s.path} (${s.reason})`),
+        "Assignments are optional but recommended. Run /senai-configure-agents-files to assign.",
+      ],
+    });
   }
 
   if (items.length === 0) {

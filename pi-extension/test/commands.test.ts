@@ -1626,6 +1626,45 @@ describe("commands", () => {
     assert.strictEqual(saved.agents[roles[1]], DEFAULT_AGENTS[roles[1]]);
   });
 
+  it("senai-configure-agents-files preserves entries for hidden roles", async () => {
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { implementer: { primary: "docs/IMPL.md", reads: ["docs/X.md"] } },
+    });
+    registerAgentsFilesCommands(makeApi());
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async () => "⬜ Finish";
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"), "utf8"));
+    assert.deepStrictEqual(
+      saved.documents.implementer,
+      { primary: "docs/IMPL.md", reads: ["docs/X.md"] },
+      "hidden-role entries must survive a configure run untouched",
+    );
+  });
+
+  it("senai-configure-agents-files shows only the document-reading roles", async () => {
+    registerAgentsFilesCommands(makeApi());
+    const ctx = makeCtx();
+    const offered: string[][] = [];
+    (ctx.ui as any).select = async (_title: string, options: string[]) => {
+      offered.push(options);
+      return "⬜ Finish";
+    };
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const labels = offered[0];
+    assert.strictEqual(labels.length, 12, "11 document roles + Finish");
+    assert.ok(labels.some((l) => l.includes("Scout 1")), "document roles are shown");
+    assert.ok(labels.some((l) => l.includes("Security gate")), "security gate is shown");
+    assert.ok(!labels.some((l) => l.includes("Implementer")), "artifact roles are hidden");
+    assert.ok(!labels.some((l) => l.includes("Archive")), "archive is hidden");
+    assert.ok(!labels.some((l) => l.includes("Linter")), "linter is hidden");
+  });
+
   it("senai-configure-agents-files removes the role entry when truth is cleared with no reads", async () => {
     saveAgentsFilesConfig(tmpDir, {
       version: 2,

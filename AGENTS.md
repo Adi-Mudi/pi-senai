@@ -90,7 +90,7 @@ Three config files live under `.pi/senai/`:
 |---|---|---|
 | `agents.json` | `/senai-configure-agents` | Maps each Senai role to a subagent name. Roles are shown with friendly labels (e.g., `Scout 1 — Architecture / big-picture`). |
 | `files.json` | `/senai-configure-files` | Categorized project context: code paths, input documents, and test paths. |
-| `agents_files.json` | `/senai-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. The custom role picker highlights roles that already have assignments. |
+| `agents_files.json` | `/senai-configure-agents-files` | Per-role truth document and comparison documents. The picker shows only the 11 document-reading roles (`DOCUMENT_ROLES` in `agent-suggestions.ts`); artifact-driven roles are hidden but stay valid in JSON. Document suggestions come from `architect-inputs.json` document types first, then `files.json` `inputDocuments`. When recommended roles lack a truth document, doctor warns with concrete suggestions (`document-suggestions.ts`). |
 
 All three files are required before any stage command (`/senai-plan`, `/senai-implement`, `/senai-document`, `/senai-deliver`) will run. `agents.json` is normally created by the generate commands (see below); `/senai-configure-agents` is the optional manual override for hand-picking custom agents. Run `/senai-configure-files` and `/senai-configure-agents-files` for the other two files.
 

@@ -19,6 +19,7 @@ import { discoverProjectFiles, safeReadDir, isExcluded } from "./files-discovery
 import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./files-config.js";
 import {
   DEFAULT_AGENTS,
+  DOCUMENT_ROLES,
   SENAI_ROLES,
   ROLE_LABELS,
   type SenaiRole,
@@ -994,7 +995,9 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       const filesConfig = loadFilesConfig(ctx.cwd);
       const candidates = buildDocumentCandidates(ctx.cwd, filesConfig);
 
-      const pickerItems: RolePickerItem[] = SENAI_ROLES.map((role) => {
+      // Only document-reading roles are shown; artifact-driven roles are
+      // hidden to keep the picker clean (JSON stays valid for all roles).
+      const pickerItems: RolePickerItem[] = DOCUMENT_ROLES.map((role) => {
         const agent = resolveAgentName(agentConfig, role);
         const docs = config.documents[role];
         let summary: string;

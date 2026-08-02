@@ -168,7 +168,7 @@ Configure document assignments for each role:
 /senai-configure-agents-files
 ```
 
-This command shows every Senai role in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Selecting a role opens the same custom list editor used by `/senai-configure-files`, pre-filled with documents from `/senai-configure-files` (the `inputDocuments` pool plus discovered markdown files).
+This command shows the document-reading Senai roles in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Only roles whose job is reading project documents are listed — the artifact-driven roles (implementer, linter, writers, archive, …) consume stage outputs and are hidden to keep the picker clean. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Selecting a role opens the same custom list editor used by `/senai-configure-files`, pre-filled with documents from `/senai-configure-files` (the `inputDocuments` pool plus discovered markdown files). Assignments are optional; when recommended roles have no truth document, `/senai-doctor` warns and suggests specific documents (from your `architect-inputs.json` document types first).
 
 Each role can have:
 

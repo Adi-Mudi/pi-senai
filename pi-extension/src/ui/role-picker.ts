@@ -124,7 +124,7 @@ async function runCustomRolePicker(
       const border = "─".repeat(Math.max(2, width));
       lines.push(theme.fg("accent", border));
       lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
-      const subtitle = options.subtitle ?? " Tip: scouts and reviewers usually need documents; other roles use stage artifacts.";
+      const subtitle = options.subtitle ?? " Only roles that read project documents are shown; other roles use stage artifacts.";
       lines.push(theme.fg("warning", subtitle));
       lines.push(theme.fg("accent", border));
 

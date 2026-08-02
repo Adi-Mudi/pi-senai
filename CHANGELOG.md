@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- `doctor.ts` — the setup-progress "Agent documents assigned" step no longer shows done for an empty `agents_files.json`. The step now requires at least one real assignment (truth or reads), so the progress section and the assignment-suggestion warning can no longer contradict each other.
+
 - `doctor.ts` — a corrupted `architect-inputs.json` no longer crashes the whole `/senai-doctor` run; `checkArchitectureSetup` now reports it as an error item with a fix hint, matching the neighboring drivers check.
 
 - All 12 known issues from `Doc/test-plan.md` (found during the edge-case test round):
@@ -40,6 +42,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Unit tests for the auto-mapping (create, preserve custom, remap stale, no-op) and for running both generate commands without an existing `agents.json`.
 
 ### Added
+
+- Document-scope guidance (suggest, don't force).
+  - `/senai-doctor` now warns when recommended document-reading roles have no truth document, with concrete per-role suggestions from the new `document-suggestions.ts` module — matched by `architect-inputs.json` document types first, filename keywords second, silence when nothing is confident. Assignments stay optional; the user approves by running `/senai-configure-agents-files`.
+  - The `/senai-configure-agents-files` picker now shows only the 11 document-reading roles (`DOCUMENT_ROLES` in `agent-suggestions.ts`). Artifact-driven roles (implementer, linter, writers, archive, …) are hidden to keep the picker clean; the config format and validation still accept every role for advanced hand-editing.
+  - New tests: `document-suggestions.test.ts` (11 tests), doctor suggestion scenarios, and a picker visibility test.
 
 - Doctor setup-progress guidance.
   - Every `/senai-doctor` report now opens with a "Setup progress" section: the 7 one-time setup steps marked done or pending, a completed-checks count, and a `Next: run <command>` line naming the exact next command (or "Setup complete — run /senai-plan <mission>").

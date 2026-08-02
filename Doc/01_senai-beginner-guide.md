@@ -68,7 +68,7 @@ This generates agents for the remaining fourteen roles and maps them in `agents.
 /senai-configure-agents-files
 ```
 
-This assigns truth documents and comparison documents to each role.
+This assigns truth documents and comparison documents to each role. The picker shows only the roles that read project documents (scouts, discussion, planner, reviewers, code review, security gate) — the other roles work from stage outputs and are hidden. Assignments are optional, but recommended: if you skip them, `/senai-doctor` will warn and suggest the right document for each role.
 
 ### 6. Verify everything
 

@@ -67,6 +67,17 @@ Legend: **(+N)** = tests added in this round.
 | --- | --- |
 | `doctor.test.ts` (+8 base) | Every step transition (empty → fully configured), first-position placement, progress count, no-error guarantee. |
 | `doctor.test.ts` (+12 edge) | All 5 corrupted-config catch branches; mapped-but-missing agent file; custom-only mappings; out-of-order completion (first incomplete step wins); different-project slug; folder-name slug fallback; step 6/7 row states; formatted report output. |
+| `doctor.test.ts` (+4 step-5 fix) | Empty-assignments file stays pending; reads-only counts as done; empty role object stays pending; empty reads array stays pending. |
+
+### Feature: document-scope guidance (added 2026-07-28)
+
+| Test file | Focus of added tests |
+| --- | --- |
+| `document-suggestions.test.ts` (+11 base) | Type matching per rule group, typed-beats-keyword priority, keyword fallback, code-scout silence, empty/corrupted config handling. |
+| `document-suggestions.test.ts` (+6 edge) | Folder paths skipped, cross-source dedup, keyword-overlap multi-group suggestion, unmatched types, basename-only matching, case-insensitivity. |
+| `doctor.test.ts` (+4 base) | Warning with suggestions, info when nothing confident, no warning when assigned, unassigned-only filtering. |
+| `doctor.test.ts` (+2 edge) | Assigned-but-missing truth file errors and is not re-suggested; exact warning count. |
+| `commands.test.ts` (+2) | Picker shows only the 11 document roles; hidden-role entries survive a configure run. |
 
 ---
 
@@ -122,6 +133,7 @@ node --test dist/pi-extension/test/<file>.test.js   # single file
 - Edge-case round: +198 tests → 683 (all passing).
 - Bugfix round (2026-07-20): all 12 known issues fixed in source; pinned tests updated to assert fixed behavior; guard tests added. Final: **686 tests, 686 passing, 0 failures**.
 - Doctor guidance round (2026-07-20): setup-progress section added (8 base tests) + 12 edge tests; issue 13 (doctor crash on corrupted architect-inputs) found by an edge test and fixed. Final: **706 tests, 706 passing, 0 failures**.
+- Document-scope guidance round (2026-07-28): suggestion module + curated picker added; step-5 detection strengthened (empty assignments stay pending). Base + edge coverage added. Final: **735 tests, 735 passing, 0 failures**.
 - Deviations recorded during the edge-case round:
   - `loadState` with a JSON `null` body throws (pinned) rather than returning the default state.
   - `getArtifactPaths` returns 19 fields (the interface has 19, not 18 as first estimated).

@@ -2156,7 +2156,7 @@ describe("doctor setup progress", () => {
       });
     }
     if (step >= 5) {
-      saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+      saveAgentsFilesConfig(tmpDir, { version: 2, documents: { planner: { primary: "docs/PRD.md" } } });
     }
     return tmpDir;
   }
@@ -2271,6 +2271,40 @@ describe("doctor setup progress", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("an agents_files.json with zero assignments leaves step 5 pending", () => {
+    const tmpDir = setupThrough(4);
+    // File exists but documents is empty — the step was never really performed.
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-agents-files"));
+    assert.ok(section.items.some((i) => i.message.startsWith("5. Agent documents assigned — pending")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("a reads-only assignment counts as step 5 done", () => {
+    const tmpDir = setupThrough(4);
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { "scout-4": { reads: ["docs/PRD.md"] } } });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Setup complete"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("a role with an empty document entry leaves step 5 pending", () => {
+    const tmpDir = setupThrough(4);
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { planner: {} } });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-agents-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("a role with an empty reads array leaves step 5 pending", () => {
+    const tmpDir = setupThrough(4);
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { planner: { reads: [] } } });
+    const section = findProgress(runSenaiDiagnostic(tmpDir));
+    assert.ok(guidanceMessage(section).includes("Next: run /senai-configure-agents-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("mapped team agent with a missing agent file leaves step 4 pending", () => {
     const tmpDir = setupThrough(3);
     saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": `${PROGRESS_SLUG}-scout-2` } });
@@ -2335,6 +2369,150 @@ describe("doctor setup progress", () => {
     const text = formatDiagnosticReport(runSenaiDiagnostic(tmpDir));
     assert.ok(text.includes("## Setup progress"));
     assert.ok(text.includes("Next: run /senai-configure-files"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("doctor document suggestions", () => {
+  function findAssignments(report: ReturnType<typeof runSenaiDiagnostic>) {
+    const section = report.sections.find((s) => s.title === "Agent document assignments");
+    assert.ok(section, "Agent document assignments section should exist");
+    return section;
+  }
+
+  function setupTypedProject(tmpDir: string): void {
+    for (const doc of ["docs/PRD.md", "docs/RTM.md", "docs/TEST_PLAN.md", "docs/NFR.md", "docs/ADR.md"]) {
+      writeFile(tmpDir, doc, "# doc");
+    }
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [
+        { type: "prd", path: "docs/PRD.md" },
+        { type: "rtm", path: "docs/RTM.md" },
+        { type: "test-plan", path: "docs/TEST_PLAN.md" },
+        { type: "nfr", path: "docs/NFR.md" },
+        { type: "adr", path: "docs/ADR.md" },
+      ],
+      additionalConstraints: [],
+    });
+  }
+
+  it("warns with concrete suggestions when recommended roles are unassigned", () => {
+    const tmpDir = makeTmpDir("doctor-docsuggest-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const warning = section.items.find((i) => i.status === "warning");
+    assert.ok(warning, "warning expected");
+    assert.ok(warning.message.includes("recommended role(s) have no truth document"));
+    assert.ok(warning.details?.some((d) => d.includes("scout-4") && d.includes("docs/PRD.md")));
+    assert.ok(warning.details?.some((d) => d.includes("/senai-configure-agents-files")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("stays info-only when there is nothing confident to suggest", () => {
+    const tmpDir = makeTmpDir("doctor-docsuggest-");
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(!section.items.some((i) => i.status === "warning"));
+    assert.ok(section.items.some((i) => i.status === "info" && i.message.includes("No per-role document assignments")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("does not warn when every suggested role is already assigned", () => {
+    const tmpDir = makeTmpDir("doctor-docsuggest-");
+    setupTypedProject(tmpDir);
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["docs/PRD.md", "docs/RTM.md", "docs/TEST_PLAN.md", "docs/NFR.md", "docs/ADR.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: {
+        "scout-1": { primary: "docs/ADR.md" },
+        "scout-4": { primary: "docs/PRD.md" },
+        discussion: { primary: "docs/PRD.md" },
+        planner: { primary: "docs/PRD.md" },
+        "reviewer-correctness": { primary: "docs/RTM.md" },
+        "reviewer-security": { primary: "docs/NFR.md" },
+        "reviewer-tests": { primary: "docs/TEST_PLAN.md" },
+        "code-review": { primary: "docs/RTM.md" },
+        "security-gate": { primary: "docs/NFR.md" },
+      },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "warning" && i.message.includes("have no truth document")),
+      "all suggested roles assigned → no suggestion warning",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("suggests only for roles that are still unassigned", () => {
+    const tmpDir = makeTmpDir("doctor-docsuggest-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-4": { primary: "docs/PRD.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const warning = section.items.find(
+      (i) => i.status === "warning" && i.message.includes("have no truth document"),
+    );
+    assert.ok(warning, "suggestion warning expected for the remaining roles");
+    assert.ok(!warning.details?.some((d) => d.includes("(scout-4)")), "assigned scout-4 is not suggested again");
+    assert.ok(warning.details?.some((d) => d.includes("(discussion)") && d.includes("docs/PRD.md")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("an assigned-but-missing truth document errors and is not suggested again", () => {
+    const tmpDir = makeTmpDir("doctor-docsuggest-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { "scout-4": { primary: "docs/DELETED.md" } } });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      section.items.some((i) => i.status === "error" && i.message.includes("(scout-4)") && i.message.includes("MISSING")),
+      "missing truth file is an error",
+    );
+    const warning = section.items.find(
+      (i) => i.status === "warning" && i.message.includes("have no truth document"),
+    );
+    assert.ok(warning, "other unassigned roles still get suggestions");
+    assert.ok(
+      !warning.details?.some((d) => d.includes("(scout-4)")),
+      "an assigned role is not suggested even though its file is missing",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("the warning message counts the exact unassigned suggestions", () => {
+    const tmpDir = makeTmpDir("doctor-docsuggest-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const warning = section.items.find(
+      (i) => i.status === "warning" && i.message.includes("have no truth document"),
+    );
+    assert.ok(warning);
+    assert.ok(
+      warning.message.startsWith("9 "),
+      `expected exactly 9 suggested roles (3 prd + 2 rtm + 1 test-plan + 2 nfr + 1 adr), got: ${warning.message}`,
+    );
+
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
