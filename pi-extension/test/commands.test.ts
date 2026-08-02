@@ -813,7 +813,7 @@ describe("commands", () => {
     // Per-role editor: set truth, add read, go back.
     // Top-level: finish.
     selectChoices.push(
-      "⬜ scout-4: Scout 4 — PRD / documentation audit (scout) — not set [recommended]",
+      "⬜ scout-4: Scout 4 — PRD / documentation audit (needs: PRD / requirements document) (scout) — not set [recommended]",
       "Set truth document",
       "Doc/planner.md",
       "⬜ Suggest: Doc/plan.md",
@@ -874,6 +874,70 @@ describe("commands", () => {
       !labels.some((l) => l.includes("code-review:")),
       "code-review is hidden from the picker",
     );
+  });
+
+  it("senai-configure-agents-files shows needs text and doctor suggestion for unassigned roles", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "rtm", path: "docs/RTM.md" }],
+      additionalConstraints: [],
+    });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "RTM.md"), "# RTM", "utf8");
+    registerAgentsFilesCommands(makeApi());
+
+    const captured: string[][] = [];
+    const ctx = {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        select: async (_title: string, options: string[]) => {
+          captured.push(options);
+          return "⬜ Finish"; // leave the picker immediately
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const row = captured[0].find((l) => l.includes("reviewer-correctness:"));
+    assert.ok(row, "reviewer-correctness row exists");
+    assert.ok(row.includes("(needs: RTM / traceability document)"), "plain document-type name shown");
+    assert.ok(row.includes("not set, suggested: docs/RTM.md"), "doctor's concrete suggestion shown");
+  });
+
+  it("senai-configure-agents-files hides the suggestion for assigned roles", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "rtm", path: "docs/RTM.md" }],
+      additionalConstraints: [],
+    });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "RTM.md"), "# RTM", "utf8");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "reviewer-correctness": { primary: "docs/RTM.md" } },
+    });
+    registerAgentsFilesCommands(makeApi());
+
+    const captured: string[][] = [];
+    const ctx = {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        select: async (_title: string, options: string[]) => {
+          captured.push(options);
+          return "⬜ Finish";
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const row = captured[0].find((l) => l.includes("reviewer-correctness:"));
+    assert.ok(row, "reviewer-correctness row exists");
+    assert.ok(row.includes("truth=docs/RTM.md"), "assigned summary shown");
+    assert.ok(!row.includes("suggested:"), "no suggestion noise on assigned rows");
   });
 
   // Edge cases
@@ -1724,7 +1788,7 @@ describe("commands", () => {
     registerAgentsFilesCommands(makeApi());
 
     selectChoices.push(
-      "✅ scout-4: Scout 4 — PRD / documentation audit (scout) — truth=Doc/planner.md [recommended]",
+      "✅ scout-4: Scout 4 — PRD / documentation audit (needs: PRD / requirements document) (scout) — truth=Doc/planner.md [recommended]",
       "Clear truth",
       "Back",
       "⬜ Finish",

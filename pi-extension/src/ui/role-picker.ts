@@ -9,6 +9,7 @@ export interface RolePickerItem {
   summary: string;
   assigned: boolean;
   guidance?: RoleGuidance;
+  needs?: string;
 }
 
 /** User-approved colors: green = handled by design, yellow = please
@@ -60,8 +61,9 @@ function makeFallbackOptions(
   for (const item of items) {
     const marker = item.assigned ? "✅" : "⬜";
     const agentPart = item.agent ? ` (${item.agent})` : "";
+    const needsPart = item.needs ? ` (needs: ${item.needs})` : "";
     const guidancePart = item.guidance ? ` [${item.guidance}]` : "";
-    const label = `${marker} ${item.id}: ${item.label}${agentPart} — ${item.summary}${guidancePart}`;
+    const label = `${marker} ${item.id}: ${item.label}${needsPart}${agentPart} — ${item.summary}${guidancePart}`;
     options.push(label);
     idMap.set(label, item.id);
   }
@@ -117,10 +119,11 @@ async function runCustomRolePicker(
     function renderRow(item: RolePickerItem, focused: boolean): string {
       const prefix = focused ? "→ " : "  ";
       const agentPart = item.agent ? ` (${item.agent})` : "";
+      const needsPart = item.needs ? ` (needs: ${item.needs})` : "";
       const guidancePart = item.guidance
         ? ` ${theme.fg(GUIDANCE_COLORS[item.guidance], `[${item.guidance}]`)}`
         : "";
-      const base = `${item.label}${agentPart} — ${item.summary}${guidancePart}`;
+      const base = `${item.label}${needsPart}${agentPart} — ${item.summary}${guidancePart}`;
       if (item.id === FINISH_ID) {
         return `${prefix}${theme.fg("text", "Finish")}`;
       }

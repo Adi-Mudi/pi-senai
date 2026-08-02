@@ -17,12 +17,12 @@ interface Candidate {
 }
 
 /** Role groups and the documents that fit them, in match-priority order. */
-const ROLE_TYPE_RULES: Array<{ roles: SenaiRole[]; types: string[]; keywords: string[]; reason: string }> = [
-  { roles: ["scout-4", "discussion", "planner"], types: ["prd", "mrd", "brd"], keywords: ["prd", "requirement"], reason: "requirements document" },
-  { roles: ["reviewer-correctness", "code-review"], types: ["rtm"], keywords: ["rtm", "traceability"], reason: "traceability document" },
-  { roles: ["reviewer-tests"], types: ["test-plan"], keywords: ["test-plan", "test"], reason: "test plan document" },
-  { roles: ["reviewer-security", "security-gate"], types: ["nfr"], keywords: ["security"], reason: "security/NFR document" },
-  { roles: ["scout-1"], types: ["adr", "feasibility"], keywords: ["architecture", "design"], reason: "architecture/design document" },
+const ROLE_TYPE_RULES: Array<{ roles: SenaiRole[]; types: string[]; keywords: string[]; reason: string; needs: string }> = [
+  { roles: ["scout-4", "discussion", "planner"], types: ["prd", "mrd", "brd"], keywords: ["prd", "requirement"], reason: "requirements document", needs: "PRD / requirements document" },
+  { roles: ["reviewer-correctness", "code-review"], types: ["rtm"], keywords: ["rtm", "traceability"], reason: "traceability document", needs: "RTM / traceability document" },
+  { roles: ["reviewer-tests"], types: ["test-plan"], keywords: ["test-plan", "test"], reason: "test plan document", needs: "test plan document" },
+  { roles: ["reviewer-security", "security-gate"], types: ["nfr"], keywords: ["security"], reason: "security/NFR document", needs: "NFR / security requirements" },
+  { roles: ["scout-1"], types: ["adr", "feasibility"], keywords: ["architecture", "design"], reason: "architecture/design document", needs: "architecture / design document" },
 ];
 
 /** Pool of candidate documents: architect-inputs entries (typed by the user)
@@ -82,4 +82,12 @@ export function suggestTruthDocuments(cwd: string): DocumentSuggestion[] {
     }
   }
   return suggestions;
+}
+
+/** Plain-words name of the document type a role needs (user decision:
+ *  beginners must see "RTM", not guess). undefined for roles without a
+ *  document-type rule (e.g., the code scouts). */
+export function roleDocumentNeed(role: SenaiRole): string | undefined {
+  const rule = ROLE_TYPE_RULES.find((r) => r.roles.includes(role));
+  return rule?.needs;
 }

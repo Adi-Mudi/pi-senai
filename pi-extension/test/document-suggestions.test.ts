@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { suggestTruthDocuments } from "../src/document-suggestions.js";
+import { suggestTruthDocuments, roleDocumentNeed } from "../src/document-suggestions.js";
 import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 
@@ -218,5 +218,20 @@ describe("document-suggestions", () => {
     assert.deepStrictEqual(roles, ["reviewer-tests"]);
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("roleDocumentNeed returns the plain document-type name per role", () => {
+    assert.strictEqual(roleDocumentNeed("reviewer-correctness"), "RTM / traceability document");
+    assert.strictEqual(roleDocumentNeed("reviewer-security"), "NFR / security requirements");
+    assert.strictEqual(roleDocumentNeed("scout-4"), "PRD / requirements document");
+  });
+
+  it("roleDocumentNeed returns the architecture need for scout-1", () => {
+    assert.strictEqual(roleDocumentNeed("scout-1"), "architecture / design document");
+  });
+
+  it("roleDocumentNeed returns undefined for the code-reading scouts", () => {
+    assert.strictEqual(roleDocumentNeed("scout-2"), undefined);
+    assert.strictEqual(roleDocumentNeed("scout-3"), undefined);
   });
 });

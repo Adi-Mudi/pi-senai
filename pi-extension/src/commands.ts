@@ -27,6 +27,7 @@ import {
   buildSuggestionMap,
 } from "./agent-suggestions.js";
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
+import { roleDocumentNeed, suggestTruthDocuments } from "./document-suggestions.js";
 import {
   formatDiagnosticReport,
   runSenaiDiagnostic,
@@ -999,6 +1000,9 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       // Only picker-visible document roles are shown (PICKER_ROLES).
       // Sequence roles (discussion, planner, code-review, security-gate) and
       // artifact-driven roles are hidden; JSON stays valid for all roles.
+      const truthSuggestions = new Map(
+        suggestTruthDocuments(ctx.cwd).map((s) => [s.role, s.path]),
+      );
       const pickerItems: RolePickerItem[] = PICKER_ROLES.map((role) => {
         const agent = resolveAgentName(agentConfig, role);
         const docs = config.documents[role];
@@ -1011,7 +1015,8 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           summary = `reads=${docs.reads.length}`;
           assigned = true;
         } else {
-          summary = "not set";
+          const suggested = truthSuggestions.get(role);
+          summary = suggested ? `not set, suggested: ${suggested}` : "not set";
         }
         return {
           id: role,
@@ -1020,6 +1025,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           summary,
           assigned,
           guidance: ROLE_GUIDANCE[role],
+          needs: roleDocumentNeed(role),
         };
       });
 

@@ -475,3 +475,33 @@ describe("role picker guidance edge cases", () => {
     await promise;
   });
 });
+
+
+describe("role picker needs labels", () => {
+  it("includes the needs text in fallback labels", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const items: RolePickerItem[] = [
+      { id: "reviewer-correctness", label: "Reviewer — Correctness", agent: "rev", summary: "not set", assigned: false, needs: "RTM / traceability document" },
+    ];
+    await runRolePicker(ctx, { title: "t", items });
+    assert.ok(captured[0][0].includes("(needs: RTM / traceability document)"), "fallback label carries the needs text");
+  });
+
+  it("renders the needs text in the custom picker and omits it when unset", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "reviewer-correctness", label: "Reviewer — Correctness", agent: "rev", summary: "not set", assigned: false, needs: "RTM / traceability document" },
+      { id: "scout-2", label: "Scout 2", agent: "scout", summary: "not set", assigned: false },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    const reviewerLine = lines.find((l) => l.includes("Reviewer — Correctness"));
+    const scoutLine = lines.find((l) => l.includes("Scout 2"));
+    assert.ok(reviewerLine?.includes("(needs: RTM / traceability document)"), "custom row carries the needs text");
+    assert.ok(scoutLine && !scoutLine.includes("(needs:"), "no needs text when unset");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+});
