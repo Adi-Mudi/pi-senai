@@ -940,6 +940,118 @@ describe("commands", () => {
     assert.ok(!row.includes("suggested:"), "no suggestion noise on assigned rows");
   });
 
+  it("senai-configure-agents-files shows plain 'not set' when no suggestion exists", async () => {
+    registerAgentsFilesCommands(makeApi());
+    const captured: string[][] = [];
+    const ctx = {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        select: async (_title: string, options: string[]) => {
+          captured.push(options);
+          return "⬜ Finish";
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const row = captured[0].find((l) => l.includes("reviewer-correctness:"));
+    assert.ok(row, "reviewer-correctness row exists");
+    assert.ok(row.includes("— not set"), "plain not set shown");
+    assert.ok(!row.includes("suggested:"), "no suggestion text without a candidate");
+  });
+
+  it("senai-configure-agents-files suggests a keyword-matched input document", async () => {
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "security-policy.md"), "# Security", "utf8");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: ["docs/security-policy.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    registerAgentsFilesCommands(makeApi());
+    const captured: string[][] = [];
+    const ctx = {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        select: async (_title: string, options: string[]) => {
+          captured.push(options);
+          return "⬜ Finish";
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const row = captured[0].find((l) => l.includes("reviewer-security:"));
+    assert.ok(row, "reviewer-security row exists");
+    assert.ok(row.includes("not set, suggested: docs/security-policy.md"), "keyword-matched suggestion shown");
+  });
+
+  it("senai-configure-agents-files hides the suggestion for reads-only assignments", async () => {
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "rtm", path: "docs/RTM.md" }],
+      additionalConstraints: [],
+    });
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "RTM.md"), "# RTM", "utf8");
+    fs.writeFileSync(path.join(tmpDir, "docs", "extra.md"), "# Extra", "utf8");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "reviewer-correctness": { reads: ["docs/extra.md"] } },
+    });
+    registerAgentsFilesCommands(makeApi());
+    const captured: string[][] = [];
+    const ctx = {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        select: async (_title: string, options: string[]) => {
+          captured.push(options);
+          return "⬜ Finish";
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const row = captured[0].find((l) => l.includes("reviewer-correctness:"));
+    assert.ok(row, "reviewer-correctness row exists");
+    assert.ok(row.includes("reads=1"), "reads-only summary shown");
+    assert.ok(!row.includes("suggested:"), "no suggestion text on reads-only rows");
+  });
+
+  it("senai-configure-agents-files shows needs only on document-rule rows", async () => {
+    registerAgentsFilesCommands(makeApi());
+    const captured: string[][] = [];
+    const ctx = {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        select: async (_title: string, options: string[]) => {
+          captured.push(options);
+          return "⬜ Finish";
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const labels = captured[0];
+    assert.ok(labels.find((l) => l.includes("scout-1:"))?.includes("(needs: architecture / design document)"));
+    assert.ok(labels.find((l) => l.includes("scout-4:"))?.includes("(needs: PRD / requirements document)"));
+    assert.ok(labels.find((l) => l.includes("reviewer-correctness:"))?.includes("(needs: RTM / traceability document)"));
+    assert.ok(labels.find((l) => l.includes("reviewer-security:"))?.includes("(needs: NFR / security requirements)"));
+    assert.ok(labels.find((l) => l.includes("reviewer-tests:"))?.includes("(needs: test plan document)"));
+    assert.ok(!labels.find((l) => l.includes("scout-2:"))?.includes("(needs:"), "scout-2 has no needs text");
+    assert.ok(!labels.find((l) => l.includes("scout-3:"))?.includes("(needs:"), "scout-3 has no needs text");
+  });
+
   // Edge cases
   it("senai-configure-files handles empty suggestions gracefully", async () => {
     fs.mkdirSync(path.join(tmpDir, "custom"), { recursive: true });

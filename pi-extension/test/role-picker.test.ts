@@ -504,4 +504,78 @@ describe("role picker needs labels", () => {
     getDone()({ kind: "back" });
     await promise;
   });
+
+  it("places the needs text between the label and the agent part in fallback labels", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const items: RolePickerItem[] = [
+      { id: "reviewer-correctness", label: "Reviewer — Correctness", agent: "rev", summary: "not set", assigned: false, guidance: "recommended", needs: "RTM / traceability document" },
+    ];
+    await runRolePicker(ctx, { title: "t", items });
+    assert.ok(
+      captured[0][0].includes("Reviewer — Correctness (needs: RTM / traceability document) (rev) — not set [recommended]"),
+      "needs sits after the label, before the agent part",
+    );
+  });
+
+  it("keeps the needs text on assigned rows in fallback labels", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const items: RolePickerItem[] = [
+      { id: "reviewer-correctness", label: "Reviewer — Correctness", agent: "rev", summary: "truth=docs/RTM.md", assigned: true, needs: "RTM / traceability document" },
+    ];
+    await runRolePicker(ctx, { title: "t", items });
+    assert.ok(captured[0][0].startsWith("✅"), "assigned marker present");
+    assert.ok(captured[0][0].includes("(needs: RTM / traceability document)"), "needs present on assigned row");
+    assert.ok(captured[0][0].includes("truth=docs/RTM.md"), "assigned summary present");
+  });
+
+  it("keeps the needs text on the focused row in the custom picker", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "reviewer-correctness", label: "Reviewer — Correctness", agent: "rev", summary: "not set", assigned: false, needs: "RTM / traceability document" },
+      { id: "scout-2", label: "Scout 2", agent: "scout", summary: "not set", assigned: false },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const focusedLine = comp.render(80).find((l) => l.startsWith("→"));
+    assert.ok(focusedLine, "a focused row exists");
+    assert.ok(focusedLine.includes("(needs: RTM / traceability document)"), "focused row keeps the needs text");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders needs text and the colored guidance tag together in the custom picker", async () => {
+    const recordingTheme = {
+      fg: (color: string, text: string) => `${color}:${text}`,
+      bg: (_color: string, text: string) => text,
+      bold: (text: string) => text,
+      dim: (text: string) => text,
+    } as unknown as import("@mariozechner/pi-coding-agent").Theme;
+
+    let component: { render: (width: number) => string[] } | undefined;
+    let doneFn: (result: unknown) => void = () => {};
+    const custom = async (factory: any): Promise<any> =>
+      new Promise((resolve) => {
+        doneFn = resolve;
+        component = factory({ requestRender: () => {} }, recordingTheme, {}, resolve);
+      });
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: { select: async () => "", custom },
+    } as unknown as ExtensionContext;
+
+    const items: RolePickerItem[] = [
+      { id: "reviewer-correctness", label: "Reviewer — Correctness", agent: "rev", summary: "not set", assigned: false, guidance: "recommended", needs: "RTM / traceability document" },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const lines = component!.render(80);
+    const row = lines.find((l) => l.includes("Reviewer — Correctness"));
+    assert.ok(row, "reviewer row exists");
+    assert.ok(row.includes("(needs: RTM / traceability document)"), "needs text present");
+    assert.ok(row.includes("warning:[recommended]"), "guidance tag still colored");
+    doneFn({ kind: "back" });
+    await promise;
+  });
 });

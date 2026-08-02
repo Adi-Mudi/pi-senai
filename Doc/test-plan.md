@@ -134,6 +134,7 @@ node --test dist/pi-extension/test/<file>.test.js   # single file
 - Bugfix round (2026-07-20): all 12 known issues fixed in source; pinned tests updated to assert fixed behavior; guard tests added. Final: **686 tests, 686 passing, 0 failures**.
 - Doctor guidance round (2026-07-20): setup-progress section added (8 base tests) + 12 edge tests; issue 13 (doctor crash on corrupted architect-inputs) found by an edge test and fixed. Final: **706 tests, 706 passing, 0 failures**.
 - Document-scope guidance round (2026-07-28): suggestion module + curated picker added; step-5 detection strengthened (empty assignments stay pending). Base + edge coverage added. Final: **735 tests, 735 passing, 0 failures**.
+- Picker needs + suggestions round (2026-08-02): +11 tests → **814 tests, 814 passing, 0 failures**.
 - Deviations recorded during the edge-case round:
   - `loadState` with a JSON `null` body throws (pinned) rather than returning the default state.
   - `getArtifactPaths` returns 19 fields (the interface has 19, not 18 as first estimated).
@@ -193,3 +194,24 @@ No source changes.
 
 - Selection/finish/back, scrolling, wrapping, tiny width, subtitle (18 tests)
 - Guidance tag text in both pickers, all 3 theme colors, map completeness (5 tests)
+
+## 9. Picker needs + suggestions round (2026-08-02)
+
+Scope: unit + edge coverage for the needs-labels and dynamic-suggestions feature
+(`roleDocumentNeed`, needs rendering in `makeFallbackOptions`/`renderRow`,
+`commands.ts` suggested-file wiring). No source changes — tests pin current behavior.
+
+### Unit/edge tests per function
+
+| Function / sub-function | Cases | Edge cases covered |
+|---|---|---|
+| `roleDocumentNeed` | 3 | every remaining rule role; all artifact/other roles → undefined; full `SENAI_ROLES` sweep (rename/dropped-rule guard) |
+| `makeFallbackOptions` | 2 | needs↔label↔agent ordering; needs + ✅ assigned marker together |
+| `renderRow` (custom) | 2 | focused row keeps needs; needs + colored guidance tag on one row |
+| `commands.ts` wiring | 4 | plain `not set` with no candidate; keyword-matched suggestion from `files.json`; reads-only assignment hides suggestion; needs on the 5 rule rows, absent on scout-2/scout-3 |
+
+### Already covered in the feature round (not duplicated)
+
+- Needs values for 3 roles, scout-1 need, undefined for code scouts (3 tests)
+- Needs rendering in both pickers, unset-needs omission (2 tests)
+- Typed-RTM suggestion row, assigned-row suggestion hiding (2 tests)

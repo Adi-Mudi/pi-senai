@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { suggestTruthDocuments, roleDocumentNeed } from "../src/document-suggestions.js";
+import { SENAI_ROLES } from "../src/agent-suggestions.js";
 import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 
@@ -233,5 +234,31 @@ describe("document-suggestions", () => {
   it("roleDocumentNeed returns undefined for the code-reading scouts", () => {
     assert.strictEqual(roleDocumentNeed("scout-2"), undefined);
     assert.strictEqual(roleDocumentNeed("scout-3"), undefined);
+  });
+
+  it("roleDocumentNeed returns the rule need for every remaining rule role", () => {
+    assert.strictEqual(roleDocumentNeed("discussion"), "PRD / requirements document");
+    assert.strictEqual(roleDocumentNeed("planner"), "PRD / requirements document");
+    assert.strictEqual(roleDocumentNeed("code-review"), "RTM / traceability document");
+    assert.strictEqual(roleDocumentNeed("reviewer-tests"), "test plan document");
+    assert.strictEqual(roleDocumentNeed("security-gate"), "NFR / security requirements");
+  });
+
+  it("roleDocumentNeed returns undefined for artifact and other non-rule roles", () => {
+    for (const role of ["plan-overview", "test-skeleton", "implementer", "linter", "full-test", "readme-writer", "changelog-writer", "api-docs-writer", "other-docs-writer"] as const) {
+      assert.strictEqual(roleDocumentNeed(role), undefined, `${role} must have no document need`);
+    }
+  });
+
+  it("roleDocumentNeed covers every SENAI_ROLES entry consistently", () => {
+    const ruleRoles = new Set(["scout-1", "scout-4", "discussion", "planner", "reviewer-correctness", "code-review", "reviewer-tests", "reviewer-security", "security-gate"]);
+    for (const role of SENAI_ROLES) {
+      const need = roleDocumentNeed(role);
+      if (ruleRoles.has(role)) {
+        assert.ok(typeof need === "string" && need.length > 0, `${role} must have a needs text`);
+      } else {
+        assert.strictEqual(need, undefined, `${role} must have no needs text`);
+      }
+    }
   });
 });
