@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `/senai-doctor` now fails on document misassignments: artifact-driven roles (implementer, linter, writers, archive, …) carrying truth/comparison documents, and truth documents that contradict the role's expected document type (e.g., a PRD assigned to the security reviewer). Both are errors with fix hints pointing at `/senai-configure-agents-files`.
+- `/senai-doctor` mandate check: for roles the suggestion rules do not cover (`scout-2`, `plan-overview`), the assigned truth document is compared against the agent's mandate (frontmatter description + generator mandate) using document signals (classified type, filename, first heading). A clear contradiction is an error; an assignment with too little signal to judge is reported as unverifiable (warning) instead of passing silently. `scout-3` keeps existence-only checking per user decision.
+
 ### Fixed
 
 - `doctor.ts` — the setup-progress "Agent documents assigned" step no longer shows done for an empty `agents_files.json`. The step now requires at least one real assignment (truth or reads), so the progress section and the assignment-suggestion warning can no longer contradict each other.

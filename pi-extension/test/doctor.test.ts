@@ -2516,3 +2516,216 @@ describe("doctor document suggestions", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+
+describe("doctor assignment validation", () => {
+  function findAssignments(report: ReturnType<typeof runSenaiDiagnostic>) {
+    const section = report.sections.find((s) => s.title === "Agent document assignments");
+    assert.ok(section, "Agent document assignments section should exist");
+    return section;
+  }
+
+  function setupTypedProject(tmpDir: string): void {
+    for (const doc of ["docs/PRD.md", "docs/RTM.md", "docs/NFR.md"]) {
+      writeFile(tmpDir, doc, "# doc");
+    }
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [
+        { type: "prd", path: "docs/PRD.md" },
+        { type: "rtm", path: "docs/RTM.md" },
+        { type: "nfr", path: "docs/NFR.md" },
+      ],
+      additionalConstraints: [],
+    });
+  }
+
+  it("errors when an artifact-driven role has a truth document", () => {
+    const tmpDir = makeTmpDir("doctor-assign-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { implementer: { primary: "docs/PRD.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      section.items.some(
+        (i) => i.status === "error" && i.message.includes("(implementer)") && i.message.includes("stage artifacts"),
+      ),
+      "artifact role with a truth document is an error",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("errors when an artifact-driven role has only comparison documents", () => {
+    const tmpDir = makeTmpDir("doctor-assign-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { archive: { reads: ["docs/PRD.md"] } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      section.items.some(
+        (i) => i.status === "error" && i.message.includes("(archive)") && i.message.includes("stage artifacts"),
+      ),
+      "artifact role with comparison documents is an error",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("errors when a truth document contradicts the suggestion rules", () => {
+    const tmpDir = makeTmpDir("doctor-assign-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "reviewer-security": { primary: "docs/PRD.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const mismatch = section.items.find(
+      (i) => i.status === "error" && i.message.includes("(reviewer-security)") && i.message.includes("mismatch"),
+    );
+    assert.ok(mismatch, "mismatched truth document is an error");
+    assert.ok(mismatch.message.includes("docs/PRD.md"), "names the assigned file");
+    assert.ok(mismatch.message.includes("docs/NFR.md"), "names the expected file");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("accepts a truth document that matches the suggestion rules", () => {
+    const tmpDir = makeTmpDir("doctor-assign-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "reviewer-security": { primary: "docs/NFR.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "error"),
+      "matching assignment produces no errors",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("does not judge roles that have no confident suggestion", () => {
+    const tmpDir = makeTmpDir("doctor-assign-");
+    setupTypedProject(tmpDir);
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-2": { primary: "docs/PRD.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "error" && i.message.includes("mismatch")),
+      "scout-2 (code-reading role, never suggested) is not judged",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+
+describe("doctor mandate assignment check", () => {
+  function findAssignments(report: ReturnType<typeof runSenaiDiagnostic>) {
+    const section = report.sections.find((s) => s.title === "Agent document assignments");
+    assert.ok(section, "Agent document assignments section should exist");
+    return section;
+  }
+
+  it("accepts a scout-2 document that overlaps the mandate", () => {
+    const tmpDir = makeTmpDir("doctor-mandate-");
+    writeFile(tmpDir, "docs/code-patterns.md", "# Code Patterns\n");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-2": { primary: "docs/code-patterns.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "error"),
+      "code-pattern document fits the code-search mandate",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("errors when a scout-2 document contradicts the mandate", () => {
+    const tmpDir = makeTmpDir("doctor-mandate-");
+    writeFile(tmpDir, "docs/vendor-marketing.md", "# Vendor Marketing\n");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-2": { primary: "docs/vendor-marketing.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const mismatch = section.items.find(
+      (i) => i.status === "error" && i.message.includes("(scout-2)") && i.message.includes("mandate"),
+    );
+    assert.ok(mismatch, "contradicting document is an error");
+    assert.ok(mismatch.message.includes("docs/vendor-marketing.md"), "names the assigned file");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("keeps scout-3 on existence-only checking", () => {
+    const tmpDir = makeTmpDir("doctor-mandate-");
+    writeFile(tmpDir, "docs/vendor-marketing.md", "# Vendor Marketing\n");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-3": { primary: "docs/vendor-marketing.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "error" && i.message.includes("mandate")),
+      "scout-3 is excluded from the mandate layer per user decision",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("warns when an assignment cannot be verified", () => {
+    const tmpDir = makeTmpDir("doctor-mandate-");
+    writeFile(tmpDir, "docs/a.md", "plain text, no heading\n");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-2": { primary: "docs/a.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const warning = section.items.find(
+      (i) => i.status === "warning" && i.message.includes("cannot verify"),
+    );
+    assert.ok(warning, "unverifiable assignment is reported, never silent");
+    assert.ok(warning.details?.some((d) => d.includes("(scout-2)") && d.includes("docs/a.md")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("errors when a plan-overview document contradicts the mandate", () => {
+    const tmpDir = makeTmpDir("doctor-mandate-");
+    writeFile(tmpDir, "docs/vendor-marketing.md", "# Vendor Marketing\n");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "plan-overview": { primary: "docs/vendor-marketing.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      section.items.some(
+        (i) => i.status === "error" && i.message.includes("(plan-overview)") && i.message.includes("mandate"),
+      ),
+      "plan-overview is covered by the mandate layer",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

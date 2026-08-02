@@ -13,6 +13,7 @@ import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { loadAgentsFilesConfig, type AgentsFilesConfig } from "./agents-files-config.js";
 import {
   DEFAULT_AGENTS,
+  DOCUMENT_ROLES,
   SENAI_ROLES,
   ROLE_LABELS,
   type SenaiRole,
@@ -140,7 +141,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   }
 
   if (agentsFilesConfig) {
-    sections.push(checkAgentsFiles(cwd, agentsFilesConfig, filesConfig));
+    sections.push(checkAgentsFiles(cwd, agentsFilesConfig, filesConfig, resolvedAgents));
   }
 
   sections.push(checkEnvironment());
@@ -607,6 +608,7 @@ function checkAgentsFiles(
   cwd: string,
   config: AgentsFilesConfig,
   filesConfig: FilesConfig | null,
+  resolved: Record<SenaiRole, ResolvedAgent>,
 ): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
@@ -658,10 +660,95 @@ function checkAgentsFiles(
     }
   }
 
-  // Suggest, don't force: recommended roles without a truth document get a
-  // warning with concrete suggestions; the user approves by running
-  // /senai-configure-agents-files. Assignments stay optional.
-  const suggestions = suggestTruthDocuments(cwd).filter(
+  // Artifact-driven roles consume stage outputs, not project documents. A
+  // hand-edited assignment on one of these roles is a configuration error
+  // (the /senai-configure-agents-files picker hides these roles by design).
+  for (const role of SENAI_ROLES) {
+    if ((DOCUMENT_ROLES as readonly string[]).includes(role)) continue;
+    const docs = config.documents[role];
+    if (!docs) continue;
+    const hasAssignment =
+      docs.primary !== undefined || (docs.reads?.length ?? 0) > 0;
+    if (!hasAssignment) continue;
+    const label = ROLE_LABELS[role];
+    items.push({
+      status: "error",
+      message: `${label} (${role}) has document assignments, but this role reads stage artifacts, not project documents.`,
+      details: [
+        ...(docs.primary ? [`Truth document assigned: ${docs.primary}`] : []),
+        ...(docs.reads?.length
+          ? [`Comparison documents assigned: ${docs.reads.join(", ")}`]
+          : []),
+        "Fix: remove this role from agents_files.json (run /senai-configure-agents-files; artifact-driven roles are hidden there by design).",
+      ],
+    });
+  }
+
+  // A truth document that contradicts the suggestion rules is a
+  // misassignment: the file exists, so the existence check passes, but the
+  // role should follow a different document type. Strict error per user
+  // decision; roles without a confident suggestion are not judged.
+  const allSuggestions = suggestTruthDocuments(cwd);
+  for (const s of allSuggestions) {
+    const assigned = config.documents[s.role]?.primary;
+    if (!assigned || assigned === s.path) continue;
+    if (!fs.existsSync(path.resolve(cwd, assigned))) continue; // the MISSING error above already covers this
+    const label = ROLE_LABELS[s.role];
+    items.push({
+      status: "error",
+      message: `${label} (${s.role}) truth document mismatch: assigned ${assigned}, but the expected ${s.reason} looks like ${s.path}.`,
+      details: [
+        "The assigned file exists, but it does not match the document type this role should follow.",
+        `Fix: run /senai-configure-agents-files and set the truth document to ${s.path}. If the assignment is intentional, re-classify the document type via /senai-configure-architect-inputs.`,
+      ],
+    });
+  }
+
+  // Layer 2 — mandate check for roles the suggestion rules do not cover.
+  // Compare what the agent does (mandate/description) with what the document
+  // is (type, filename, first heading). No overlap = clear contradiction =
+  // error. Not enough signal = reported as unverifiable, never silent.
+  const unverifiable: string[] = [];
+  for (const role of MANDATE_CHECK_ROLES) {
+    const assigned = config.documents[role]?.primary;
+    if (!assigned) continue;
+    const fullPath = path.resolve(cwd, assigned);
+    if (!fs.existsSync(fullPath)) continue; // the MISSING error above already covers this
+    const docWords = documentSignalWords(cwd, assigned, fullPath);
+    const mandateWords = significantWords(mandateTextForRole(resolved[role], role));
+    if (docWords.size === 0 || mandateWords.size === 0) {
+      unverifiable.push(`${ROLE_LABELS[role]} (${role}) → ${assigned}`);
+      continue;
+    }
+    if (!wordsOverlap(docWords, mandateWords)) {
+      const label = ROLE_LABELS[role];
+      items.push({
+        status: "error",
+        message: `${label} (${role}) truth document does not match the agent's mandate: ${assigned}.`,
+        details: [
+          `Agent mandate: ${mandateTextForRole(resolved[role], role)}`,
+          "The document shows no overlap with what this agent does.",
+          "Fix: run /senai-configure-agents-files and assign a document that fits the role, or remove the assignment.",
+        ],
+      });
+    }
+  }
+  if (unverifiable.length > 0) {
+    items.push({
+      status: "warning",
+      message: `Doctor cannot verify ${unverifiable.length} document assignment(s) (not enough signal to judge).`,
+      details: [
+        ...unverifiable,
+        "These assignments pass, but they are YOUR responsibility — doctor has no rule for them.",
+        "Tip: classify the document type via /senai-configure-architect-inputs and give the file a meaningful name and top heading to make it verifiable.",
+      ],
+    });
+  }
+
+  // Recommended roles without a truth document get a warning with concrete
+  // suggestions; the user approves by running /senai-configure-agents-files.
+  // Assignments stay optional.
+  const suggestions = allSuggestions.filter(
     (s) => !config.documents[s.role]?.primary,
   );
   if (suggestions.length > 0) {
@@ -711,6 +798,72 @@ function isPathConflict(a: string, b: string): boolean {
   if (a.endsWith("/") && b.startsWith(a)) return true;
   if (b.endsWith("/") && a.startsWith(b)) return true;
   return false;
+}
+
+/** Roles verified by the mandate layer: roles the suggestion rules
+ *  (ROLE_TYPE_RULES in document-suggestions.ts) do not cover. scout-3 is
+ *  excluded per user decision — it keeps existence-only checking. */
+const MANDATE_CHECK_ROLES: SenaiRole[] = ["scout-2", "plan-overview"];
+
+const MANDATE_STOPWORDS = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "into", "your", "their",
+  "them", "they", "will", "shall", "must", "before", "after", "against", "about",
+  "report", "write", "reads", "read", "user", "agent", "role",
+]);
+
+/** Lowercase word set: drops stopwords and words shorter than 4 chars. */
+function significantWords(text: string): Set<string> {
+  const words = new Set<string>();
+  for (const raw of text.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (raw.length < 4) continue;
+    if (MANDATE_STOPWORDS.has(raw)) continue;
+    words.add(raw);
+  }
+  return words;
+}
+
+/** Exact match, or one word prefixing the other (code/codebase, test/testing). */
+function wordsOverlap(a: Set<string>, b: Set<string>): boolean {
+  for (const wa of a) {
+    for (const wb of b) {
+      if (wa === wb) return true;
+      const [shorter, longer] = wa.length <= wb.length ? [wa, wb] : [wb, wa];
+      if (shorter.length >= 4 && longer.startsWith(shorter)) return true;
+    }
+  }
+  return false;
+}
+
+/** What the agent does: frontmatter description + generator mandate + label. */
+function mandateTextForRole(agent: ResolvedAgent, role: SenaiRole): string {
+  const parts: string[] = [];
+  if (agent.frontmatter?.description) parts.push(agent.frontmatter.description);
+  const generated = GENERATED_ROLES.find((def) => def.role === role);
+  if (generated) parts.push(generated.mandate);
+  parts.push(ROLE_LABELS[role]);
+  return parts.join(". ");
+}
+
+/** What the document is: classified type + filename + first markdown heading. */
+function documentSignalWords(cwd: string, relPath: string, fullPath: string): Set<string> {
+  const words = new Set<string>();
+  try {
+    const inputs = loadArchitectInputsConfig(cwd);
+    const entry = inputs?.documents.find((d) => d.path === relPath);
+    if (entry?.type) for (const w of significantWords(entry.type)) words.add(w);
+  } catch {
+    // Invalid architect inputs are reported in the architecture setup section.
+  }
+  const base = path.basename(relPath).replace(/\.[^.]+$/, "");
+  for (const w of significantWords(base)) words.add(w);
+  try {
+    const content = fs.readFileSync(fullPath, "utf8");
+    const heading = content.match(/^#\s+(.+)$/m);
+    if (heading) for (const w of significantWords(heading[1])) words.add(w);
+  } catch {
+    // Unreadable file: fall back to filename/type signals only.
+  }
+  return words;
 }
 
 function checkArchitectureSetup(cwd: string): DiagnosticSection {
