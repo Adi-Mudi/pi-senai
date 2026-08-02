@@ -61,7 +61,7 @@ export interface DiagnosticReport {
   sections: DiagnosticSection[];
 }
 
-interface ResolvedAgent {
+export interface ResolvedAgent {
   name: string;
   source: "project" | "user" | "builtin" | "not found";
   filePath: string | null;
@@ -812,7 +812,7 @@ const MANDATE_STOPWORDS = new Set([
 ]);
 
 /** Lowercase word set: drops stopwords and words shorter than 4 chars. */
-function significantWords(text: string): Set<string> {
+export function significantWords(text: string): Set<string> {
   const words = new Set<string>();
   for (const raw of text.toLowerCase().split(/[^a-z0-9]+/)) {
     if (raw.length < 4) continue;
@@ -823,7 +823,7 @@ function significantWords(text: string): Set<string> {
 }
 
 /** Exact match, or one word prefixing the other (code/codebase, test/testing). */
-function wordsOverlap(a: Set<string>, b: Set<string>): boolean {
+export function wordsOverlap(a: Set<string>, b: Set<string>): boolean {
   for (const wa of a) {
     for (const wb of b) {
       if (wa === wb) return true;
@@ -835,7 +835,7 @@ function wordsOverlap(a: Set<string>, b: Set<string>): boolean {
 }
 
 /** What the agent does: frontmatter description + generator mandate + label. */
-function mandateTextForRole(agent: ResolvedAgent, role: SenaiRole): string {
+export function mandateTextForRole(agent: ResolvedAgent, role: SenaiRole): string {
   const parts: string[] = [];
   if (agent.frontmatter?.description) parts.push(agent.frontmatter.description);
   const generated = GENERATED_ROLES.find((def) => def.role === role);
@@ -845,7 +845,7 @@ function mandateTextForRole(agent: ResolvedAgent, role: SenaiRole): string {
 }
 
 /** What the document is: classified type + filename + first markdown heading. */
-function documentSignalWords(cwd: string, relPath: string, fullPath: string): Set<string> {
+export function documentSignalWords(cwd: string, relPath: string, fullPath: string): Set<string> {
   const words = new Set<string>();
   try {
     const inputs = loadArchitectInputsConfig(cwd);

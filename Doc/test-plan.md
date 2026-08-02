@@ -139,3 +139,32 @@ node --test dist/pi-extension/test/<file>.test.js   # single file
   - `getArtifactPaths` returns 19 fields (the interface has 19, not 18 as first estimated).
   - `agents_files.json` version 1 is silently migrated on load (legitimate v1→v2 migration — kept).
   - Known issue 12 was found during test writing and added above.
+
+## 7. Doctor assignment validation round (2026-08-02)
+
+Scope: unit + edge coverage for the assignment-validation feature in `doctor.ts`
+(artifact-role check, suggestion-rule mismatch, mandate check, unverifiable report).
+
+### Unit tests per helper
+
+| Function | Cases | Edge cases covered |
+|---|---|---|
+| `significantWords` | 8 | empty string, stopword-only, <4-char words, 4-char boundary, digits, punctuation split, uppercase |
+| `wordsOverlap` | 7 | exact, prefix both directions, empty sets, <4-char no-prefix rule |
+| `mandateTextForRole` | 4 | custom description, builtin (null frontmatter), non-generated role, word extraction end-to-end |
+| `documentSignalWords` | 8 | filename, heading, classified type, directory-as-file, corrupted config, 3-char name, multi-extension |
+
+### Integration edge cases (via `runSenaiDiagnostic`)
+
+| # | Scenario | Asserts |
+|---|---|---|
+| 1 | two unverifiable assignments | single aggregated warning with count |
+| 2 | missing assigned file | MISSING error only, no mandate double-report |
+| 3 | artifact role with `reads: []` | not treated as an assignment |
+| 4 | artifact role with `{}` | not treated as an assignment |
+| 5 | missing + mismatched Layer-1 doc | no double error |
+| 6 | two mismatched Layer-1 roles | one error per role |
+| 7 | type-classified overlap (`code`) | mandate check passes via classification |
+
+Method: helpers exported for direct unit tests (user decision); `ResolvedAgent`
+exported because `declaration: true` forbids exporting functions over private types.

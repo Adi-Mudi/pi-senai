@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { runSenaiDiagnostic, formatDiagnosticReport } from "../src/doctor.js";
+import { runSenaiDiagnostic, formatDiagnosticReport, significantWords, wordsOverlap, mandateTextForRole, documentSignalWords, type ResolvedAgent } from "../src/doctor.js";
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
@@ -2724,6 +2724,388 @@ describe("doctor mandate assignment check", () => {
         (i) => i.status === "error" && i.message.includes("(plan-overview)") && i.message.includes("mandate"),
       ),
       "plan-overview is covered by the mandate layer",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+
+describe("significantWords (unit)", () => {
+  it("lowercases, splits, and removes stopwords", () => {
+    const words = significantWords("Search the Codebase and Report");
+    assert.ok(words.has("search"));
+    assert.ok(words.has("codebase"));
+    assert.ok(!words.has("the"));
+    assert.ok(!words.has("and"));
+    assert.ok(!words.has("report"), "report is a stopword");
+  });
+
+  it("splits on any non-alphanumeric character", () => {
+    const words = significantWords("code-risk/dependency_audit");
+    assert.deepStrictEqual([...words].sort(), ["audit", "code", "dependency", "risk"]);
+  });
+
+  it("drops words shorter than 4 characters", () => {
+    assert.strictEqual(significantWords("a an api is").size, 0);
+  });
+
+  it("keeps words of exactly 4 characters", () => {
+    assert.ok(significantWords("test").has("test"));
+  });
+
+  it("keeps words containing digits", () => {
+    const words = significantWords("oauth2 tokens");
+    assert.ok(words.has("oauth2"));
+    assert.ok(words.has("tokens"));
+  });
+
+  it("returns an empty set for an empty string", () => {
+    assert.strictEqual(significantWords("").size, 0);
+  });
+
+  it("returns an empty set for stopword-only input", () => {
+    assert.strictEqual(significantWords("the and for with").size, 0);
+  });
+
+  it("extracts the expected words from the scout-2 mandate", () => {
+    const words = significantWords(
+      "Search the codebase and report relevant code locations, existing implementations, and reusable patterns.",
+    );
+    assert.ok(words.has("codebase"));
+    assert.ok(words.has("implementations"));
+    assert.ok(!words.has("the"));
+    assert.ok(!words.has("report"));
+  });
+});
+
+describe("wordsOverlap (unit)", () => {
+  it("matches identical words", () => {
+    assert.ok(wordsOverlap(new Set(["code"]), new Set(["code"])));
+  });
+
+  it("matches when a word prefixes the other (a shorter)", () => {
+    assert.ok(wordsOverlap(new Set(["code"]), new Set(["codebase"])));
+  });
+
+  it("matches when a word prefixes the other (b shorter)", () => {
+    assert.ok(wordsOverlap(new Set(["codebase"]), new Set(["code"])));
+  });
+
+  it("returns false for unrelated words", () => {
+    assert.ok(!wordsOverlap(new Set(["marketing"]), new Set(["codebase"])));
+  });
+
+  it("returns false when the first set is empty", () => {
+    assert.ok(!wordsOverlap(new Set(), new Set(["code"])));
+  });
+
+  it("returns false when both sets are empty", () => {
+    assert.ok(!wordsOverlap(new Set(), new Set()));
+  });
+
+  it("does not prefix-match words shorter than 4 characters", () => {
+    assert.ok(!wordsOverlap(new Set(["cod"]), new Set(["code"])));
+  });
+});
+
+describe("mandateTextForRole (unit)", () => {
+  function makeAgent(frontmatter: ResolvedAgent["frontmatter"]): ResolvedAgent {
+    return { name: "x", source: "builtin", filePath: null, frontmatter, shadowed: [] };
+  }
+
+  it("combines custom description, generator mandate, and role label", () => {
+    const text = mandateTextForRole(
+      makeAgent({ name: "x", description: "Custom desc", filePath: "/x.md" }),
+      "scout-2",
+    );
+    assert.ok(text.includes("Custom desc"));
+    assert.ok(text.includes("Search the codebase"), "generator mandate included");
+    assert.ok(text.includes("Scout 2 — Coder Search"), "role label included");
+  });
+
+  it("works with null frontmatter (built-in agent)", () => {
+    const text = mandateTextForRole(makeAgent(null), "scout-2");
+    assert.ok(text.includes("Search the codebase"));
+    assert.ok(text.includes("Scout 2 — Coder Search"));
+  });
+
+  it("works for roles outside GENERATED_ROLES", () => {
+    const text = mandateTextForRole(
+      makeAgent({ name: "x", description: "Custom desc", filePath: "/x.md" }),
+      "planner",
+    );
+    assert.ok(text.includes("Custom desc"));
+    assert.ok(text.includes("Planner"));
+  });
+
+  it("feeds significantWords with the expected mandate words", () => {
+    const words = significantWords(mandateTextForRole(makeAgent(null), "scout-2"));
+    assert.ok(words.has("codebase"));
+    assert.ok(words.has("implementations"));
+  });
+});
+
+describe("documentSignalWords (unit)", () => {
+  it("extracts words from the filename", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    const fullPath = path.join(tmpDir, "docs", "code-patterns.md");
+    writeFile(tmpDir, "docs/code-patterns.md", "no heading here\n");
+
+    const words = documentSignalWords(tmpDir, "docs/code-patterns.md", fullPath);
+    assert.ok(words.has("code"));
+    assert.ok(words.has("patterns"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("extracts words from the first markdown heading", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    const fullPath = path.join(tmpDir, "docs", "a.md");
+    writeFile(tmpDir, "docs/a.md", "intro\n# Vendor Marketing\ntext\n");
+
+    const words = documentSignalWords(tmpDir, "docs/a.md", fullPath);
+    assert.ok(words.has("vendor"));
+    assert.ok(words.has("marketing"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("extracts words from the classified document type", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    const fullPath = path.join(tmpDir, "docs", "a.md");
+    writeFile(tmpDir, "docs/a.md", "no heading\n");
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "test-plan", path: "docs/a.md" }],
+      additionalConstraints: [],
+    });
+
+    const words = documentSignalWords(tmpDir, "docs/a.md", fullPath);
+    assert.ok(words.has("test"));
+    assert.ok(words.has("plan"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("uses filename only when there is no heading and no type", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    const fullPath = path.join(tmpDir, "docs", "security-notes.md");
+    writeFile(tmpDir, "docs/security-notes.md", "plain text\n");
+
+    const words = documentSignalWords(tmpDir, "docs/security-notes.md", fullPath);
+    assert.deepStrictEqual([...words].sort(), ["notes", "security"]);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("does not throw when the path is a directory", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    fs.mkdirSync(path.join(tmpDir, "docs", "code-mapper"), { recursive: true });
+
+    const words = documentSignalWords(tmpDir, "docs/code-mapper", path.join(tmpDir, "docs", "code-mapper"));
+    assert.ok(words.has("code"));
+    assert.ok(words.has("mapper"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("does not throw when architect-inputs.json is corrupted", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    const fullPath = path.join(tmpDir, "docs", "code-mapper.md");
+    writeFile(tmpDir, "docs/code-mapper.md", "no heading\n");
+    writeFile(tmpDir, ".pi/senai/architect-inputs.json", "{not json");
+
+    const words = documentSignalWords(tmpDir, "docs/code-mapper.md", fullPath);
+    assert.ok(words.has("code"));
+    assert.ok(words.has("mapper"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns an empty set when nothing has signal", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    const fullPath = path.join(tmpDir, "docs", "a.md");
+    writeFile(tmpDir, "docs/a.md", "plain text, no heading\n");
+
+    const words = documentSignalWords(tmpDir, "docs/a.md", fullPath);
+    assert.strictEqual(words.size, 0);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("strips only the last extension and drops 3-char words", () => {
+    const tmpDir = makeTmpDir("doctor-signals-");
+    const fullPath = path.join(tmpDir, "docs", "api.spec.md");
+    writeFile(tmpDir, "docs/api.spec.md", "no heading\n");
+
+    const words = documentSignalWords(tmpDir, "docs/api.spec.md", fullPath);
+    assert.ok(words.has("spec"));
+    assert.ok(!words.has("api"), "api is shorter than 4 chars");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("doctor assignment validation edge cases", () => {
+  function findAssignments(report: ReturnType<typeof runSenaiDiagnostic>) {
+    const section = report.sections.find((s) => s.title === "Agent document assignments");
+    assert.ok(section, "Agent document assignments section should exist");
+    return section;
+  }
+
+  it("aggregates multiple unverifiable assignments into one warning", () => {
+    const tmpDir = makeTmpDir("doctor-edge-");
+    writeFile(tmpDir, "docs/a.md", "plain text\n");
+    writeFile(tmpDir, "docs/b.md", "plain text\n");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: {
+        "scout-2": { primary: "docs/a.md" },
+        "plan-overview": { primary: "docs/b.md" },
+      },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const warnings = section.items.filter((i) => i.status === "warning" && i.message.includes("cannot verify"));
+    assert.strictEqual(warnings.length, 1, "exactly one aggregated warning");
+    assert.ok(warnings[0].message.startsWith("Doctor cannot verify 2 document assignment(s)"));
+    assert.ok(warnings[0].details?.some((d) => d.includes("(scout-2)")));
+    assert.ok(warnings[0].details?.some((d) => d.includes("(plan-overview)")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("missing assigned file produces only the MISSING error, no mandate error", () => {
+    const tmpDir = makeTmpDir("doctor-edge-");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-2": { primary: "docs/deleted.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      section.items.some((i) => i.status === "error" && i.message.includes("(scout-2)") && i.message.includes("MISSING")),
+      "MISSING error present",
+    );
+    assert.ok(
+      !section.items.some((i) => i.status === "error" && i.message.includes("mandate")),
+      "no mandate double-report for a missing file",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("artifact role with an empty reads array is not an assignment", () => {
+    const tmpDir = makeTmpDir("doctor-edge-");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { implementer: { reads: [] } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "error" && i.message.includes("stage artifacts")),
+      "empty reads array is not treated as an assignment",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("artifact role with an empty entry is not an assignment", () => {
+    const tmpDir = makeTmpDir("doctor-edge-");
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { linter: {} },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "error" && i.message.includes("stage artifacts")),
+      "empty entry is not treated as an assignment",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("missing + mismatched Layer-1 document produces only the MISSING error", () => {
+    const tmpDir = makeTmpDir("doctor-edge-");
+    writeFile(tmpDir, "docs/PRD.md", "# PRD\n");
+    writeFile(tmpDir, "docs/NFR.md", "# NFR\n");
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [
+        { type: "prd", path: "docs/PRD.md" },
+        { type: "nfr", path: "docs/NFR.md" },
+      ],
+      additionalConstraints: [],
+    });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "reviewer-security": { primary: "docs/GONE.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      section.items.some((i) => i.status === "error" && i.message.includes("(reviewer-security)") && i.message.includes("MISSING")),
+      "MISSING error present",
+    );
+    assert.ok(
+      !section.items.some((i) => i.status === "error" && i.message.includes("mismatch")),
+      "no mismatch double-report for a missing file",
+    );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("two mismatched Layer-1 roles produce two separate errors", () => {
+    const tmpDir = makeTmpDir("doctor-edge-");
+    writeFile(tmpDir, "docs/PRD.md", "# PRD\n");
+    writeFile(tmpDir, "docs/NFR.md", "# NFR\n");
+    writeFile(tmpDir, "docs/TEST_PLAN.md", "# Test Plan\n");
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [
+        { type: "prd", path: "docs/PRD.md" },
+        { type: "nfr", path: "docs/NFR.md" },
+        { type: "test-plan", path: "docs/TEST_PLAN.md" },
+      ],
+      additionalConstraints: [],
+    });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: {
+        "reviewer-security": { primary: "docs/PRD.md" },
+        "reviewer-tests": { primary: "docs/PRD.md" },
+      },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    const mismatches = section.items.filter((i) => i.status === "error" && i.message.includes("mismatch"));
+    assert.strictEqual(mismatches.length, 2, "one error per mismatched role");
+    assert.ok(mismatches.some((i) => i.message.includes("(reviewer-security)")));
+    assert.ok(mismatches.some((i) => i.message.includes("(reviewer-tests)")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("mandate check passes when the classified type overlaps the mandate", () => {
+    const tmpDir = makeTmpDir("doctor-edge-");
+    writeFile(tmpDir, "docs/zz.md", "no heading\n");
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "code", path: "docs/zz.md" }],
+      additionalConstraints: [],
+    });
+    saveAgentsFilesConfig(tmpDir, {
+      version: 2,
+      documents: { "scout-2": { primary: "docs/zz.md" } },
+    });
+
+    const section = findAssignments(runSenaiDiagnostic(tmpDir));
+    assert.ok(
+      !section.items.some((i) => i.status === "error"),
+      "type 'code' overlaps the code-search mandate — no error",
     );
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
