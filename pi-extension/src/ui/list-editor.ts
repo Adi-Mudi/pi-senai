@@ -314,6 +314,9 @@ async function runCustomListEditor(
       lines.push(theme.fg("borderMuted", border));
 
       lines.push(theme.fg("success", ` ✅ Selected (${selCount})`));
+      if (selCount === 0) {
+        lines.push(theme.fg("dim", "  (none)"));
+      }
       const visible = all.slice(scrollOffset, scrollOffset + pageSize);
       let emittedSuggestions = 0;
       for (let i = 0; i < visible.length; i++) {
@@ -324,9 +327,6 @@ async function runCustomListEditor(
         }
         lines.push(renderRow(row, focusArea === "content" && scrollOffset + i === contentIndex, width));
         if (row.kind === "suggestion") emittedSuggestions++;
-      }
-      if (selCount === 0) {
-        lines.push(theme.fg("dim", "  (none)"));
       }
       if (all.length - selCount === 0) {
         lines.push(theme.fg("dim", "  ── enter adds/removes ──"));
@@ -339,7 +339,9 @@ async function runCustomListEditor(
 
       lines.push(...detailLines(width));
       lines.push(theme.fg("accent", border));
-      lines.push(theme.fg("dim", "↑↓ navigate • enter add/remove • esc cancel"));
+      const footer = "↑↓ navigate • enter add/remove • esc cancel";
+      const footerShort = "↑↓ move • enter toggle • esc";
+      lines.push(theme.fg("dim", (footer.length <= width ? footer : footerShort).slice(0, Math.max(2, width))));
       lines.push(theme.fg("accent", border));
       return lines;
     }

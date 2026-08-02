@@ -397,6 +397,11 @@ describe("runListEditor custom TUI", () => {
       lines.some((line) => line.includes("(none)")),
       `expected a (none) placeholder, got:\n${lines.join("\n")}`,
     );
+    const selIdx = lines.findIndex((l) => l.includes("Selected (0)"));
+    assert.ok(
+      lines[selIdx + 1]?.includes("(none)"),
+      "(none) sits directly under the Selected header",
+    );
     getDone()({ kind: "back" });
     await promise;
   });
@@ -689,6 +694,26 @@ describe("runListEditor Option A sections", () => {
     );
     const at1 = comp.render(1);
     assert.ok(at1.length > 0, "renders at width 1");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("shrinks the footer hint to fit narrow widths", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [{ id: "s1", kind: "suggestion", label: "a", value: "a" }],
+    });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const at80 = comp.render(80);
+    assert.ok(
+      at80.some((l) => l.includes("↑↓ navigate • enter add/remove • esc cancel")),
+      "full footer at wide width",
+    );
+    const at40 = comp.render(40);
+    const footer = at40.find((l) => l.includes("esc"));
+    assert.ok(footer, "footer present at width 40");
+    assert.ok(footer.length <= 40, `footer fits width 40, got: ${footer}`);
     getDone()({ kind: "back" });
     await promise;
   });
