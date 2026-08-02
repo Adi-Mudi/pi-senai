@@ -3,8 +3,12 @@ import assert from "node:assert";
 import {
   buildSuggestionMap,
   DEFAULT_AGENTS,
+  DOCUMENT_ROLES,
+  PICKER_ROLES,
+  ROLE_GUIDANCE,
   ROLE_LABELS,
   SENAI_ROLES,
+  SEQUENCE_ROLES,
   suggestAgentForRole,
 } from "../src/agent-suggestions.js";
 import type { DiscoveredAgent } from "../src/agent-discovery.js";
@@ -217,5 +221,67 @@ describe("agent-suggestions", () => {
     assert.strictEqual(map.linter, undefined);
     assert.ok(!("linter" in map));
     assert.ok(!("archive" in map));
+  });
+});
+
+
+describe("ROLE_GUIDANCE", () => {
+  it("covers every document role", () => {
+    for (const role of DOCUMENT_ROLES) {
+      assert.ok(ROLE_GUIDANCE[role], `missing guidance for ${role}`);
+    }
+  });
+
+  it("scout-1 is design-defined and scout-3 is optional", () => {
+    assert.strictEqual(ROLE_GUIDANCE["scout-1"], "design-defined");
+    assert.strictEqual(ROLE_GUIDANCE["scout-3"], "optional");
+  });
+});
+
+
+describe("ROLE_GUIDANCE data integrity", () => {
+  it("contains only valid guidance values", () => {
+    const valid = new Set(["design-defined", "recommended", "optional"]);
+    for (const [role, guidance] of Object.entries(ROLE_GUIDANCE)) {
+      assert.ok(valid.has(guidance), `invalid guidance "${guidance}" for ${role}`);
+    }
+  });
+
+  it("has no entries outside DOCUMENT_ROLES", () => {
+    for (const role of Object.keys(ROLE_GUIDANCE)) {
+      assert.ok(
+        (DOCUMENT_ROLES as readonly string[]).includes(role),
+        `dead guidance entry for ${role} (not a document role)`,
+      );
+    }
+  });
+});
+
+
+describe("PICKER_ROLES", () => {
+  it("is DOCUMENT_ROLES minus the four sequence roles", () => {
+    assert.deepStrictEqual(
+      PICKER_ROLES,
+      DOCUMENT_ROLES.filter((r) => !SEQUENCE_ROLES.includes(r)),
+    );
+    assert.strictEqual(PICKER_ROLES.length, DOCUMENT_ROLES.length - 4);
+  });
+
+  it("contains no sequence roles and keeps every scout and reviewer", () => {
+    for (const role of SEQUENCE_ROLES) {
+      assert.ok(!PICKER_ROLES.includes(role), `${role} must be hidden`);
+    }
+    const visible = [
+      "scout-1",
+      "scout-2",
+      "scout-3",
+      "scout-4",
+      "reviewer-correctness",
+      "reviewer-security",
+      "reviewer-tests",
+    ] as const;
+    for (const role of visible) {
+      assert.ok(PICKER_ROLES.includes(role), `${role} must stay visible`);
+    }
   });
 });

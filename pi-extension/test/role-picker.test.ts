@@ -310,3 +310,168 @@ describe("runRolePicker custom TUI", () => {
     await promise;
   });
 });
+
+
+describe("role picker guidance tags", () => {
+  it("includes the guidance tag in fallback labels", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const items: RolePickerItem[] = [
+      { id: "scout-2", label: "Scout 2", agent: "scout", summary: "not set", assigned: false, guidance: "recommended" },
+    ];
+    await runRolePicker(ctx, { title: "t", items });
+    assert.ok(captured[0][0].includes("[recommended]"), "fallback label carries the tag");
+  });
+
+  it("renders the guidance tag text in the custom picker", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "scout-1", label: "Scout 1", agent: "scout", summary: "not set", assigned: false, guidance: "design-defined" },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    assert.ok(lines.some((l) => l.includes("[design-defined]")), "custom row carries the tag");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders each guidance kind with its theme color", async () => {
+    // Color-recording theme: fg(color, text) embeds the color name.
+    const recordingTheme = {
+      fg: (color: string, text: string) => `${color}:${text}`,
+      bg: (_color: string, text: string) => text,
+      bold: (text: string) => text,
+      dim: (text: string) => text,
+    } as unknown as import("@mariozechner/pi-coding-agent").Theme;
+
+    let component: { render: (width: number) => string[] } | undefined;
+    let doneFn: (result: unknown) => void = () => {};
+    const custom = async (factory: any): Promise<any> =>
+      new Promise((resolve) => {
+        doneFn = resolve;
+        component = factory(
+          { requestRender: () => {} },
+          recordingTheme,
+          {},
+          resolve,
+        );
+      });
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: { select: async () => "", custom },
+    } as unknown as ExtensionContext;
+
+    const items: RolePickerItem[] = [
+      { id: "scout-1", label: "Scout 1", agent: "scout", summary: "not set", assigned: false, guidance: "design-defined" },
+      { id: "scout-2", label: "Scout 2", agent: "scout", summary: "not set", assigned: false, guidance: "recommended" },
+      { id: "scout-3", label: "Scout 3", agent: "scout", summary: "not set", assigned: false, guidance: "optional" },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const lines = component!.render(80);
+    assert.ok(lines.some((l) => l.includes("success:[design-defined]")), "design-defined is green");
+    assert.ok(lines.some((l) => l.includes("warning:[recommended]")), "recommended is yellow");
+    assert.ok(lines.some((l) => l.includes("dim:[optional]")), "optional is dim");
+    doneFn({ kind: "back" });
+    await promise;
+  });
+});
+
+
+describe("role picker guidance edge cases", () => {
+  it("omits the tag for items without guidance in fallback labels", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const items: RolePickerItem[] = [
+      { id: "scout-2", label: "Scout 2", agent: "scout", summary: "not set", assigned: false },
+    ];
+    await runRolePicker(ctx, { title: "t", items });
+    assert.ok(!captured[0][0].includes("["), "no tag when guidance is undefined");
+  });
+
+  it("keeps the assigned marker and the tag together in fallback labels", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const items: RolePickerItem[] = [
+      { id: "planner", label: "Planner", agent: "planner", summary: "truth=docs/PRD.md", assigned: true, guidance: "recommended" },
+    ];
+    await runRolePicker(ctx, { title: "t", items });
+    assert.ok(captured[0][0].startsWith("✅"), "assigned marker present");
+    assert.ok(captured[0][0].includes("[recommended]"), "tag present on assigned row");
+  });
+
+  it("renders design-defined and optional tags in fallback labels", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const items: RolePickerItem[] = [
+      { id: "scout-1", label: "Scout 1", agent: "scout", summary: "not set", assigned: false, guidance: "design-defined" },
+      { id: "scout-3", label: "Scout 3", agent: "scout", summary: "not set", assigned: false, guidance: "optional" },
+    ];
+    await runRolePicker(ctx, { title: "t", items });
+    assert.ok(captured[0][0].includes("[design-defined]"));
+    assert.ok(captured[0][1].includes("[optional]"));
+  });
+
+  it("renders no tag on the Finish row", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "scout-1", label: "Scout 1", agent: "scout", summary: "not set", assigned: false, guidance: "design-defined" },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    const finishLine = lines.find((l) => l.includes("Finish"));
+    assert.ok(finishLine, "Finish row exists");
+    assert.ok(!finishLine.includes("["), "Finish row carries no tag");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("keeps the tag on the focused row", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "scout-2", label: "Scout 2", agent: "scout", summary: "not set", assigned: false, guidance: "recommended" },
+      { id: "scout-3", label: "Scout 3", agent: "scout", summary: "not set", assigned: false, guidance: "optional" },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    const focusedLine = lines.find((l) => l.startsWith("→"));
+    assert.ok(focusedLine, "a focused row exists");
+    assert.ok(focusedLine.includes("[recommended]"), "focused row keeps the tag");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders no tag for items without guidance in the custom picker", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "scout-2", label: "Scout 2", agent: "scout", summary: "not set", assigned: false },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    const row = lines.find((l) => l.includes("Scout 2"));
+    assert.ok(row);
+    assert.ok(!row.includes("["), "no tag when guidance is undefined");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders assigned rows with the tag in the custom picker", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "planner", label: "Planner", agent: "planner", summary: "truth=docs/PRD.md", assigned: true, guidance: "recommended" },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    const row = lines.find((l) => l.includes("Planner"));
+    assert.ok(row);
+    assert.ok(row.includes("truth=docs/PRD.md"), "assigned summary present");
+    assert.ok(row.includes("[recommended]"), "tag present on assigned row");
+    getDone()({ kind: "back" });
+    await promise;
+  });
+});

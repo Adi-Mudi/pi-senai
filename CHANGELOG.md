@@ -7,10 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- `/senai-configure-agents-files` now hides the four sequence-orchestrated roles (discussion, planner, code-review, security-gate) — their primary input is stage artifacts and Senai runs them automatically. The picker shows the 7 scout/reviewer roles (`PICKER_ROLES`). Hidden roles stay assignable via `agents_files.json`, and doctor keeps suggesting documents for them.
+
 ### Added
 
 - `/senai-doctor` now fails on document misassignments: artifact-driven roles (implementer, linter, writers, archive, …) carrying truth/comparison documents, and truth documents that contradict the role's expected document type (e.g., a PRD assigned to the security reviewer). Both are errors with fix hints pointing at `/senai-configure-agents-files`.
 - `/senai-doctor` mandate check: for roles the suggestion rules do not cover (`scout-2`, `plan-overview`), the assigned truth document is compared against the agent's mandate (frontmatter description + generator mandate) using document signals (classified type, filename, first heading). A clear contradiction is an error; an assignment with too little signal to judge is reported as unverifiable (warning) instead of passing silently. `scout-3` keeps existence-only checking per user decision.
+- `/senai-configure-agents-files` picker rows now show colored guidance tags (`ROLE_GUIDANCE` in `agent-suggestions.ts`): `[design-defined]` (green) for scout-1, `[recommended]` (yellow) for roles that should be configured, `[optional]` (dim) for scout-3.
 
 ### Fixed
 

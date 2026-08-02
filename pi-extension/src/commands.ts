@@ -19,8 +19,9 @@ import { discoverProjectFiles, safeReadDir, isExcluded } from "./files-discovery
 import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./files-config.js";
 import {
   DEFAULT_AGENTS,
-  DOCUMENT_ROLES,
+  PICKER_ROLES,
   SENAI_ROLES,
+  ROLE_GUIDANCE,
   ROLE_LABELS,
   type SenaiRole,
   buildSuggestionMap,
@@ -995,9 +996,10 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       const filesConfig = loadFilesConfig(ctx.cwd);
       const candidates = buildDocumentCandidates(ctx.cwd, filesConfig);
 
-      // Only document-reading roles are shown; artifact-driven roles are
-      // hidden to keep the picker clean (JSON stays valid for all roles).
-      const pickerItems: RolePickerItem[] = DOCUMENT_ROLES.map((role) => {
+      // Only picker-visible document roles are shown (PICKER_ROLES).
+      // Sequence roles (discussion, planner, code-review, security-gate) and
+      // artifact-driven roles are hidden; JSON stays valid for all roles.
+      const pickerItems: RolePickerItem[] = PICKER_ROLES.map((role) => {
         const agent = resolveAgentName(agentConfig, role);
         const docs = config.documents[role];
         let summary: string;
@@ -1017,6 +1019,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           agent,
           summary,
           assigned,
+          guidance: ROLE_GUIDANCE[role],
         };
       });
 
@@ -1024,6 +1027,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       while (editing) {
         const action = await runRolePicker(ctx, {
           title: "Configure agent documents",
+          subtitle: " Sequence roles (discussion, planner, code review, security gate) follow stage artifacts automatically — assign them by editing agents_files.json directly.",
           items: pickerItems,
         });
 

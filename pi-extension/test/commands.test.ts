@@ -809,11 +809,11 @@ describe("commands", () => {
     });
     registerAgentsFilesCommands(makeApi());
 
-    // Top-level role picker: choose planner.
+    // Top-level role picker: choose scout-4.
     // Per-role editor: set truth, add read, go back.
     // Top-level: finish.
     selectChoices.push(
-      "⬜ planner: Planner (planner) — not set",
+      "⬜ scout-4: Scout 4 — PRD / documentation audit (scout) — not set [recommended]",
       "Set truth document",
       "Doc/planner.md",
       "⬜ Suggest: Doc/plan.md",
@@ -823,8 +823,57 @@ describe("commands", () => {
 
     await commandHandlers["senai-configure-agents-files"]("", makeCtx());
     const saved = loadAgentsFilesConfig(tmpDir);
-    assert.strictEqual(saved?.documents.planner?.primary, "Doc/planner.md");
-    assert.deepStrictEqual(saved?.documents.planner?.reads, ["Doc/plan.md"]);
+    assert.strictEqual(saved?.documents["scout-4"]?.primary, "Doc/planner.md");
+    assert.deepStrictEqual(saved?.documents["scout-4"]?.reads, ["Doc/plan.md"]);
+  });
+
+  it("senai-configure-agents-files picker labels carry guidance tags", async () => {
+    registerAgentsFilesCommands(makeApi());
+
+    const captured: string[][] = [];
+    const ctx = {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        select: async (_title: string, options: string[]) => {
+          captured.push(options);
+          return "⬜ Finish"; // leave the picker immediately
+        },
+      },
+    } as unknown as ExtensionContext;
+
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    assert.ok(captured.length > 0, "role picker was shown");
+    const labels = captured[0];
+    assert.ok(
+      labels.some((l) => l.includes("scout-1") && l.includes("[design-defined]")),
+      "scout-1 row carries the design-defined tag",
+    );
+    assert.ok(
+      labels.some((l) => l.includes("scout-3") && l.includes("[optional]")),
+      "scout-3 row carries the optional tag",
+    );
+    assert.ok(
+      labels.some((l) => l.includes("scout-4") && l.includes("[recommended]")),
+      "scout-4 row carries the recommended tag",
+    );
+    assert.ok(
+      !labels.some((l) => l.includes("planner:")),
+      "planner is hidden from the picker",
+    );
+    assert.ok(
+      !labels.some((l) => l.includes("security-gate:")),
+      "security-gate is hidden from the picker",
+    );
+    assert.ok(
+      !labels.some((l) => l.includes("discussion:")),
+      "discussion is hidden from the picker",
+    );
+    assert.ok(
+      !labels.some((l) => l.includes("code-review:")),
+      "code-review is hidden from the picker",
+    );
   });
 
   // Edge cases
@@ -1645,7 +1694,7 @@ describe("commands", () => {
     );
   });
 
-  it("senai-configure-agents-files shows only the document-reading roles", async () => {
+  it("senai-configure-agents-files shows only the picker-visible roles", async () => {
     registerAgentsFilesCommands(makeApi());
     const ctx = makeCtx();
     const offered: string[][] = [];
@@ -1657,9 +1706,11 @@ describe("commands", () => {
     await commandHandlers["senai-configure-agents-files"]("", ctx);
 
     const labels = offered[0];
-    assert.strictEqual(labels.length, 12, "11 document roles + Finish");
-    assert.ok(labels.some((l) => l.includes("Scout 1")), "document roles are shown");
-    assert.ok(labels.some((l) => l.includes("Security gate")), "security gate is shown");
+    assert.strictEqual(labels.length, 8, "7 picker-visible roles + Finish");
+    assert.ok(labels.some((l) => l.includes("Scout 1")), "scouts are shown");
+    assert.ok(labels.some((l) => l.includes("Reviewer — Tests")), "reviewers are shown");
+    assert.ok(!labels.some((l) => l.includes("Security gate")), "sequence roles are hidden");
+    assert.ok(!labels.some((l) => l.includes("Planner")), "planner is hidden");
     assert.ok(!labels.some((l) => l.includes("Implementer")), "artifact roles are hidden");
     assert.ok(!labels.some((l) => l.includes("Archive")), "archive is hidden");
     assert.ok(!labels.some((l) => l.includes("Linter")), "linter is hidden");
@@ -1668,12 +1719,12 @@ describe("commands", () => {
   it("senai-configure-agents-files removes the role entry when truth is cleared with no reads", async () => {
     saveAgentsFilesConfig(tmpDir, {
       version: 2,
-      documents: { planner: { primary: "Doc/planner.md" } },
+      documents: { "scout-4": { primary: "Doc/planner.md" } },
     });
     registerAgentsFilesCommands(makeApi());
 
     selectChoices.push(
-      "✅ planner: Planner (planner) — truth=Doc/planner.md",
+      "✅ scout-4: Scout 4 — PRD / documentation audit (scout) — truth=Doc/planner.md [recommended]",
       "Clear truth",
       "Back",
       "⬜ Finish",
@@ -1683,7 +1734,7 @@ describe("commands", () => {
 
     const saved = loadAgentsFilesConfig(tmpDir);
     assert.ok(saved);
-    assert.strictEqual(saved.documents.planner, undefined);
+    assert.strictEqual(saved.documents["scout-4"], undefined);
     assert.deepStrictEqual(Object.keys(saved.documents), []);
   });
 

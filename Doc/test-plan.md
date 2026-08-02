@@ -168,3 +168,28 @@ Scope: unit + edge coverage for the assignment-validation feature in `doctor.ts`
 
 Method: helpers exported for direct unit tests (user decision); `ResolvedAgent`
 exported because `declaration: true` forbids exporting functions over private types.
+
+## 8. Picker role guidance round (2026-08-02)
+
+Scope: unit + edge coverage for the role-guidance feature
+(`ROLE_GUIDANCE` map, `GUIDANCE_COLORS`, guidance rendering in `runRolePicker`
+and its sub-functions, `commands.ts` wiring).
+
+Method: sub-functions (`renderRow`, `render`, `move`, `ensureVisible`) are
+closures inside `runCustomRolePicker` and cannot be exported; all tests reach
+them through `runRolePicker` with mock contexts (established file pattern).
+No source changes.
+
+### Unit/edge tests per function
+
+| Function / sub-function | Cases | Edge cases covered |
+|---|---|---|
+| `makeFallbackOptions` | 3 | undefined guidance (no tag), assigned ✅ + tag, all tag kinds in fallback |
+| `renderRow` (custom) | 4 | Finish row clean, focused path keeps tag, no-guidance row, assigned + tag |
+| `ROLE_GUIDANCE` (data) | 2 | only valid tag values, no keys outside `DOCUMENT_ROLES` |
+| `commands.ts` wiring | 1 | tags flow into live picker options (scout-1/scout-3/planner spot checks) |
+
+### Already covered in the feature round (not duplicated)
+
+- Selection/finish/back, scrolling, wrapping, tiny width, subtitle (18 tests)
+- Guidance tag text in both pickers, all 3 theme colors, map completeness (5 tests)

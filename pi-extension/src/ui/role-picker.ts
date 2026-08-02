@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Key, matchesKey } from "@mariozechner/pi-tui";
+import type { RoleGuidance } from "../agent-suggestions.js";
 
 export interface RolePickerItem {
   id: string;
@@ -7,7 +8,16 @@ export interface RolePickerItem {
   agent: string;
   summary: string;
   assigned: boolean;
+  guidance?: RoleGuidance;
 }
+
+/** User-approved colors: green = handled by design, yellow = please
+ *  configure, gray = your choice. */
+const GUIDANCE_COLORS: Record<RoleGuidance, "success" | "warning" | "dim"> = {
+  "design-defined": "success",
+  recommended: "warning",
+  optional: "dim",
+};
 
 export interface RolePickerOptions {
   title: string;
@@ -50,7 +60,8 @@ function makeFallbackOptions(
   for (const item of items) {
     const marker = item.assigned ? "✅" : "⬜";
     const agentPart = item.agent ? ` (${item.agent})` : "";
-    const label = `${marker} ${item.id}: ${item.label}${agentPart} — ${item.summary}`;
+    const guidancePart = item.guidance ? ` [${item.guidance}]` : "";
+    const label = `${marker} ${item.id}: ${item.label}${agentPart} — ${item.summary}${guidancePart}`;
     options.push(label);
     idMap.set(label, item.id);
   }
@@ -106,7 +117,10 @@ async function runCustomRolePicker(
     function renderRow(item: RolePickerItem, focused: boolean): string {
       const prefix = focused ? "→ " : "  ";
       const agentPart = item.agent ? ` (${item.agent})` : "";
-      const base = `${item.label}${agentPart} — ${item.summary}`;
+      const guidancePart = item.guidance
+        ? ` ${theme.fg(GUIDANCE_COLORS[item.guidance], `[${item.guidance}]`)}`
+        : "";
+      const base = `${item.label}${agentPart} — ${item.summary}${guidancePart}`;
       if (item.id === FINISH_ID) {
         return `${prefix}${theme.fg("text", "Finish")}`;
       }
