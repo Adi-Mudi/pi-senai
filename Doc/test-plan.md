@@ -136,6 +136,7 @@ node --test dist/pi-extension/test/<file>.test.js   # single file
 - Document-scope guidance round (2026-07-28): suggestion module + curated picker added; step-5 detection strengthened (empty assignments stay pending). Base + edge coverage added. Final: **735 tests, 735 passing, 0 failures**.
 - Picker needs + suggestions round (2026-08-02): +11 tests → **814 tests, 814 passing, 0 failures**.
 - List editor Option A round (2026-08-02): +12 tests → **826 tests, 826 passing, 0 failures**.
+- Unified picker round (2026-08-03): +12 tests, 1 latent test bug fixed → **839 tests, 839 passing, 0 failures**.
 - Deviations recorded during the edge-case round:
   - `loadState` with a JSON `null` body throws (pinned) rather than returning the default state.
   - `getArtifactPaths` returns 19 fields (the interface has 19, not 18 as first estimated).
@@ -240,3 +241,25 @@ unchanged, so `commands.test.ts` needed no changes.
 SelectList-internal assertions re-pointed at rendered lines: `(no items)` →
 section placeholders (`Selected (0)` / `Suggestions (0)` / `(none)`), label
 assertions updated for uniform markers. Fallback describe untouched.
+
+## 11. Unified picker round (2026-08-03)
+
+Scope: shared single-choice picker (`ui/simple-picker.ts`) — all 7 plain selects
+and 4 confirms migrated to the same visual language. Fallback (non-TUI) kept
+byte-identical labels and `ctx.ui.confirm` delegation by design.
+
+### Unit/edge tests per function
+
+| Function / sub-function | Cases | Edge cases covered |
+|---|---|---|
+| `runSimplePicker` fallback | 3 | id-by-label mapping, cancel → undefined, hints never leak into fallback labels |
+| `runCustomSimplePicker` | 7 | enter/escape, border+title+subtitle+footer render, dim hint (recording theme), wrap both ends, scroll window + info line, initialSelectedId + unknown-id fallback |
+| `runSimpleConfirm` | 2 | TUI Yes/No/esc → true/false/false; non-TUI delegates to `ctx.ui.confirm` (custom not called) |
+
+### Migration defect found and fixed
+
+`commands.test.ts` "Choose different" pushed `reviewer (builtin)`, but real user
+agents shadow built-ins on this machine (offered label: `reviewer (user)`). The
+old `split(" ")[0]` handler never validated; the strict id mapping exposed the
+latent test bug. Fixed hermetically: the test now picks from offered options.
+No source change.

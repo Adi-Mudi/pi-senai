@@ -1820,13 +1820,22 @@ describe("commands", () => {
     registerAgentCommands(makeApi());
     const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
 
-    selectChoices.push("Choose different");
-    selectChoices.push("reviewer (builtin)");
-    for (let i = 1; i < roles.length; i++) {
-      selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
-    }
+    // Hermetic select: pick from the actually-offered options (user agents can
+    // shadow built-ins, so exact labels differ per machine).
+    const ctx = makeCtx();
+    let chooseUsed = false;
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      if (title.startsWith("Select agent for")) {
+        return options.find((o) => o.startsWith("reviewer (")) ?? options[0];
+      }
+      if (!chooseUsed) {
+        chooseUsed = true;
+        return "Choose different";
+      }
+      return options.find((o) => o.startsWith("Use default:")) ?? options[options.length - 1];
+    };
 
-    await commandHandlers["senai-configure-agents"]("", makeCtx());
+    await commandHandlers["senai-configure-agents"]("", ctx);
 
     const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));

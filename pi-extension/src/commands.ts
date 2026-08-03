@@ -43,6 +43,11 @@ import {
   type RolePickerItem,
 } from "./ui/role-picker.js";
 import {
+  runSimpleConfirm,
+  runSimplePicker,
+  type SimplePickerItem,
+} from "./ui/simple-picker.js";
+import {
   advanceStage,
   loadState,
   resetState,
@@ -286,7 +291,8 @@ export function registerCommands(pi: ExtensionAPI) {
         return;
       }
 
-      const confirmed = await ctx.ui.confirm(
+      const confirmed = await runSimpleConfirm(
+        ctx,
         "Approve stage",
         `Approve '${state.currentStage}' and run the next stage?`,
       );
@@ -339,7 +345,8 @@ export function registerCommands(pi: ExtensionAPI) {
         ctx.ui.notify("No active senai run to reset.", "info");
         return;
       }
-      const confirmed = await ctx.ui.confirm(
+      const confirmed = await runSimpleConfirm(
+        ctx,
         "Reset senai run",
         `Reset run "${state.mission}"? This only deletes the state file; artifacts are preserved.`,
       );
@@ -575,47 +582,56 @@ export function registerAgentCommands(pi: ExtensionAPI) {
         const suggested = suggestions[role] ?? DEFAULT_AGENTS[role];
         const current = mapping[role] ?? existingValue ?? suggested;
 
-        const options: string[] = [];
+        const pickerItems: SimplePickerItem[] = [];
         if (existingValue) {
-          options.push(`Keep current: ${existingValue}`);
+          pickerItems.push({ id: "keep", label: `Keep current: ${existingValue}` });
         }
         if (!existingValue || existingValue !== suggested) {
-          options.push(`Accept suggestion: ${suggested}`);
+          pickerItems.push({ id: "accept", label: `Accept suggestion: ${suggested}` });
         }
-        options.push("Choose different");
-        options.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+        pickerItems.push({ id: "choose", label: "Choose different" });
+        pickerItems.push({ id: "default", label: `Use default: ${DEFAULT_AGENTS[role]}` });
         if (i > 0) {
-          options.push("← Back");
+          pickerItems.push({ id: "back", label: "← Back" });
         }
         if (i < SENAI_ROLES.length - 1) {
-          options.push("Next →");
+          pickerItems.push({ id: "next", label: "Next →" });
         } else {
-          options.push("Finish");
+          pickerItems.push({ id: "finish", label: "Finish" });
         }
 
-        const choice = await ctx.ui.select(`Configure agent for ${ROLE_LABELS[role]} (${role})`, options);
+        const choice = await runSimplePicker(ctx, {
+          title: `Configure agent for ${ROLE_LABELS[role]} (${role})`,
+          items: pickerItems,
+        });
 
-        if (choice?.startsWith("Keep current:")) {
+        if (choice === "keep") {
           mapping[role] = existingValue!;
           i++;
-        } else if (choice?.startsWith("Accept suggestion:")) {
+        } else if (choice === "accept") {
           mapping[role] = suggested;
           i++;
-        } else if (choice === "Choose different") {
-          const agentOptions = agents.map((a) => `${a.name} (${a.source})`);
-          const selected = await ctx.ui.select(`Select agent for ${ROLE_LABELS[role]} (${role})`, agentOptions);
+        } else if (choice === "choose") {
+          const agentItems: SimplePickerItem[] = agents.map((a) => ({
+            id: a.name,
+            label: `${a.name} (${a.source})`,
+          }));
+          const selected = await runSimplePicker(ctx, {
+            title: `Select agent for ${ROLE_LABELS[role]} (${role})`,
+            items: agentItems,
+          });
           if (selected) {
-            mapping[role] = selected.split(" ")[0];
+            mapping[role] = selected;
           } else {
             mapping[role] = DEFAULT_AGENTS[role];
           }
           i++;
-        } else if (choice?.startsWith("Use default:")) {
+        } else if (choice === "default") {
           mapping[role] = DEFAULT_AGENTS[role];
           i++;
-        } else if (choice === "← Back") {
+        } else if (choice === "back") {
           i = Math.max(0, i - 1);
-        } else if (choice === "Next →" || choice === "Finish") {
+        } else if (choice === "next" || choice === "finish") {
           mapping[role] = current;
           i++;
         } else {
@@ -687,30 +703,30 @@ export function registerFilesCommands(pi: ExtensionAPI) {
 
       let editing = true;
       while (editing) {
-        const choice = await ctx.ui.select(
-          `Project files — ${config.codePaths.length} code, ${config.inputDocuments.length} docs, ${config.testPaths.length} tests`,
-          [
-            "Edit code paths",
-            "Edit input documents",
-            "Edit test paths",
-            "Edit excluded paths",
-            "Finish",
+        const choice = await runSimplePicker(ctx, {
+          title: `Project files — ${config.codePaths.length} code, ${config.inputDocuments.length} docs, ${config.testPaths.length} tests`,
+          items: [
+            { id: "code", label: "Edit code paths" },
+            { id: "docs", label: "Edit input documents" },
+            { id: "tests", label: "Edit test paths" },
+            { id: "excluded", label: "Edit excluded paths" },
+            { id: "finish", label: "Finish" },
           ],
-        );
+        });
 
-        if (choice === "Edit code paths") {
+        if (choice === "code") {
           await editCategory(ctx, config, "codePaths", discovered.codeFolders.map((f) => f.path));
-        } else if (choice === "Edit input documents") {
+        } else if (choice === "docs") {
           await editCategory(ctx, config, "inputDocuments", [
             ...discovered.documentFolders.map((f) => f.path),
             ...discovered.documentFiles,
           ]);
-        } else if (choice === "Edit test paths") {
+        } else if (choice === "tests") {
           await editCategory(ctx, config, "testPaths", [
             ...discovered.testFolders.map((f) => f.path),
             ...discovered.testFiles,
           ]);
-        } else if (choice === "Edit excluded paths") {
+        } else if (choice === "excluded") {
           await editExcludedPaths(ctx, config);
         } else {
           editing = false;
@@ -918,41 +934,40 @@ async function browsePath(
         return a.name.localeCompare(b.name);
       });
 
-    const options: string[] = [];
+    const pickerItems: SimplePickerItem[] = [];
     if (relativeDir && mode !== "file") {
-      options.push(`📁 Select this folder (${relativeDir}/)`);
+      pickerItems.push({ id: "select-current", label: `📁 Select this folder (${relativeDir}/)` });
     }
     for (const entry of entries) {
       if (isFolderLike(currentDir, entry)) {
-        options.push(`📂 ${entry.name}/`);
+        pickerItems.push({ id: `dir:${entry.name}`, label: `📂 ${entry.name}/` });
       } else if (mode !== "folder") {
-        options.push(`📄 ${entry.name}`);
+        pickerItems.push({ id: `file:${entry.name}`, label: `📄 ${entry.name}` });
       }
     }
     if (currentDir !== root) {
-      options.push("⬆️ ../");
+      pickerItems.push({ id: "up", label: "⬆️ ../" });
     }
-    options.push("❌ Cancel");
+    pickerItems.push({ id: "cancel", label: "❌ Cancel" });
 
     const title = relativeDir ? `Browsing ${relativeDir}/` : "Browsing project root";
-    const choice = await ctx.ui.select(title, options);
+    const choice = await runSimplePicker(ctx, { title, items: pickerItems });
 
-    if (choice === "❌ Cancel") return null;
-    if (choice === "⬆️ ../") {
+    if (choice === "cancel") return null;
+    if (choice === undefined) continue; // esc redraws the browser, same as before
+    if (choice === "up") {
       currentDir = path.dirname(currentDir);
       continue;
     }
-    if (choice?.startsWith("📁 Select this folder")) {
+    if (choice === "select-current") {
       return `${relativeDir}/`;
     }
-    if (choice?.startsWith("📂 ")) {
-      const name = choice.replace("📂 ", "").replace(/\/$/, "");
-      currentDir = path.join(currentDir, name);
+    if (choice.startsWith("dir:")) {
+      currentDir = path.join(currentDir, choice.slice(4));
       continue;
     }
-
-    if (choice?.startsWith("📄 ")) {
-      const name = choice.replace("📄 ", "");
+    if (choice.startsWith("file:")) {
+      const name = choice.slice(5);
       return relativeDir ? `${relativeDir}/${name}` : name;
     }
   }
@@ -1194,15 +1209,15 @@ async function pickTruthDocument(
   reads: string[],
   candidates: string[],
 ): Promise<string | undefined> {
-  const options: string[] = [];
-  if (current) options.push("(clear truth document)");
+  const pickerItems: SimplePickerItem[] = [];
+  if (current) pickerItems.push({ id: "__clear__", label: "(clear truth document)" });
   for (const c of candidates) {
     if (c === current || reads.includes(c)) continue;
-    options.push(c);
+    pickerItems.push({ id: c, label: c });
   }
-  const choice = await ctx.ui.select("Select truth document", options);
-  if (!choice) return current;
-  if (choice === "(clear truth document)") return undefined;
+  const choice = await runSimplePicker(ctx, { title: "Select truth document", items: pickerItems });
+  if (choice === undefined) return current;
+  if (choice === "__clear__") return undefined;
   return choice;
 }
 
@@ -1455,7 +1470,8 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
       let changeNote = "";
       if (stale) {
         if (drivers) {
-          const proceed = await ctx.ui.confirm(
+          const proceed = await runSimpleConfirm(
+            ctx,
             "Architecture inputs changed",
             "Input documents are newer than the generated architecture. Re-run the full architecture factory?",
           );
@@ -1560,13 +1576,16 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
       if (report) {
         stackHints = [...report.techStack, ...report.constraints];
       } else {
-        const projectType = await ctx.ui.select("Project type?", [
-          "automation / scripts",
-          "web application",
-          "cli tool",
-          "library / package",
-          "other",
-        ]);
+        const projectType = await runSimplePicker(ctx, {
+          title: "Project type?",
+          items: [
+            { id: "automation / scripts", label: "automation / scripts" },
+            { id: "web application", label: "web application" },
+            { id: "cli tool", label: "cli tool" },
+            { id: "library / package", label: "library / package" },
+            { id: "other", label: "other" },
+          ],
+        });
         const language = await ctx.ui.input("Primary language? (e.g., python, typescript, apps script)");
         const framework = await ctx.ui.input(
           "Framework or platform? (e.g., fastapi, react, google sheets) — optional, press Enter to skip",
@@ -1592,16 +1611,19 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
       const onlyGeneric = matched.every((r) => r.id === "generic");
       if (onlyGeneric) {
         const hintText = stackHints.length > 0 ? ` (${stackHints.join(", ")})` : "";
-        const choice = await ctx.ui.select(`No technology resource matches this project${hintText}. What do you want to do?`, [
-          "Fetch from official docs (recommended)",
-          "Use generic resource",
-          "Cancel",
-        ]);
-        if (!choice || choice === "Cancel") {
+        const choice = await runSimplePicker(ctx, {
+          title: `No technology resource matches this project${hintText}. What do you want to do?`,
+          items: [
+            { id: "fetch", label: "Fetch from official docs (recommended)" },
+            { id: "generic", label: "Use generic resource" },
+            { id: "cancel", label: "Cancel" },
+          ],
+        });
+        if (!choice || choice === "cancel") {
           ctx.ui.notify("Agent generation cancelled.", "info");
           return;
         }
-        if (choice === "Fetch from official docs (recommended)") {
+        if (choice === "fetch") {
           let techHint = stackHints.join(" ").trim();
           if (!techHint) {
             const answer = await ctx.ui.input(
@@ -1644,7 +1666,8 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
       const plans = planAgentGeneration(ctx.cwd, targets, matched, report);
       const resourceList = matched.map((r) => r.name).join(", ");
       const roleList = plans.map((p) => `  - ${p.role} → ${p.agentName}`).join("\n");
-      const proceed = await ctx.ui.confirm(
+      const proceed = await runSimpleConfirm(
+        ctx,
         "Generate sub-agents",
         `Technology resources: ${resourceList}\n\nAgents to generate and map in agents.json:\n${roleList}\n\nExisting custom agents and mappings are not touched. Proceed?`,
       );
