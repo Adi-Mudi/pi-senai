@@ -285,3 +285,27 @@ describe("PICKER_ROLES", () => {
     }
   });
 });
+
+describe("coverage audit gaps", () => {
+  function agent(name: string, description = ""): DiscoveredAgent {
+    return { name, description, source: "project" };
+  }
+
+  it("suggests scout-4 via the spec keyword in the description", () => {
+    const agents = [agent("gas-spec-checker", "Spec compliance scout")];
+    assert.strictEqual(suggestAgentForRole("scout-4", agents), "gas-spec-checker");
+  });
+
+  it("reviewer-security falls through to the keyword pass instead of the architecture reviewer preference", () => {
+    const agents = [
+      agent("gas-security-reviewer", "Security reviewer"),
+      agent("proj-arch-reviewer-correctness", "reviews correctness against architecture rules"),
+    ];
+    // reviewer-correctness gets the preference: the generated architecture
+    // reviewer wins even though a matching agent appears earlier in the list.
+    assert.strictEqual(suggestAgentForRole("reviewer-correctness", agents), "proj-arch-reviewer-correctness");
+    // reviewer-security is not in the preference branch, so the keyword pass
+    // returns the first keyword match instead.
+    assert.strictEqual(suggestAgentForRole("reviewer-security", agents), "gas-security-reviewer");
+  });
+});

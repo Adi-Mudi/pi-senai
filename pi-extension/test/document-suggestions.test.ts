@@ -262,3 +262,20 @@ describe("document-suggestions", () => {
     }
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("filters out a typed architect-input candidate whose file no longer exists on disk", () => {
+    const tmpDir = makeTmpDir();
+    // The document is classified but never written to disk; the final
+    // existsSync filter in collectCandidates must drop it.
+    saveArchitectInputsConfig(tmpDir, {
+      version: 1,
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    });
+
+    assert.deepStrictEqual(suggestTruthDocuments(tmpDir), []);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

@@ -787,3 +787,42 @@ describe("architect-tools", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("merge tool silently drops map files missing a string document or an array functionalRequirements", async () => {
+    const tmpDir = makeTmpDir("arch-tools-drop-shape-");
+    const mapDir = getArchitectMapDir(tmpDir);
+    fs.mkdirSync(mapDir, { recursive: true });
+
+    const valid = {
+      document: "docs/PRD.md",
+      documentType: "prd",
+      functionalRequirements: [{ id: "FR-1", description: "Do X" }],
+      qualityAttributes: [],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    fs.writeFileSync(path.join(mapDir, "docs-PRD.md.json"), JSON.stringify(valid), "utf8");
+    fs.writeFileSync(
+      path.join(mapDir, "docs-NODOC.md.json"),
+      JSON.stringify({ ...valid, document: 42, functionalRequirements: [{ id: "FR-DROP", description: "No doc" }] }),
+      "utf8",
+    );
+    fs.writeFileSync(
+      path.join(mapDir, "docs-BADFR.md.json"),
+      JSON.stringify({ ...valid, document: "docs/BADFR.md", functionalRequirements: "not-an-array" }),
+      "utf8",
+    );
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    const result = await tools.get("senai_merge_architect_drivers").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    assert.strictEqual(result.details.functionalRequirements, 1, "only the well-formed map output is merged");
+    assert.ok(fs.existsSync(path.join(mapDir, "docs-NODOC.md.json")), "dropped files are not deleted");
+    assert.ok(fs.existsSync(path.join(mapDir, "docs-BADFR.md.json")), "dropped files are not deleted");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

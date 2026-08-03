@@ -718,3 +718,92 @@ describe("runListEditor Option A sections", () => {
     await promise;
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("head-truncates the detail continuation when the path exceeds 2*width-3", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    // text = " 📄 " + path, so the path must push text.length past 2*40-3 = 77.
+    const longPath = `docs/${"a".repeat(80)}`;
+    const promise = runListEditor(ctx, {
+      title: "Test",
+      items: [{ id: "s1", kind: "suggestion", label: longPath, value: longPath }],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    comp.handleInput(DOWN); // focus the content row
+    const lines = comp.render(40);
+    const continuation = lines.find((l) => l.startsWith("  …"));
+    assert.ok(
+      continuation,
+      `expected a head-truncated detail continuation, got:\n${lines.join("\n")}`,
+    );
+    assert.ok(continuation.length <= 40, `continuation fits width 40, got: ${continuation}`);
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("fallback returns back when select returns a label not in labelToId", async () => {
+    const ctx = makeFallbackCtx(["Not an offered label"], []);
+    const result = await runListEditor(ctx, {
+      title: "Test",
+      items: [{ id: "s1", kind: "suggestion", label: "⬜ Suggest: a", value: "a" }],
+    });
+    assert.deepStrictEqual(result, { kind: "back" });
+  });
+
+  it("fallback clamps the page back when adding a suggestion shrinks the list", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx(
+      ["Next page →", "Next page →", "⬜ Suggest: path4", "Back"],
+      [],
+      captured,
+    );
+    const items = Array.from({ length: 5 }, (_, i) => ({
+      id: `s${i}`,
+      kind: "suggestion" as const,
+      label: `⬜ Suggest: path${i}`,
+      value: `path${i}`,
+    }));
+    const result = await runListEditor(ctx, { title: "Test", items, pageSize: 2 });
+
+    // Page 2 showed only path4 before it was added.
+    assert.deepStrictEqual(
+      captured[2].filter((l) => l.startsWith("⬜")),
+      ["⬜ Suggest: path4"],
+    );
+    // After adding path4, 4 suggestions remain on 2 pages: page clamps from 2 to 1.
+    const afterAdd = captured[3].filter((l) => l.startsWith("⬜"));
+    assert.deepStrictEqual(afterAdd, ["⬜ Suggest: path2", "⬜ Suggest: path3"]);
+    assert.deepStrictEqual(result, { kind: "done", paths: ["path4"] });
+  });
+
+  it("uses the fallback when custom is a native function", async () => {
+    let customCalled = false;
+    const custom = async () => {
+      customCalled = true;
+      return { kind: "back" as const };
+    };
+    custom.toString = () => "function () { [native code] }";
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: {
+        select: async () => "Back",
+        input: async () => "",
+        custom,
+      } as unknown as ExtensionUIContext,
+    } as unknown as ExtensionContext;
+    const result = await runListEditor(ctx, { title: "Test", items: [] });
+    assert.strictEqual(customCalled, false, "native custom is never called");
+    assert.deepStrictEqual(result, { kind: "done", paths: [] });
+  });
+
+  it("truncateMiddle falls through to the tail slice at base.length + 1 === maxWidth", () => {
+    // base = "abcdef.md" (9), maxWidth = 10: base.length + 1 is not < maxWidth.
+    const result = truncateMiddle("dir/abcdef.md", 10);
+    assert.strictEqual(result, "…abcdef.md");
+    assert.strictEqual(result.length, 10);
+  });
+});

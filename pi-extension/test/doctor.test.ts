@@ -10,7 +10,7 @@ import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
 import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest } from "../src/architect.js";
 import { getProjectSlug } from "../src/agent-generator.js";
-import { createEmptyDrivers } from "../src/driver-extractor.js";
+import { createEmptyDrivers, saveDrivers } from "../src/driver-extractor.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -3107,6 +3107,228 @@ describe("doctor assignment validation edge cases", () => {
       !section.items.some((i) => i.status === "error"),
       "type 'code' overlaps the code-search mandate — no error",
     );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("coverage audit gaps", () => {
+  function findGapSection(report: ReturnType<typeof runSenaiDiagnostic>, title: string) {
+    const section = report.sections.find((s) => s.title === title);
+    assert.ok(section, `section "${title}" should exist`);
+    return section;
+  }
+
+  it("environment check is ok when running inside Zellij", () => {
+    const tmpDir = makeTmpDir("doctor-env-zellij-");
+    const previousZellij = process.env.ZELLIJ;
+    const previousTmux = process.env.TMUX;
+    process.env.ZELLIJ = "1";
+    delete process.env.TMUX; // the Zellij branch only runs when TMUX is unset
+    try {
+      const report = runSenaiDiagnostic(tmpDir);
+      const section = findGapSection(report, "Runtime environment");
+      assert.strictEqual(section.items.length, 1);
+      assert.strictEqual(section.items[0].status, "ok");
+      assert.ok(section.items[0].message.includes("Zellij"));
+    } finally {
+      if (previousZellij === undefined) {
+        delete process.env.ZELLIJ;
+      } else {
+        process.env.ZELLIJ = previousZellij;
+      }
+      if (previousTmux === undefined) {
+        delete process.env.TMUX;
+      } else {
+        process.env.TMUX = previousTmux;
+      }
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("environment check warns when running inside neither tmux nor Zellij", () => {
+    const tmpDir = makeTmpDir("doctor-env-none-");
+    const previousZellij = process.env.ZELLIJ;
+    const previousTmux = process.env.TMUX;
+    delete process.env.ZELLIJ;
+    delete process.env.TMUX;
+    try {
+      const report = runSenaiDiagnostic(tmpDir);
+      const section = findGapSection(report, "Runtime environment");
+      assert.strictEqual(section.items.length, 1);
+      assert.strictEqual(section.items[0].status, "warning");
+      assert.ok(section.items[0].message.includes("Not running inside tmux or Zellij."));
+      assert.ok(section.items[0].details?.some((d) => d.includes("terminal multiplexer")));
+    } finally {
+      if (previousZellij === undefined) {
+        delete process.env.ZELLIJ;
+      } else {
+        process.env.ZELLIJ = previousZellij;
+      }
+      if (previousTmux === undefined) {
+        delete process.env.TMUX;
+      } else {
+        process.env.TMUX = previousTmux;
+      }
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("capability check reports a single ok item when every role skips verification", () => {
+    const tmpDir = makeTmpDir("doctor-cap-all-green-");
+    // No agents configured: every role resolves to a default/built-in mapping,
+    // which the capability check skips, so the all-green ok item is emitted.
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Agent-role capability fit");
+    assert.strictEqual(section.items.length, 1);
+    assert.strictEqual(section.items[0].status, "ok");
+    assert.ok(section.items[0].message.includes("All mapped agents have suitable capabilities for their roles."));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("file scope check errors when a configured path does not exist on disk", () => {
+    const tmpDir = makeTmpDir("doctor-scope-missing-");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: ["docs/missing-prd.md"],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    writeFile(tmpDir, "src/index.ts");
+    // docs/missing-prd.md is intentionally not created.
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Project file scope");
+    const item = section.items.find((i) => i.message.includes("Input documents: 1 configured, 1 not found"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.deepStrictEqual(item.details, ["docs/missing-prd.md"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("agents_files check is ok when a comparison document exists", () => {
+    const tmpDir = makeTmpDir("doctor-agents-files-reads-ok-");
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: { "scout-3": { reads: ["docs/comparison.md"] } } });
+    writeFile(tmpDir, "docs/comparison.md", "# notes");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Agent document assignments");
+    const item = section.items.find((i) => i.message.includes("comparison document: docs/comparison.md"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "ok");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup warns when the architecture library is empty or missing", () => {
+    const tmpDir = makeTmpDir("doctor-arch-no-library-");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Architecture setup");
+    const item = section.items.find((i) => i.message.includes("Architecture library is empty or missing."));
+    assert.ok(item);
+    assert.strictEqual(item.status, "warning");
+    assert.ok(item.details?.some((d) => d.includes(".pi/architecture-library/")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup reports info when no architect inputs are configured", () => {
+    const tmpDir = makeTmpDir("doctor-arch-no-inputs-");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Architecture setup");
+    const item = section.items.find((i) => i.message.includes("No architect inputs configured."));
+    assert.ok(item);
+    assert.strictEqual(item.status, "info");
+    assert.ok(item.message.includes("/senai-configure-architect-inputs"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup reports ok for a valid architectural drivers file", () => {
+    const tmpDir = makeTmpDir("doctor-arch-drivers-ok-");
+    saveDrivers(tmpDir, createEmptyDrivers());
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Architecture setup");
+    const item = section.items.find((i) =>
+      i.message.includes("Architectural drivers file exists at .pi/architect/architectural-drivers.json."),
+    );
+    assert.ok(item);
+    assert.strictEqual(item.status, "ok");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("architecture setup errors on a misnamed generated skill", () => {
+    const tmpDir = makeTmpDir("doctor-arch-misnamed-skill-");
+    const slug = "gap-project";
+    const arch = "modular-monolith";
+    saveArchitectProfile(tmpDir, {
+      projectName: "Gap Project",
+      projectSlug: slug,
+      selectedArchitecture: arch,
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    // Starts with the expected prefix but is not one of the four stage skills.
+    writeFile(tmpDir, path.join(".pi", "skills", `${slug}-${arch}-wrongstage`, "SKILL.md"), "# skill");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Architecture setup");
+    const item = section.items.find((i) => i.message.includes("misnamed architecture skills found"));
+    assert.ok(item);
+    assert.strictEqual(item.status, "error");
+    assert.ok(item.details?.some((d) => d.includes(path.join(".pi", "skills", `${slug}-${arch}-wrongstage`))));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check flags a technology resource with an empty body", () => {
+    const tmpDir = makeTmpDir("doctor-res-empty-body-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "technologies", "empty-body.md"),
+      "---\nid: empty-body\nkeywords:\n  - empty-body\n---\n",
+    );
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Technology resources");
+    const warning = section.items.find((i) => i.status === "warning" && i.message.includes("empty-body.md"));
+    assert.ok(warning);
+    assert.ok(warning.details?.some((d) => d.includes("body is empty")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("skill reference check reports empty SKILL.md body and unparsable frontmatter problems", () => {
+    const tmpDir = makeTmpDir("doctor-skill-invalid-");
+    writeAgent(tmpDir, "gap-skill-agent", {
+      name: "gap-skill-agent",
+      description: "Agent referencing skills",
+      tools: ["read", "write"],
+      skills: ["empty-skill", "broken-skill"],
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { planner: "gap-skill-agent" } });
+    // Valid frontmatter but no body.
+    writeFile(
+      tmpDir,
+      path.join(".pi", "skills", "empty-skill", "SKILL.md"),
+      "---\nname: empty-skill\ndescription: Empty body skill\n---\n",
+    );
+    // A directory named SKILL.md passes existsSync but cannot be read as a file.
+    fs.mkdirSync(path.join(tmpDir, ".pi", "skills", "broken-skill", "SKILL.md"), { recursive: true });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findGapSection(report, "Agent skill references");
+
+    const emptySkill = section.items.find(
+      (i) => i.status === "warning" && i.message.includes('references invalid skill "empty-skill"'),
+    );
+    assert.ok(emptySkill);
+    assert.ok(emptySkill.details?.some((d) => d.includes("SKILL.md body is empty")));
+
+    const brokenSkill = section.items.find(
+      (i) => i.status === "warning" && i.message.includes('references invalid skill "broken-skill"'),
+    );
+    assert.ok(brokenSkill);
+    assert.ok(brokenSkill.details?.some((d) => d.includes("SKILL.md could not be parsed")));
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

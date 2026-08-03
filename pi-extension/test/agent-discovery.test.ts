@@ -377,3 +377,34 @@ describe("agent-discovery", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("parseAgentFileFull ignores array fields that are neither string nor array", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "numeric-tools.md");
+    fs.writeFileSync(
+      filePath,
+      "---\nname: numeric-tools\ndescription: Numeric tools field\ntools: 5\n---\n",
+      "utf8",
+    );
+
+    const parsed = parseAgentFileFull(filePath);
+    assert.ok(parsed);
+    assert.strictEqual(parsed.tools, undefined, "a numeric tools value must not be parsed into an array");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFileFull returns undefined for a nonexistent or unreadable file", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+
+    assert.strictEqual(parseAgentFileFull(path.join(tmpDir, "does-not-exist.md")), undefined);
+
+    // A directory named *.md cannot be read as a file; the catch must return undefined.
+    const dirPath = path.join(tmpDir, "unreadable.md");
+    fs.mkdirSync(dirPath, { recursive: true });
+    assert.strictEqual(parseAgentFileFull(dirPath), undefined);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

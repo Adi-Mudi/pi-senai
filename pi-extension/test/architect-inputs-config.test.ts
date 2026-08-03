@@ -158,3 +158,14 @@ describe("architect-inputs-config", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("validateArchitectInputsConfig rejects a non-null primitive document entry", () => {
+    const config = {
+      version: 1,
+      documents: ["doc.md"],
+      additionalConstraints: [],
+    } as unknown as ArchitectInputsConfig;
+    assert.throws(() => validateArchitectInputsConfig(config), /Each document entry must be an object/);
+  });
+});

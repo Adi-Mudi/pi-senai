@@ -287,3 +287,36 @@ describe("state", () => {
     );
   });
 });
+
+describe("coverage audit gaps", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-test-"));
+  });
+
+  it("migrateState carries over legacy timestamps and stage results, and resets an unknown stage", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        version: 0,
+        mission: "legacy",
+        runId: "legacy-run",
+        currentStage: "bogus-stage",
+        startedAt: "2025-01-01T00:00:00Z",
+        updatedAt: "2025-06-01T00:00:00Z",
+        stageResults: { planning: "plan.md" },
+      }),
+    );
+
+    const loaded = loadState(tmpDir);
+    assert.strictEqual(loaded.version, 1);
+    // A legacy stage string that is not in STAGES falls back to "none".
+    assert.strictEqual(loaded.currentStage, "none");
+    assert.strictEqual(loaded.startedAt, "2025-01-01T00:00:00Z");
+    assert.strictEqual(loaded.updatedAt, "2025-06-01T00:00:00Z");
+    assert.deepStrictEqual(loaded.stageResults, { planning: "plan.md" });
+  });
+});

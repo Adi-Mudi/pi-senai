@@ -254,3 +254,60 @@ describe("runSimpleConfirm", () => {
     assert.strictEqual(customCalled, false, "custom picker not used outside TUI");
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("fallback returns undefined when select returns a label not in the offered list", async () => {
+    const ctx = makeFallbackCtx(["Not an offered label"]);
+    const result = await runSimplePicker(ctx, { title: "Pick", items: ITEMS });
+    assert.strictEqual(result, undefined, "unknown label maps to no item id");
+  });
+
+  it("uses the fallback when custom is a native function", async () => {
+    let customCalled = false;
+    const custom = async () => {
+      customCalled = true;
+      return undefined;
+    };
+    custom.toString = () => "function () { [native code] }";
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: {
+        select: async () => "Option B",
+        custom,
+      } as unknown as ExtensionUIContext,
+    } as unknown as ExtensionContext;
+    const result = await runSimplePicker(ctx, { title: "Pick", items: ITEMS });
+    assert.strictEqual(result, "b", "fallback select path used");
+    assert.strictEqual(customCalled, false, "native custom is never called");
+  });
+
+  it("custom picker wraps DOWN from the last item to the first", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runSimplePicker(ctx, { title: "Pick", items: ITEMS, initialSelectedId: "c" });
+    const comp = getComponent() as { handleInput: (data: string) => void };
+    comp.handleInput(DOWN);
+    comp.handleInput(ENTER);
+    const result = await promise;
+    assert.strictEqual(result, "a", "DOWN from last wraps to index 0");
+  });
+
+  it("handles an empty items array without crashing in fallback and custom modes", async () => {
+    const captured: string[][] = [];
+    const fbCtx = makeFallbackCtx([undefined], captured);
+    const fbResult = await runSimplePicker(fbCtx, { title: "Pick", items: [] });
+    assert.deepStrictEqual(captured[0], [], "fallback select offered no labels");
+    assert.strictEqual(fbResult, undefined);
+
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runSimplePicker(ctx, { title: "Pick", items: [] });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    assert.ok(comp.render(80).length > 0, "custom picker renders with no items");
+    comp.handleInput(ENTER);
+    const result = await promise;
+    assert.strictEqual(result, undefined, "enter on empty list resolves undefined");
+  });
+});

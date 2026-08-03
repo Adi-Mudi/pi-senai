@@ -197,3 +197,22 @@ describe("agents-files-config", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("migrateAgentsFilesConfig returns a version >= 2 config unchanged (identity)", () => {
+    const config: AgentsFilesConfig = {
+      version: 2,
+      documents: { planner: { primary: "Doc/plan.md", reads: ["Doc/a.md"] } },
+    };
+    const migrated = migrateAgentsFilesConfig(config);
+    assert.strictEqual(migrated, config, "same object reference returned");
+  });
+
+  it("loadAgentsFilesConfig wraps the error when agents_files.json path is a directory", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"), { recursive: true });
+    // EISDIR is not ENOENT, so the raw error must be wrapped, not returned as null.
+    assert.throws(() => loadAgentsFilesConfig(tmpDir), /Invalid agents_files config/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

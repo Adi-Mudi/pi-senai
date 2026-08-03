@@ -8,6 +8,7 @@ import {
   discoverTechnologyResources,
   getProjectSlug,
   matchTechnologies,
+  parseKeywords,
   planAgentGeneration,
   writeGeneratedAgents,
 } from "../src/agent-generator.js";
@@ -412,5 +413,14 @@ describe("agent-generator", () => {
     assert.strictEqual(loadGeneratedManifest(tmpDir), null);
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("coverage audit gaps", () => {
+  it("parseKeywords returns an empty array for missing or malformed keywords frontmatter", () => {
+    assert.deepStrictEqual(parseKeywords(undefined), []);
+    assert.deepStrictEqual(parseKeywords(42), []);
+    assert.deepStrictEqual(parseKeywords({ list: ["python"] }), []);
+    assert.deepStrictEqual(parseKeywords(null), []);
   });
 });

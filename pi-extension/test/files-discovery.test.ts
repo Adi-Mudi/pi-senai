@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { discoverProjectFiles, formatSuggestion, isExcluded, safeReadDir } from "../src/files-discovery.js";
+import { discoverProjectFiles, formatSuggestion, isExcluded, looksLikeTestPath, safeReadDir } from "../src/files-discovery.js";
 
 describe("files-discovery", () => {
   it("discovers standard code and document folders", () => {
@@ -377,6 +377,61 @@ describe("files-discovery", () => {
       result.codeFolders.map((f) => f.path),
       ["afold/", "zfold/"],
     );
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("coverage audit gaps", () => {
+  it("looksLikeTestPath matches test segments and rejects mere substrings", () => {
+    assert.strictEqual(looksLikeTestPath("TESTING/"), true);
+    assert.strictEqual(looksLikeTestPath("foo.specs"), true);
+    assert.strictEqual(looksLikeTestPath("src/test.ts"), true);
+    assert.strictEqual(looksLikeTestPath("unit/__tests__/a.ts"), true);
+    assert.strictEqual(looksLikeTestPath("latest"), false);
+    assert.strictEqual(looksLikeTestPath("contest.md"), false);
+    assert.strictEqual(looksLikeTestPath("protest"), false);
+    assert.strictEqual(looksLikeTestPath("testutils.ts"), false);
+    assert.strictEqual(looksLikeTestPath("special.ts"), false);
+  });
+
+  it("classifies an extensionless CHANGELOG file at root into documentFiles", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    fs.writeFileSync(path.join(tmpDir, "CHANGELOG"), "# changes", "utf8");
+
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.ok(result.documentFiles.includes("CHANGELOG"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("excludes non-document files inside a document folder from documentFiles", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "guide.md"), "", "utf8");
+    fs.writeFileSync(path.join(tmpDir, "docs", "image.png"), "", "utf8");
+
+    const result = discoverProjectFiles(tmpDir, []);
+    assert.ok(result.documentFiles.includes("docs/guide.md"));
+    assert.ok(!result.documentFiles.includes("docs/image.png"));
+    assert.deepStrictEqual(result.codeFiles, []);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("honors excludedPaths while content-classifying a custom-named folder", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "discover-"));
+    fs.mkdirSync(path.join(tmpDir, "pack", "vendor"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "pack", "vendor", "a.ts"), "", "utf8");
+
+    // Control: without the exclusion, the nested .ts file makes pack/ a code folder.
+    const withAll = discoverProjectFiles(tmpDir, []);
+    assert.ok(withAll.codeFolders.some((f) => f.path === "pack/"));
+
+    // With pack/vendor/ excluded, no child files remain to classify pack/ by.
+    const result = discoverProjectFiles(tmpDir, ["pack/vendor/"]);
+    assert.ok(!result.codeFolders.some((f) => f.path === "pack/"));
+    assert.ok(!result.codeFiles.some((f) => f.includes("a.ts")));
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });

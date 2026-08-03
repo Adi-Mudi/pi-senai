@@ -295,7 +295,12 @@ describe("runRolePicker custom TUI", () => {
     const comp = getComponent() as { render: (width: number) => string[] };
     const lines = comp.render(80);
     assert.ok(lines.some((line) => line.includes("Pick one role per line.")));
-    assert.ok(!lines.some((line) => line.includes("Tip: scouts and reviewers")));
+    assert.ok(
+      !lines.some((line) =>
+        line.includes("Only roles that read project documents are shown; other roles use stage artifacts."),
+      ),
+      "default subtitle is replaced by the custom one",
+    );
     getDone()({ kind: "back" });
     await promise;
   });
@@ -575,6 +580,85 @@ describe("role picker needs labels", () => {
     assert.ok(row, "reviewer row exists");
     assert.ok(row.includes("(needs: RTM / traceability document)"), "needs text present");
     assert.ok(row.includes("warning:[recommended]"), "guidance tag still colored");
+    doneFn({ kind: "back" });
+    await promise;
+  });
+});
+
+describe("coverage audit gaps", () => {
+  it("renders the default subtitle when the subtitle option is omitted", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "Test", items: ITEMS });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const lines = comp.render(80);
+    assert.ok(
+      lines.some((line) =>
+        line.includes("Only roles that read project documents are shown; other roles use stage artifacts."),
+      ),
+      "default subtitle shown",
+    );
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("fallback treats a label not in idMap as finish", async () => {
+    const ctx = makeFallbackCtx(["Not a real label"]);
+    const result = await runRolePicker(ctx, { title: "Test", items: ITEMS });
+    assert.deepStrictEqual(result, { kind: "finish" });
+  });
+
+  it("uses the fallback when custom is a native function", async () => {
+    let customCalled = false;
+    const custom = async () => {
+      customCalled = true;
+      return undefined;
+    };
+    custom.toString = () => "function () { [native code] }";
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: {
+        select: async () => "⬜ Finish",
+        custom,
+      } as unknown as ExtensionUIContext,
+    } as unknown as ExtensionContext;
+    const result = await runRolePicker(ctx, { title: "Test", items: ITEMS });
+    assert.deepStrictEqual(result, { kind: "finish" }, "fallback select path used");
+    assert.strictEqual(customCalled, false, "native custom is never called");
+  });
+
+  it("renders the focused Finish row without the focus accent", async () => {
+    const recordingTheme = {
+      fg: (color: string, text: string) => `${color}:${text}`,
+      bg: (_color: string, text: string) => text,
+      bold: (text: string) => text,
+      dim: (text: string) => text,
+    } as unknown as import("@mariozechner/pi-coding-agent").Theme;
+
+    let component:
+      | { render: (width: number) => string[]; handleInput: (data: string) => void }
+      | undefined;
+    let doneFn: (result: unknown) => void = () => {};
+    const custom = async (factory: any): Promise<any> =>
+      new Promise((resolve) => {
+        doneFn = resolve;
+        component = factory({ requestRender: () => {} }, recordingTheme, {}, resolve);
+      });
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: { select: async () => "", custom },
+    } as unknown as ExtensionContext;
+
+    const promise = runRolePicker(ctx, { title: "Test", items: ITEMS });
+    // Two roles plus Finish = three rows; move focus onto Finish.
+    component!.handleInput(DOWN);
+    component!.handleInput(DOWN);
+    const lines = component!.render(80);
+    const focused = lines.find((l) => l.startsWith("→"));
+    assert.ok(focused, "a focused row exists");
+    assert.ok(focused.includes("text:Finish"), "focused Finish row uses the plain text color");
+    assert.ok(!focused.includes("accent:"), "focused Finish row gets no accent");
     doneFn({ kind: "back" });
     await promise;
   });

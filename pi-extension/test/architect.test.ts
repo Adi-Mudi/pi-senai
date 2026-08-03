@@ -1320,3 +1320,145 @@ describe("architect", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("coverage audit gaps", () => {
+  function makeGapProfile(overrides?: Partial<ArchitectProfile>): ArchitectProfile {
+    return {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+      ...overrides,
+    };
+  }
+
+  function makeGapReport(overrides?: Partial<ArchitectReport>): ArchitectReport {
+    return {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+      ...overrides,
+    };
+  }
+
+  it("discoverArchitectureLibrary accepts a JSON file holding a single object", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-lib-single-"));
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "single.json"),
+      JSON.stringify({ id: "solo-arch", name: "Solo Arch", description: "One object, not an array." }),
+      "utf8",
+    );
+
+    const entries = discoverArchitectureLibrary(tmpDir);
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].id, "solo-arch");
+    assert.strictEqual(entries[0].name, "Solo Arch");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discoverArchitectureLibrary skips name-less JSON items, uses domain when platform is absent, and ignores other files", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-lib-json-edge-"));
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "library.json"),
+      JSON.stringify([
+        { id: "no-name-here" },
+        { name: "Domain Only Arch", domain: ["embedded", "plc"] },
+      ]),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(libDir, "notes.txt"), "name: Not An Entry", "utf8");
+
+    const entries = discoverArchitectureLibrary(tmpDir);
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].name, "Domain Only Arch");
+    assert.strictEqual(entries[0].id, "domain-only-arch");
+    assert.deepStrictEqual(entries[0].domain, ["embedded", "plc"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs draws system-context edges for external interfaces only", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-docs-ext-"));
+    const report = makeGapReport({
+      interfaces: [
+        { name: "Payment Gateway", type: "external", description: "Card payments" },
+        { name: "Internal Bus", type: "internal", description: "In-process events" },
+      ],
+    });
+
+    generateArchitectureDocs(tmpDir, makeGapProfile(), report);
+
+    const content = fs.readFileSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), "utf8");
+    assert.ok(content.includes("id_payment-gateway[Payment Gateway]"));
+    assert.ok(content.includes("System --> id_payment-gateway"));
+    assert.ok(!content.includes("id_internal-bus"), "internal interfaces are not external context nodes");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs chains sequence edges and caps participants at six", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-docs-seq-"));
+    const components = Array.from({ length: 8 }, (_, i) => ({
+      name: `Comp ${i + 1}`,
+      responsibility: "Part of the chain",
+      dependencies: [],
+    }));
+    const report = makeGapReport({ components });
+
+    generateArchitectureDocs(tmpDir, makeGapProfile(), report);
+
+    const content = fs.readFileSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), "utf8");
+    assert.ok(content.includes("U->>id_comp-1: initiates request"));
+    assert.ok(content.includes("id_comp-1->>id_comp-2: processes"));
+    assert.ok(content.includes("id_comp-5->>id_comp-6: processes"));
+    assert.ok(content.includes("id_comp-6-->>U: returns result"));
+    assert.ok(!content.includes("participant id_comp-7"), "participants are capped by slice(0, 6)");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateAgentFiles includes the additional constraints block when configured", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-agent-constraints-"));
+    const profile = makeGapProfile({ additionalConstraints: ["Must run offline", "No paid services"] });
+    const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
+      name: "Modular Monolith",
+      filePath: "",
+      domain: [],
+      teamSize: "",
+      complexity: "",
+      bestForDrivers: [],
+      notForDrivers: [],
+      content: "",
+    };
+
+    generateAgentFiles(tmpDir, profile, entry);
+
+    const content = fs.readFileSync(
+      path.join(tmpDir, ".pi", "agents", "test-project-modular-monolith-planner.md"),
+      "utf8",
+    );
+    assert.ok(content.includes("## Additional constraints"));
+    assert.ok(content.includes("- Must run offline"));
+    assert.ok(content.includes("- No paid services"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

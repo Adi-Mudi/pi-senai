@@ -3,7 +3,8 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { loadSkill, buildStagePrompt } from "../src/prompt.js";
+import { fileURLToPath } from "node:url";
+import { loadSkill, buildStagePrompt, resolveSkillPath } from "../src/prompt.js";
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
@@ -273,5 +274,37 @@ describe("prompt", () => {
     assert.ok(skill.includes("No detailed skill file found"));
     assert.ok(prompt.includes('<pi-senai stage="bogus">'));
     assert.ok(prompt.includes("No detailed skill file found"));
+  });
+});
+
+describe("coverage audit gaps", () => {
+  it("resolveSkillPath returns the first candidate when no candidate file exists", () => {
+    // The compiled prompt.js sits at dist/pi-extension/src, so the first
+    // candidate is <repo-root>/skills/senai-<stage>.md — same depth as this
+    // compiled test file at dist/pi-extension/test.
+    const expected = path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../..",
+      "skills",
+      "senai-no-such-stage.md",
+    );
+    const resolved = resolveSkillPath("no-such-stage");
+    assert.strictEqual(resolved, expected);
+    assert.ok(!fs.existsSync(resolved), "no candidate should exist for a made-up stage");
+  });
+
+  it("loadSkill re-throws non-ENOENT read errors", () => {
+    // A directory at the skill path makes readFileSync fail with EISDIR,
+    // which must propagate instead of producing the fallback text.
+    const skillPath = resolveSkillPath("eisdir-probe");
+    fs.mkdirSync(skillPath, { recursive: true });
+    try {
+      assert.throws(
+        () => loadSkill("eisdir-probe"),
+        (err: any) => err.code === "EISDIR",
+      );
+    } finally {
+      fs.rmSync(skillPath, { recursive: true, force: true });
+    }
   });
 });

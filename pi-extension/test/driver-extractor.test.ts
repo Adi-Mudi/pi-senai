@@ -405,3 +405,96 @@ describe("driver-extractor", () => {
     assert.strictEqual(blankSource!.source, undefined, "whitespace-only source is dropped");
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("normalizeQualityAttributeItem sets target only for a non-blank string", () => {
+    const withTarget = normalizeQualityAttributeItem({
+      id: "QA-1",
+      category: "scale",
+      description: "Scale",
+      target: "  100 users  ",
+    });
+    assert.ok(withTarget);
+    assert.strictEqual(withTarget!.target, "100 users", "target is trimmed and kept");
+
+    const blankTarget = normalizeQualityAttributeItem({
+      id: "QA-1",
+      category: "scale",
+      description: "Scale",
+      target: "   ",
+    });
+    assert.ok(blankTarget);
+    assert.strictEqual(blankTarget!.target, undefined, "whitespace-only target is omitted");
+
+    const nonStringTarget = normalizeQualityAttributeItem({
+      id: "QA-1",
+      category: "scale",
+      description: "Scale",
+      target: 42,
+    });
+    assert.ok(nonStringTarget);
+    assert.strictEqual(nonStringTarget!.target, undefined, "non-string target is omitted");
+  });
+
+  it("normalizeDriverItem returns null for non-object input", () => {
+    assert.strictEqual(normalizeDriverItem("a string"), null);
+    assert.strictEqual(normalizeDriverItem(null), null);
+    assert.strictEqual(normalizeDriverItem(42), null);
+  });
+
+  it("normalizeDrivers legacy schema skips non-object items and filters non-string uncertainties", () => {
+    const legacy = {
+      drivers: [
+        "not-an-object",
+        null,
+        42,
+        { id: "FR-1", category: "functional", description: "Do X" },
+      ],
+      uncertainties: ["U1", 42, null],
+    };
+
+    const normalized = normalizeDrivers(legacy);
+    assert.ok(normalized);
+    assert.strictEqual(normalized!.functionalRequirements.length, 1);
+    assert.strictEqual(normalized!.functionalRequirements[0].id, "FR-1");
+    assert.strictEqual(normalized!.qualityAttributes.length, 0);
+    assert.strictEqual(normalized!.constraints.length, 0);
+    assert.deepStrictEqual(normalized!.uncertainties, ["U1"]);
+  });
+
+  it("findDriverGaps covers deploy constraints, on-premise/offline concerns, and project-type keywords", () => {
+    const deployDrivers = createEmptyDrivers();
+    deployDrivers.constraints.push({ id: "C-1", category: "deployment", description: "Ship as one binary" });
+    assert.ok(
+      !findDriverGaps(deployDrivers).some((g) => g.category === "deployment"),
+      "a deploy-category constraint suppresses the deployment gap",
+    );
+
+    for (const description of ["Must run on-premise", "Must work fully offline"]) {
+      const drivers = createEmptyDrivers();
+      drivers.technicalConcerns.push({ id: "TC-1", description });
+      assert.ok(
+        !findDriverGaps(drivers).some((g) => g.category === "deployment"),
+        `technical concern "${description}" suppresses the deployment gap`,
+      );
+    }
+
+    for (const description of ["A mobile client", "A desktop tool", "Controls a plc line", "Runs on embedded hardware", "An iot gateway"]) {
+      const drivers = createEmptyDrivers();
+      drivers.technicalConcerns.push({ id: "TC-1", description });
+      assert.ok(
+        !findDriverGaps(drivers).some((g) => g.category === "project-type"),
+        `technical concern "${description}" suppresses the project-type gap`,
+      );
+    }
+
+    for (const description of ["Sync with a mobile app", "Export to a desktop report"]) {
+      const drivers = createEmptyDrivers();
+      drivers.functionalRequirements.push({ id: "FR-1", description });
+      assert.ok(
+        !findDriverGaps(drivers).some((g) => g.category === "project-type"),
+        `functional requirement "${description}" suppresses the project-type gap`,
+      );
+    }
+  });
+});

@@ -249,3 +249,27 @@ describe("files-config", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("migrateFilesConfig routes singular doc/ files into inputDocuments", () => {
+    const v1: FilesConfigV1 = { version: 1, files: ["doc/plan.md"] };
+    const v2 = migrateFilesConfig(v1);
+    assert.deepStrictEqual(v2.inputDocuments, ["doc/plan.md"]);
+    assert.deepStrictEqual(v2.codePaths, []);
+    assert.deepStrictEqual(v2.testPaths, []);
+  });
+
+  it("loadFilesConfig wraps a malformed v1 config without files as invalid", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "senai", "files.json"),
+      JSON.stringify({ version: 1 }),
+      "utf8",
+    );
+    // migrateFilesConfig iterates the missing files array and throws; the raw
+    // error must be wrapped as "Invalid files config", not returned as null.
+    assert.throws(() => loadFilesConfig(tmpDir), /Invalid files config/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

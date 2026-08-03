@@ -194,3 +194,16 @@ describe("agent-config", () => {
     assert.strictEqual(resolveAgentName(config, "planner"), DEFAULT_AGENTS.planner);
   });
 });
+
+describe("coverage audit gaps", () => {
+  it("loadAgentConfig wraps a non-ENOENT read failure as an invalid config error", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
+    // A directory at the config path makes readFileSync fail with EISDIR,
+    // which must be wrapped instead of returning null (the ENOENT branch).
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai", "agents.json"), { recursive: true });
+
+    assert.throws(() => loadAgentConfig(tmpDir), /Invalid agent config/);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

@@ -263,3 +263,59 @@ agents shadow built-ins on this machine (offered label: `reviewer (user)`). The
 old `split(" ")[0]` handler never validated; the strict id mapping exposed the
 latent test bug. Fixed hermetically: the test now picks from offered options.
 No source change.
+
+## 12. Coverage-audit test round (2026-08-03)
+
+Scope: full-project branch audit. Four parallel audit agents checked every
+exported function and sub-function in all 24 source modules against their test
+files. Result: no exported function was fully untested; 77 untested branches /
+edge cases found. This round added 69 new tests covering 63 of them, fixed 1
+vacuous assertion, and left 14 excluded (see below).
+
+### Unit/edge tests added per module
+
+| Module (test file) | New tests | Branches / edge cases covered |
+|---|---|---|
+| `state.ts` | 1 | `migrateState` legacy timestamps + stageResults carry-over; unknown legacy stage → `"none"` |
+| `prompt.ts` | 2 | `resolveSkillPath` no-candidate fallback; `loadSkill` non-ENOENT re-throw (EISDIR) |
+| `index.ts` | 2 | legacy-dir migration log lines; `registerArchitectTools` registers both tools |
+| `commands.ts` | 20 | implement wrong-stage warning; status artifacts block; configure-agents accept-suggestion / Next→Finish / cancelled sub-picker fallback; empty-config `senai-files`; empty `senai-agents-files` variants; role-editor filter/back/add-custom-read; clear-truth picker item (pins actual keep-behavior); cancel-keeps-truth; architect-inputs back/filter/cancelled-constraints; category-editor back; browser esc-redraw + dotfile filter; `isFolderLike` symlink + broken symlink; `isPathConflict` cross-category duplicate; architect skill-read fallback; `dirHasFiles` missing dir |
+| `doctor.ts` | 11 | Zellij ok; no-multiplexer warning; all-green capability ok item; missing-path file-scope error; comparison-doc ok; empty library warning; no-inputs info; valid drivers ok; misnamed skill error; empty-body resource; SKILL.md empty body + unparsable |
+| `document-suggestions.ts` | 1 | typed candidate deleted from disk is filtered out |
+| `agent-suggestions.ts` | 2 | scout-4 `spec` keyword; reviewer-security does NOT get the arch-reviewer preference |
+| `agent-discovery.ts` | 2 | `parseStringArray` non-string/non-array; `parseAgentFileFull` unreadable file |
+| `agent-config.ts` | 1 | `loadAgentConfig` non-ENOENT wrap (EISDIR) |
+| `architect.ts` | 5 | single-object JSON library; name-less skip + `domain` fallback + non-md/json ignore; system-context external-interface edges; sequence chain + 6-participant cap; additional-constraints block in generated agents |
+| `architect-tools.ts` | 1 | well-formed but wrong-shape map file silently dropped from merge |
+| `architect-inputs-config.ts` | 1 | non-null primitive document entry rejected |
+| `driver-extractor.ts` | 4 | QA `target` field; `normalizeDriverItem` non-object; legacy non-object skip + non-string uncertainty filter; `findDriverGaps` deploy / on-premise / offline / mobile / desktop / plc / embedded / iot keywords |
+| `agent-generator.ts` | 1 | `parseKeywords` missing/malformed frontmatter → `[]` |
+| `files-discovery.ts` | 4 | `looksLikeTestPath` direct cases; extensionless CHANGELOG; non-doc files inside doc folder; excludedPaths during content classification |
+| `files-config.ts` | 2 | singular `doc/` migration; malformed v1 (no `files`) wrap |
+| `agents-files-config.ts` | 2 | v2 passthrough identity; non-ENOENT wrap (EISDIR) |
+| `ui/simple-picker.ts` | 4 | unknown-label fallback; native-code `custom` guard; DOWN wrap; empty items both modes |
+| `ui/list-editor.ts` | 5 | detail continuation head-truncate; unknown-label fallback → back; page clamp after shrink; native-code guard; `truncateMiddle` boundary equality |
+| `ui/role-picker.ts` | 3 + 1 fix | default subtitle positive assertion; unknown-label → finish; native-code guard; focused Finish row has no accent. Fix: vacuous negative assertion now uses the real default subtitle text |
+
+Suite total after this round: **914 tests, 0 fail**.
+
+### Excluded — need source changes first (14)
+
+- 7 audit gaps need `getAgentDir()` dependency injection or install-layout
+  tricks (doctor user-agent shadow, bundled-generic-missing, user-skill-dir
+  resolveSkillFile, agent-discovery user dedup, agent-config user-dir
+  resolution, agent-generator dist-layout fallback, readdirSync catch).
+- 4 branches are unreachable by construction (dead defensive code found while
+  writing tests): `senai-approve` "No next stage" + both advanceStage-failure
+  notifies (commands.ts:288-292, 303-306, 324-327), `matched.length === 0` in
+  the agent-generator command (generic fallback always matches),
+  `ensureAgentConfig` validation catch branches (loaders already validate),
+  list-editor.ts:195 fall-through.
+
+### Real source bug found (reported, not fixed — out of scope)
+
+`pickTruthDocument`'s `(clear truth document)` item returns `undefined`
+(commands.ts:1220), but the caller's `if (truth !== undefined)` guard
+(commands.ts:1139) treats that like a cancel — so clearing via that item never
+works. The "Clear truth" editor action is the only working clear path. The new
+test pins the actual behavior with a NOTE comment. Needs a source fix decision.
