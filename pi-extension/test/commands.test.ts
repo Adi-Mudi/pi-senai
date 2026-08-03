@@ -2348,7 +2348,7 @@ describe("coverage audit gaps", () => {
     assert.strictEqual(saved.documents["scout-4"]?.primary, undefined);
   });
 
-  it("senai-configure-agents-files exercises the clear-truth picker item", async () => {
+  it("senai-configure-agents-files clears the truth document via the picker clear item", async () => {
     fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
     fs.writeFileSync(path.join(tmpDir, "docs", "extra.md"), "# Extra", "utf8");
@@ -2381,13 +2381,10 @@ describe("coverage audit gaps", () => {
 
     // The __clear__ item is offered only when a truth document is set.
     assert.ok(truthPickerOptions.includes("(clear truth document)"));
-    // NOTE: __clear__ returns undefined from pickTruthDocument, and the caller's
-    // `if (truth !== undefined)` guard treats that like a cancel — so the truth
-    // document is kept. This pins the actual current behavior (likely a bug:
-    // the working clear path is the "Clear truth" editor action instead).
+    // Clearing with no reads left removes the role entry entirely (updateRoleDocs).
     const saved = loadAgentsFilesConfig(tmpDir);
     assert.ok(saved);
-    assert.strictEqual(saved.documents["scout-4"]?.primary, "docs/PRD.md");
+    assert.strictEqual(saved.documents["scout-4"], undefined);
   });
 
   it("senai-configure-agents-files keeps the current truth document when the picker is cancelled", async () => {

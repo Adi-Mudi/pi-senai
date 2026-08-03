@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `doctor.ts` — a corrupted `architect-inputs.json` no longer crashes the whole `/senai-doctor` run; `checkArchitectureSetup` now reports it as an error item with a fix hint, matching the neighboring drivers check.
 
+- `commands.ts` — the truth-document picker's "(clear truth document)" item now actually clears the truth document. It previously returned the same `undefined` as a cancel, so the caller kept the current value; `pickTruthDocument` now returns an explicit set/clear/cancel result.
+
 - All 12 known issues from `Doc/test-plan.md` (found during the edge-case test round):
   - `agent-registry.ts` — empty-string agent mappings now fall back to the default agent name.
   - `agent-generator.ts` — an architect report with all-empty arrays no longer emits a bare `## Project context` header in generated agents.

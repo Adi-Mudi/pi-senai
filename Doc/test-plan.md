@@ -312,10 +312,11 @@ Suite total after this round: **914 tests, 0 fail**.
   `ensureAgentConfig` validation catch branches (loaders already validate),
   list-editor.ts:195 fall-through.
 
-### Real source bug found (reported, not fixed — out of scope)
+### Real source bug found (fixed 2026-08-03)
 
-`pickTruthDocument`'s `(clear truth document)` item returns `undefined`
-(commands.ts:1220), but the caller's `if (truth !== undefined)` guard
-(commands.ts:1139) treats that like a cancel — so clearing via that item never
-works. The "Clear truth" editor action is the only working clear path. The new
-test pins the actual behavior with a NOTE comment. Needs a source fix decision.
+`pickTruthDocument`'s `(clear truth document)` item returned `undefined`
+(commands.ts:1220), and the caller's `if (truth !== undefined)` guard treated
+that like a cancel — so clearing via that item never worked. Fixed:
+`pickTruthDocument` now returns an explicit set/clear/cancel result and the
+caller clears on `clear`. The coverage-audit test was updated to assert the
+clear actually happens.

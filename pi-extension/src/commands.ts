@@ -1135,8 +1135,9 @@ async function editRoleDocuments(
         reads = action.paths;
         updateRoleDocs(config, role, primary, reads);
         if (action.id === "set-truth") {
-          const truth = await pickTruthDocument(ctx, primary, reads, candidates);
-          if (truth !== undefined) primary = truth;
+          const result = await pickTruthDocument(ctx, primary, reads, candidates);
+          if (result.action === "set") primary = result.value;
+          else if (result.action === "clear") primary = undefined;
           updateRoleDocs(config, role, primary, reads);
         } else if (action.id === "clear-truth") {
           primary = undefined;
@@ -1203,12 +1204,17 @@ function updateRoleDocs(
   config.documents[role] = docs;
 }
 
+type TruthPickResult =
+  | { action: "set"; value: string }
+  | { action: "clear" }
+  | { action: "cancel" };
+
 async function pickTruthDocument(
   ctx: ExtensionContext,
   current: string | undefined,
   reads: string[],
   candidates: string[],
-): Promise<string | undefined> {
+): Promise<TruthPickResult> {
   const pickerItems: SimplePickerItem[] = [];
   if (current) pickerItems.push({ id: "__clear__", label: "(clear truth document)" });
   for (const c of candidates) {
@@ -1216,9 +1222,9 @@ async function pickTruthDocument(
     pickerItems.push({ id: c, label: c });
   }
   const choice = await runSimplePicker(ctx, { title: "Select truth document", items: pickerItems });
-  if (choice === undefined) return current;
-  if (choice === "__clear__") return undefined;
-  return choice;
+  if (choice === undefined) return { action: "cancel" };
+  if (choice === "__clear__") return { action: "clear" };
+  return { action: "set", value: choice };
 }
 
 
