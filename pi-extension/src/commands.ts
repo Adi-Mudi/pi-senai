@@ -574,31 +574,60 @@ export function registerAgentCommands(pi: ExtensionAPI) {
       const suggestions = buildSuggestionMap(agents);
       const existing = loadAgentConfig(ctx.cwd);
       const mapping: Partial<Record<SenaiRole, string>> = {};
-      let i = 0;
 
-      while (i < SENAI_ROLES.length) {
-        const role = SENAI_ROLES[i];
-        const existingValue = existing?.agents?.[role];
+      const effectiveAgent = (role: SenaiRole): string =>
+        mapping[role] ?? existing?.agents?.[role] ?? suggestions[role] ?? DEFAULT_AGENTS[role];
+
+      let lastSelectedId: string | undefined;
+      let editing = true;
+      while (editing) {
+        const items: RolePickerItem[] = SENAI_ROLES.map((role) => {
+          const effective = effectiveAgent(role);
+          const suggested = suggestions[role];
+          const isCustom = Boolean(mapping[role] ?? existing?.agents?.[role]);
+          return {
+            id: role,
+            label: ROLE_LABELS[role],
+            agent: effective,
+            summary:
+              suggested && suggested !== effective
+                ? `suggested: ${suggested}`
+                : isCustom
+                  ? "custom"
+                  : "default",
+            assigned: isCustom,
+          };
+        });
+
+        const action = await runRolePicker(ctx, {
+          title: "Configure agents",
+          subtitle: " Enter edits one role • Finish saves all • Back cancels. Unedited roles keep their current or suggested agent.",
+          items,
+          initialSelectedId: lastSelectedId,
+          showBack: true,
+        });
+
+        if (action.kind === "back") {
+          ctx.ui.notify("Agent configuration cancelled — no changes saved.", "info");
+          return;
+        }
+        if (action.kind !== "role") {
+          editing = false;
+          break;
+        }
+
+        const role = action.role as SenaiRole;
+        lastSelectedId = role;
         const suggested = suggestions[role] ?? DEFAULT_AGENTS[role];
-        const current = mapping[role] ?? existingValue ?? suggested;
+        const current = effectiveAgent(role);
 
         const pickerItems: SimplePickerItem[] = [];
-        if (existingValue) {
-          pickerItems.push({ id: "keep", label: `Keep current: ${existingValue}` });
-        }
-        if (!existingValue || existingValue !== suggested) {
+        pickerItems.push({ id: "keep", label: `Keep current: ${current}` });
+        if (suggested !== current) {
           pickerItems.push({ id: "accept", label: `Accept suggestion: ${suggested}` });
         }
         pickerItems.push({ id: "choose", label: "Choose different" });
         pickerItems.push({ id: "default", label: `Use default: ${DEFAULT_AGENTS[role]}` });
-        if (i > 0) {
-          pickerItems.push({ id: "back", label: "← Back" });
-        }
-        if (i < SENAI_ROLES.length - 1) {
-          pickerItems.push({ id: "next", label: "Next →" });
-        } else {
-          pickerItems.push({ id: "finish", label: "Finish" });
-        }
 
         const choice = await runSimplePicker(ctx, {
           title: `Configure agent for ${ROLE_LABELS[role]} (${role})`,
@@ -606,11 +635,9 @@ export function registerAgentCommands(pi: ExtensionAPI) {
         });
 
         if (choice === "keep") {
-          mapping[role] = existingValue!;
-          i++;
+          mapping[role] = current;
         } else if (choice === "accept") {
           mapping[role] = suggested;
-          i++;
         } else if (choice === "choose") {
           const agentItems: SimplePickerItem[] = agents.map((a) => ({
             id: a.name,
@@ -620,30 +647,16 @@ export function registerAgentCommands(pi: ExtensionAPI) {
             title: `Select agent for ${ROLE_LABELS[role]} (${role})`,
             items: agentItems,
           });
-          if (selected) {
-            mapping[role] = selected;
-          } else {
-            mapping[role] = DEFAULT_AGENTS[role];
-          }
-          i++;
+          mapping[role] = selected ?? DEFAULT_AGENTS[role];
         } else if (choice === "default") {
           mapping[role] = DEFAULT_AGENTS[role];
-          i++;
-        } else if (choice === "back") {
-          i = Math.max(0, i - 1);
-        } else if (choice === "next" || choice === "finish") {
-          mapping[role] = current;
-          i++;
-        } else {
-          // Unexpected cancellation / empty selection: keep current and advance.
-          mapping[role] = current;
-          i++;
         }
+        // undefined (esc): no change, back to the list.
       }
 
       const finalMapping: Partial<Record<SenaiRole, string>> = {};
       for (const role of SENAI_ROLES) {
-        finalMapping[role] = mapping[role] ?? existing?.agents?.[role] ?? DEFAULT_AGENTS[role];
+        finalMapping[role] = effectiveAgent(role);
       }
 
       const config = { version: 1, agents: finalMapping };

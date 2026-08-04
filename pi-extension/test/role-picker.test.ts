@@ -663,3 +663,41 @@ describe("coverage audit gaps", () => {
     await promise;
   });
 });
+
+describe("role-picker showBack", () => {
+  const BACK_ITEMS: RolePickerItem[] = [
+    { id: "scout-1", label: "Scout 1", agent: "scout", summary: "default", assigned: false },
+  ];
+
+  it("fallback offers Back first when showBack is set and selecting it returns back", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx(["Back"], captured);
+    const result = await runRolePicker(ctx, { title: "Test", items: BACK_ITEMS, showBack: true });
+    assert.deepStrictEqual(result, { kind: "back" });
+    assert.strictEqual(captured[0][0], "Back", "Back is the first offered option");
+  });
+
+  it("fallback does not offer Back by default", async () => {
+    const captured: string[][] = [];
+    const ctx = makeFallbackCtx([undefined], captured);
+    const result = await runRolePicker(ctx, { title: "Test", items: BACK_ITEMS });
+    assert.deepStrictEqual(result, { kind: "back" });
+    assert.ok(captured[0].length > 0 && !captured[0].includes("Back"));
+  });
+
+  it("custom picker renders the Back row plainly and Enter on it resolves back", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "Test", items: BACK_ITEMS, showBack: true });
+    const component = getComponent() as {
+      render: (width: number) => string[];
+      handleInput: (data: string) => void;
+    };
+    const lines = component.render(80);
+    const backRow = lines.find((l) => l.includes("Back"));
+    assert.ok(backRow, "Back row is rendered");
+    assert.ok(backRow.startsWith("→"), "Back is the first (focused) row");
+    component.handleInput(ENTER);
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "back" });
+  });
+});

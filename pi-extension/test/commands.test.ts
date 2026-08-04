@@ -227,11 +227,19 @@ describe("commands", () => {
 
   it("senai-configure-agents saves a config from user choices", async () => {
     registerAgentCommands(makeApi());
-    // Pre-program choices: for every role choose "Use default: <default>".
-    for (const role of Object.keys(DEFAULT_AGENTS) as SenaiRole[]) {
-      selectChoices.push(`Use default: ${DEFAULT_AGENTS[role]}`);
-    }
-    await commandHandlers["senai-configure-agents"]("", makeCtx());
+
+    let edited = false;
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      if (title === "Configure agents") {
+        if (!edited) return options.find((o) => o.includes("implementer:"));
+        return "⬜ Finish";
+      }
+      edited = true;
+      return options.find((o) => o.startsWith("Use default:"));
+    };
+
+    await commandHandlers["senai-configure-agents"]("", ctx);
     assert.ok(notifications[0].message.includes("Agent configuration saved"));
     const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     assert.ok(fs.existsSync(configPath));
@@ -244,40 +252,49 @@ describe("commands", () => {
     saveAgentConfig(tmpDir, { version: 1, agents: { planner: "custom-planner" } });
     registerAgentCommands(makeApi());
 
-    for (const role of Object.keys(DEFAULT_AGENTS) as SenaiRole[]) {
-      if (role === "planner") {
-        selectChoices.push("Keep current: custom-planner");
-      } else {
-        selectChoices.push(`Use default: ${DEFAULT_AGENTS[role]}`);
+    let edited = false;
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      if (title === "Configure agents") {
+        if (!edited) return options.find((o) => o.includes("planner:"));
+        return "⬜ Finish";
       }
-    }
+      edited = true;
+      return options.find((o) => o.startsWith("Keep current:"));
+    };
 
-    await commandHandlers["senai-configure-agents"]("", makeCtx());
+    await commandHandlers["senai-configure-agents"]("", ctx);
 
     const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
     assert.strictEqual(saved.agents.planner, "custom-planner");
-    assert.strictEqual(saved.agents.implementer, "worker");
+    assert.strictEqual(Object.keys(saved.agents).length, Object.keys(DEFAULT_AGENTS).length);
   });
 
-  it("senai-configure-agents lets the user go back", async () => {
+  it("senai-configure-agents returns to the role list after editing a role", async () => {
     registerAgentCommands(makeApi());
     const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
 
-    // Role 0: pick default, then role 1: go back, then role 0 again: pick default, then rest defaults.
-    selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[0]]}`);
-    selectChoices.push("← Back");
-    selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[0]]}`);
-    for (let i = 1; i < roles.length; i++) {
-      selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
-    }
+    let edits = 0;
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      if (title === "Configure agents") {
+        if (edits === 0) return options.find((o) => o.includes(`${roles[0]}:`));
+        if (edits === 1) return options.find((o) => o.includes(`${roles[1]}:`));
+        return "⬜ Finish";
+      }
+      edits++;
+      return options.find((o) => o.startsWith("Use default:"));
+    };
 
-    await commandHandlers["senai-configure-agents"]("", makeCtx());
+    await commandHandlers["senai-configure-agents"]("", ctx);
 
     const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
     assert.strictEqual(saved.version, 1);
     assert.strictEqual(saved.agents[roles[0]], DEFAULT_AGENTS[roles[0]]);
+    assert.strictEqual(saved.agents[roles[1]], DEFAULT_AGENTS[roles[1]]);
+    assert.strictEqual(edits, 2, "both roles edited through the list loop");
   });
 
   it("senai-status reports no active run", async () => {
@@ -1823,17 +1840,19 @@ describe("commands", () => {
 
     // Hermetic select: pick from the actually-offered options (user agents can
     // shadow built-ins, so exact labels differ per machine).
+    let stage = 0;
     const ctx = makeCtx();
-    let chooseUsed = false;
     (ctx.ui as any).select = async (title: string, options: string[]) => {
+      if (title === "Configure agents") {
+        if (stage === 0) return options.find((o) => o.includes(`${roles[0]}:`));
+        return "⬜ Finish";
+      }
       if (title.startsWith("Select agent for")) {
+        stage = 2;
         return options.find((o) => o.startsWith("reviewer (")) ?? options[0];
       }
-      if (!chooseUsed) {
-        chooseUsed = true;
-        return "Choose different";
-      }
-      return options.find((o) => o.startsWith("Use default:")) ?? options[options.length - 1];
+      stage = 1;
+      return "Choose different";
     };
 
     await commandHandlers["senai-configure-agents"]("", ctx);
@@ -1844,16 +1863,22 @@ describe("commands", () => {
     assert.strictEqual(saved.agents[roles[1]], DEFAULT_AGENTS[roles[1]]);
   });
 
-  it("senai-configure-agents keeps the current value when a select is cancelled", async () => {
+  it("senai-configure-agents keeps the current value when the per-role menu is cancelled", async () => {
     registerAgentCommands(makeApi());
     const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
 
-    selectChoices.push(undefined as unknown as string);
-    for (let i = 1; i < roles.length; i++) {
-      selectChoices.push(`Use default: ${DEFAULT_AGENTS[roles[i]]}`);
-    }
+    let opened = false;
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      if (title === "Configure agents") {
+        if (!opened) return options.find((o) => o.includes(`${roles[0]}:`));
+        return "⬜ Finish";
+      }
+      opened = true;
+      return undefined; // esc the per-role menu: no change
+    };
 
-    await commandHandlers["senai-configure-agents"]("", makeCtx());
+    await commandHandlers["senai-configure-agents"]("", ctx);
 
     const configPath = path.join(tmpDir, ".pi/senai/agents.json");
     const saved = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -2217,38 +2242,55 @@ describe("coverage audit gaps", () => {
   });
 
   it("senai-configure-agents applies the suggested agent via Accept suggestion", async () => {
-    fs.rmSync(path.join(tmpDir, ".pi", "senai", "agents.json"));
+    // Accept is offered when the current value differs from the suggestion,
+    // so seed every role with a value that matches no suggestion.
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: Object.fromEntries(
+        (Object.keys(DEFAULT_AGENTS) as SenaiRole[]).map((r) => [r, "zzz-not-a-suggestion"]),
+      ),
+    });
     registerAgentCommands(makeApi());
     const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
 
-    // Hermetic select: pick from the actually-offered options (user agents can
-    // shadow built-ins, so exact labels differ per machine).
+    // Hermetic select: walk the roles until an "Accept suggestion" option
+    // appears (suggestions depend on the machine's discovered agents).
     let accepted: string | undefined;
+    let acceptedRole: string | undefined;
+    let roleIdx = 0;
     const ctx = makeCtx();
-    (ctx.ui as any).select = async (_title: string, options: string[]) => {
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      if (title === "Configure agents") {
+        if (accepted !== undefined || roleIdx >= roles.length) return "⬜ Finish";
+        return options.find((o) => o.includes(`${roles[roleIdx]}:`));
+      }
       const accept = options.find((o) => o.startsWith("Accept suggestion:"));
-      if (accept && accepted === undefined) {
+      if (accept) {
         accepted = accept.replace("Accept suggestion: ", "");
+        acceptedRole = roles[roleIdx];
         return accept;
       }
-      return options.find((o) => o.startsWith("Use default:")) ?? options[options.length - 1];
+      roleIdx++;
+      return undefined; // esc, try the next role
     };
 
     await commandHandlers["senai-configure-agents"]("", ctx);
 
     assert.ok(accepted, "an Accept suggestion option should have been offered");
     const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
-    assert.strictEqual(saved.agents[roles[0]], accepted);
+    assert.strictEqual(saved.agents[acceptedRole!], accepted);
     assert.ok(notifications.some((n) => n.message.includes("Agent configuration saved")));
   });
 
-  it("senai-configure-agents saves the current value via Next → and Finish", async () => {
+  it("senai-configure-agents saves effective values when finishing without edits", async () => {
     registerAgentCommands(makeApi());
     const roles = Object.keys(DEFAULT_AGENTS) as SenaiRole[];
 
     const ctx = makeCtx();
-    (ctx.ui as any).select = async (_title: string, options: string[]) =>
-      options.find((o) => o === "Next →") ?? "Finish";
+    (ctx.ui as any).select = async (title: string, _options: string[]) => {
+      assert.strictEqual(title, "Configure agents");
+      return "⬜ Finish";
+    };
 
     await commandHandlers["senai-configure-agents"]("", ctx);
 
@@ -2269,15 +2311,19 @@ describe("coverage audit gaps", () => {
     });
     registerAgentCommands(makeApi());
 
-    let chooseUsed = false;
+    let stage = 0;
     const ctx = makeCtx();
     (ctx.ui as any).select = async (title: string, options: string[]) => {
-      if (title.startsWith("Select agent for")) return undefined; // cancelled sub-picker
-      if (!chooseUsed) {
-        chooseUsed = true;
-        return "Choose different";
+      if (title === "Configure agents") {
+        if (stage === 0) return options.find((o) => o.includes(`${roles[0]}:`));
+        return "⬜ Finish";
       }
-      return options.find((o) => o.startsWith("Use default:")) ?? options[options.length - 1];
+      if (title.startsWith("Select agent for")) {
+        stage = 2;
+        return undefined; // cancelled sub-picker
+      }
+      stage = 1;
+      return "Choose different";
     };
 
     await commandHandlers["senai-configure-agents"]("", ctx);
@@ -2634,8 +2680,7 @@ describe("coverage audit gaps", () => {
     registerAgentCommands(makeApi());
 
     const ctx = makeCtx();
-    (ctx.ui as any).select = async (_title: string, options: string[]) =>
-      options.find((o) => o === "Next →") ?? "Finish";
+    (ctx.ui as any).select = async () => "⬜ Finish";
     await commandHandlers["senai-configure-agents"]("", ctx);
 
     const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
@@ -2700,5 +2745,25 @@ describe("coverage audit gaps", () => {
     const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
     assert.strictEqual(Object.keys(raw)[0], "_comment");
     assert.strictEqual(raw._comment, ARCHITECT_INPUTS_CONFIG_COMMENT);
+  });
+
+  it("senai-configure-agents cancels without saving via the Back button", async () => {
+    registerAgentCommands(makeApi());
+    const configPath = path.join(tmpDir, ".pi", "senai", "agents.json");
+    const before = fs.readFileSync(configPath, "utf8");
+
+    let backOffered = false;
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async (title: string, options: string[]) => {
+      assert.strictEqual(title, "Configure agents");
+      backOffered = options[0] === "Back";
+      return "Back";
+    };
+
+    await commandHandlers["senai-configure-agents"]("", ctx);
+
+    assert.ok(backOffered, "Back should be the first option in the role list");
+    assert.strictEqual(fs.readFileSync(configPath, "utf8"), before, "file must be unchanged");
+    assert.ok(notifications.some((n) => n.message.includes("cancelled")));
   });
 });

@@ -26,6 +26,7 @@ export interface RolePickerOptions {
   pageSize?: number;
   subtitle?: string;
   initialSelectedId?: string;
+  showBack?: boolean;
 }
 
 export type RolePickerResult =
@@ -52,12 +53,18 @@ export async function runRolePicker(
 }
 
 const FINISH_ID = "__finish__";
+const BACK_ID = "__back__";
 
 function makeFallbackOptions(
   items: RolePickerItem[],
+  showBack?: boolean,
 ): { options: string[]; idMap: Map<string, string> } {
   const options: string[] = [];
   const idMap = new Map<string, string>();
+  if (showBack) {
+    options.push("Back");
+    idMap.set("Back", BACK_ID);
+  }
   for (const item of items) {
     const marker = item.assigned ? "✅" : "⬜";
     const agentPart = item.agent ? ` (${item.agent})` : "";
@@ -77,10 +84,11 @@ async function runFallbackRolePicker(
   ctx: ExtensionContext,
   options: RolePickerOptions,
 ): Promise<RolePickerResult> {
-  const { options: labels, idMap } = makeFallbackOptions(options.items);
+  const { options: labels, idMap } = makeFallbackOptions(options.items, options.showBack);
   const choice = await ctx.ui.select(options.title, labels);
   if (!choice) return { kind: "back" };
   const id = idMap.get(choice);
+  if (id === BACK_ID) return { kind: "back" };
   if (!id || id === FINISH_ID) return { kind: "finish" };
   return { kind: "role", role: id };
 }
@@ -99,6 +107,15 @@ async function runCustomRolePicker(
       summary: "",
       assigned: false,
     });
+    if (options.showBack) {
+      items.unshift({
+        id: BACK_ID,
+        label: "Back",
+        agent: "",
+        summary: "",
+        assigned: false,
+      });
+    }
 
     let selectedIndex = Math.max(
       0,
@@ -126,6 +143,9 @@ async function runCustomRolePicker(
       const base = `${item.label}${needsPart}${agentPart} — ${item.summary}${guidancePart}`;
       if (item.id === FINISH_ID) {
         return `${prefix}${theme.fg("text", "Finish")}`;
+      }
+      if (item.id === BACK_ID) {
+        return `${prefix}${theme.fg("text", "Back")}`;
       }
       if (focused) {
         return `${prefix}${theme.fg("accent", theme.bold(base))}`;
@@ -183,6 +203,8 @@ async function runCustomRolePicker(
           const item = items[selectedIndex];
           if (item.id === FINISH_ID) {
             done({ kind: "finish" });
+          } else if (item.id === BACK_ID) {
+            done({ kind: "back" });
           } else {
             done({ kind: "role", role: item.id });
           }
