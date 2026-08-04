@@ -9,6 +9,7 @@ import {
   migrateAgentsFilesConfig,
   saveAgentsFilesConfig,
   validateAgentsFilesConfig,
+  AGENTS_FILES_CONFIG_COMMENT,
 } from "../src/agents-files-config.js";
 import type { AgentsFilesConfig } from "../src/agents-files-config.js";
 
@@ -213,6 +214,31 @@ describe("coverage audit gaps", () => {
     fs.mkdirSync(path.join(tmpDir, ".pi", "senai", "agents_files.json"), { recursive: true });
     // EISDIR is not ENOENT, so the raw error must be wrapped, not returned as null.
     assert.throws(() => loadAgentsFilesConfig(tmpDir), /Invalid agents_files config/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("config _comment instructions", () => {
+  it("saveAgentsFilesConfig writes a _comment instruction as the first key", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+    const parsed = JSON.parse(fs.readFileSync(getAgentsFilesConfigPath(tmpDir), "utf8"));
+    assert.strictEqual(Object.keys(parsed)[0], "_comment");
+    assert.strictEqual(parsed._comment, AGENTS_FILES_CONFIG_COMMENT);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadAgentsFilesConfig strips _comment so the round-trip shape is unchanged", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agents-files-cfg-"));
+    const config: AgentsFilesConfig = {
+      version: 2,
+      documents: { "scout-4": { primary: "docs/PRD.md", reads: ["docs/extra.md"] } },
+    };
+    saveAgentsFilesConfig(tmpDir, config);
+    const loaded = loadAgentsFilesConfig(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(loaded, "_comment"), false);
+    assert.deepStrictEqual(loaded, config);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

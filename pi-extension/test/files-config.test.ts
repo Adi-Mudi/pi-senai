@@ -9,6 +9,7 @@ import {
   migrateFilesConfig,
   saveFilesConfig,
   validateFilesConfig,
+  FILES_CONFIG_COMMENT,
 } from "../src/files-config.js";
 import type { FilesConfig, FilesConfigV1 } from "../src/files-config.js";
 
@@ -270,6 +271,28 @@ describe("coverage audit gaps", () => {
     // migrateFilesConfig iterates the missing files array and throws; the raw
     // error must be wrapped as "Invalid files config", not returned as null.
     assert.throws(() => loadFilesConfig(tmpDir), /Invalid files config/);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("config _comment instructions", () => {
+  it("saveFilesConfig writes a _comment instruction as the first key", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    saveFilesConfig(tmpDir, makeV2Config());
+    const parsed = JSON.parse(fs.readFileSync(getFilesConfigPath(tmpDir), "utf8"));
+    assert.strictEqual(Object.keys(parsed)[0], "_comment");
+    assert.strictEqual(parsed._comment, FILES_CONFIG_COMMENT);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadFilesConfig strips _comment so the round-trip shape is unchanged", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "files-cfg-"));
+    const config = makeV2Config({ codePaths: ["src/"], inputDocuments: ["docs/PRD.md"] });
+    saveFilesConfig(tmpDir, config);
+    const loaded = loadFilesConfig(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(loaded, "_comment"), false);
+    assert.deepStrictEqual(loaded, config);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

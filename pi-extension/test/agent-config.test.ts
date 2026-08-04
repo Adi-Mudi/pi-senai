@@ -10,6 +10,7 @@ import {
   saveAgentConfig,
   validateAgentConfig,
   validateMappedAgents,
+  CONFIG_COMMENT,
 } from "../src/agent-config.js";
 import type { AgentConfig } from "../src/agent-config.js";
 import { DEFAULT_AGENTS } from "../src/agent-suggestions.js";
@@ -204,6 +205,28 @@ describe("coverage audit gaps", () => {
 
     assert.throws(() => loadAgentConfig(tmpDir), /Invalid agent config/);
 
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("config _comment instructions", () => {
+  it("saveAgentConfig writes a _comment instruction as the first key", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    const parsed = JSON.parse(fs.readFileSync(getConfigPath(tmpDir), "utf8"));
+    assert.strictEqual(Object.keys(parsed)[0], "_comment");
+    assert.strictEqual(parsed._comment, CONFIG_COMMENT);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadAgentConfig strips _comment so the round-trip shape is unchanged", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
+    const config: AgentConfig = { version: 1, agents: { planner: "my-planner" } };
+    saveAgentConfig(tmpDir, config);
+    const loaded = loadAgentConfig(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(loaded, "_comment"), false);
+    assert.deepStrictEqual(loaded, config);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

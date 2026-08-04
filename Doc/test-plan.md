@@ -320,3 +320,12 @@ that like a cancel — so clearing via that item never worked. Fixed:
 `pickTruthDocument` now returns an explicit set/clear/cancel result and the
 caller clears on `clear`. The coverage-audit test was updated to assert the
 clear actually happens.
+
+## 13. Config `_comment` instruction round (2026-08-03)
+
+All 4 `.pi/senai/` config files carry a `_comment` instruction as the first key.
+Savers always write it; loaders strip it. Tests: 8 module-level (save writes,
+load strips, round-trip shape) + 4 command-level regeneration tests (file on
+disk without `_comment` → run the matching configure command → instruction
+regenerated as first key). Removed or edited instructions self-heal on the
+next save; no doctor check (help text, not a rule).

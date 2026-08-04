@@ -11,6 +11,7 @@ import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
   validateArchitectInputsConfig,
+  ARCHITECT_INPUTS_CONFIG_COMMENT,
 } from "../src/architect-inputs-config.js";
 import type { ArchitectInputsConfig } from "../src/architect-inputs-config.js";
 
@@ -167,5 +168,30 @@ describe("coverage audit gaps", () => {
       additionalConstraints: [],
     } as unknown as ArchitectInputsConfig;
     assert.throws(() => validateArchitectInputsConfig(config), /Each document entry must be an object/);
+  });
+});
+
+describe("config _comment instructions", () => {
+  it("saveArchitectInputsConfig writes a _comment instruction as the first key", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-inputs-cfg-"));
+    saveArchitectInputsConfig(tmpDir, makeConfig());
+    const parsed = JSON.parse(fs.readFileSync(getArchitectInputsConfigPath(tmpDir), "utf8"));
+    assert.strictEqual(Object.keys(parsed)[0], "_comment");
+    assert.strictEqual(parsed._comment, ARCHITECT_INPUTS_CONFIG_COMMENT);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectInputsConfig strips _comment so the round-trip shape is unchanged", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-inputs-cfg-"));
+    const config = makeConfig({
+      documents: [{ type: "prd", path: "docs/PRD.md" }],
+      additionalConstraints: ["keep it simple"],
+    });
+    saveArchitectInputsConfig(tmpDir, config);
+    const loaded = loadArchitectInputsConfig(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(Object.prototype.hasOwnProperty.call(loaded, "_comment"), false);
+    assert.deepStrictEqual(loaded, config);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

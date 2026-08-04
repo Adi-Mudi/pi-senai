@@ -3,6 +3,9 @@ import * as path from "node:path";
 
 export const ARCHITECT_INPUTS_CONFIG_FILE = "architect-inputs.json";
 
+export const ARCHITECT_INPUTS_CONFIG_COMMENT =
+  "Senai config: documents and constraints used to derive the project architecture. Managed by /senai-configure-architect-inputs.";
+
 export const CURRENT_ARCHITECT_INPUTS_CONFIG_VERSION = 1;
 
 export const ARCHITECT_DOCUMENT_TYPES = [
@@ -40,6 +43,7 @@ export function loadArchitectInputsConfig(cwd: string): ArchitectInputsConfig | 
   try {
     const raw = fs.readFileSync(configPath, "utf8");
     const parsed = JSON.parse(raw) as ArchitectInputsConfig;
+    delete (parsed as unknown as Record<string, unknown>)._comment;
     validateArchitectInputsConfig(parsed);
     return parsed;
   } catch (err: any) {
@@ -54,7 +58,11 @@ export function saveArchitectInputsConfig(
 ): void {
   const configPath = getArchitectInputsConfigPath(cwd);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({ _comment: ARCHITECT_INPUTS_CONFIG_COMMENT, ...config }, null, 2),
+    "utf8",
+  );
 }
 
 export function validateArchitectInputsConfig(config: ArchitectInputsConfig): void {

@@ -4,6 +4,9 @@ import { SENAI_ROLES, type SenaiRole } from "./agent-suggestions.js";
 
 export const AGENTS_FILES_CONFIG_FILE = "agents_files.json";
 
+export const AGENTS_FILES_CONFIG_COMMENT =
+  "Senai config: per-role truth document (primary) and comparison documents (reads). Managed by /senai-configure-agents-files.";
+
 export interface AgentFilesDocuments {
   primary?: string;
   reads?: string[];
@@ -30,6 +33,7 @@ export function loadAgentsFilesConfig(cwd: string): AgentsFilesConfig | null {
   try {
     const raw = fs.readFileSync(configPath, "utf8");
     const parsed = JSON.parse(raw) as AgentsFilesConfig;
+    delete (parsed as unknown as Record<string, unknown>)._comment;
     validateAgentsFilesConfig(parsed);
     const migrated = migrateAgentsFilesConfig(parsed);
     if (migrated.version !== 2) {
@@ -47,7 +51,7 @@ export function saveAgentsFilesConfig(cwd: string, config: AgentsFilesConfig): v
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(
     configPath,
-    JSON.stringify({ ...config, version: 2 }, null, 2),
+    JSON.stringify({ _comment: AGENTS_FILES_CONFIG_COMMENT, ...config, version: 2 }, null, 2),
     "utf8",
   );
 }

@@ -24,12 +24,13 @@ import { loadState, startRun, advanceStage } from "../src/state.js";
 import type { SenaiState } from "../src/state.js";
 import type { Stage } from "../src/constants.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { saveAgentConfig } from "../src/agent-config.js";
-import { saveFilesConfig, loadFilesConfig } from "../src/files-config.js";
-import { saveAgentsFilesConfig, loadAgentsFilesConfig } from "../src/agents-files-config.js";
+import { saveAgentConfig, CONFIG_COMMENT } from "../src/agent-config.js";
+import { saveFilesConfig, loadFilesConfig, FILES_CONFIG_COMMENT } from "../src/files-config.js";
+import { saveAgentsFilesConfig, loadAgentsFilesConfig, AGENTS_FILES_CONFIG_COMMENT } from "../src/agents-files-config.js";
 import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
+  ARCHITECT_INPUTS_CONFIG_COMMENT,
 } from "../src/architect-inputs-config.js";
 import { saveArchitectReport, slugify } from "../src/architect.js";
 import { resolveSkillPath } from "../src/prompt.js";
@@ -2624,5 +2625,80 @@ describe("coverage audit gaps", () => {
     const result = checkStageArtifact(loadState(tmpDir), "implement", makeCtx());
     assert.strictEqual(result.ok, false);
     assert.ok(notifications[0].message.includes("Implement artifacts not found"));
+  });
+
+  it("senai-configure-agents regenerates _comment when the file on disk lacks it", async () => {
+    const configPath = path.join(tmpDir, ".pi", "senai", "agents.json");
+    // Simulate a user hand-removing the instruction line.
+    fs.writeFileSync(configPath, JSON.stringify({ version: 1, agents: {} }, null, 2), "utf8");
+    registerAgentCommands(makeApi());
+
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async (_title: string, options: string[]) =>
+      options.find((o) => o === "Next →") ?? "Finish";
+    await commandHandlers["senai-configure-agents"]("", ctx);
+
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(Object.keys(raw)[0], "_comment");
+    assert.strictEqual(raw._comment, CONFIG_COMMENT);
+  });
+
+  it("senai-configure-files regenerates _comment when the file on disk lacks it", async () => {
+    const configPath = path.join(tmpDir, ".pi", "senai", "files.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify(
+        { version: 2, codePaths: [], inputDocuments: [], testPaths: [], excludedPaths: [] },
+        null,
+        2,
+      ),
+      "utf8",
+    );
+    registerFilesCommands(makeApi());
+
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async () => "Finish";
+    await commandHandlers["senai-configure-files"]("", ctx);
+
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(Object.keys(raw)[0], "_comment");
+    assert.strictEqual(raw._comment, FILES_CONFIG_COMMENT);
+  });
+
+  it("senai-configure-agents-files regenerates _comment when the file on disk lacks it", async () => {
+    const configPath = path.join(tmpDir, ".pi", "senai", "agents_files.json");
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({ version: 2, documents: {} }, null, 2),
+      "utf8",
+    );
+    registerAgentsFilesCommands(makeApi());
+
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async () => "⬜ Finish";
+    await commandHandlers["senai-configure-agents-files"]("", ctx);
+
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(Object.keys(raw)[0], "_comment");
+    assert.strictEqual(raw._comment, AGENTS_FILES_CONFIG_COMMENT);
+  });
+
+  it("senai-configure-architect-inputs regenerates _comment when the file on disk lacks it", async () => {
+    const configPath = path.join(tmpDir, ".pi", "senai", "architect-inputs.json");
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(
+      configPath,
+      JSON.stringify({ version: 1, documents: [], additionalConstraints: [] }, null, 2),
+      "utf8",
+    );
+    registerArchitectInputsCommands(makeApi());
+
+    const ctx = makeCtx();
+    (ctx.ui as any).select = async () => "⬜ Finish";
+    await commandHandlers["senai-configure-architect-inputs"]("", ctx);
+
+    const raw = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    assert.strictEqual(Object.keys(raw)[0], "_comment");
+    assert.strictEqual(raw._comment, ARCHITECT_INPUTS_CONFIG_COMMENT);
   });
 });
