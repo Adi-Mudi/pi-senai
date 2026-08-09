@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Subagent model inheritance guard: every stage prompt's Agent Registry block now carries an explicit rule — never pass the `model` parameter to `subagent()` and never set a model override; subagents must inherit pi's configured default model (the parent session model). This prevents the LLM from freelancing a model (e.g., copying the subagent extension's doc examples) and spawning agents on an unconfigured provider, which left them stuck at the login prompt. `/senai-doctor` agent file integrity now also warns when a mapped agent pins a `model` in its frontmatter, naming the pinned model and explaining the default-model impact.
+
 ### Changed
 
 - All one-shot dialogs (files menu, folder browser, truth-document picker, project-type and technology prompts, per-role agent menus, and the four yes/no confirms) now use a shared single-choice picker (`ui/simple-picker.ts`) with the same visual language as the role picker and list editor (border, title, `→` cursor, dim footer). Handlers use stable item ids instead of label matching. Non-TUI fallback behavior is unchanged.

@@ -18,5 +18,11 @@ export function buildAgentRegistryBlock(config: AgentConfig | null): string {
 
   lines.push("");
   lines.push("If a role is not listed above, use the default agent name.");
+  lines.push("");
+  lines.push(
+    "Model rule: NEVER pass the `model` parameter to `subagent()` and never set a model override. " +
+      "Subagents must inherit pi's configured default model (the parent session model). " +
+      "Passing a model can spawn agents on an unconfigured provider and leave them stuck at login.",
+  );
   return lines.join("\n");
 }

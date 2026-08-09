@@ -424,3 +424,22 @@ describe("coverage audit gaps", () => {
     assert.deepStrictEqual(parseKeywords(null), []);
   });
 });
+
+describe("model inheritance", () => {
+  it("generated agents never pin a model in frontmatter (all 14 roles)", () => {
+    const tmpDir = makeTmpDir("agent-gen-nomodel-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    assert.strictEqual(plans.length, GENERATED_ROLES.length);
+    for (const plan of plans) {
+      const frontmatter = plan.content.split("---")[1] ?? "";
+      assert.ok(
+        !/^model:/m.test(frontmatter),
+        `${plan.agentName} must not pin a model — subagents inherit pi's default model`,
+      );
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

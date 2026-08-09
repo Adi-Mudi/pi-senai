@@ -56,4 +56,16 @@ describe("agent-registry", () => {
     const line = block.split("\n").find((l) => l.startsWith("- Planner (planner)"));
     assert.strictEqual(line, `- Planner (planner) (default) → ${DEFAULT_AGENTS.planner}`);
   });
+
+  it("includes the model inheritance rule", () => {
+    const block = buildAgentRegistryBlock(null);
+    assert.ok(block.includes("NEVER pass the `model` parameter to `subagent()`"));
+    assert.ok(block.includes("inherit pi's configured default model"));
+  });
+
+  it("model rule appears for custom configs too", () => {
+    const config: AgentConfig = { version: 1, agents: { planner: "gas-planner" } };
+    const block = buildAgentRegistryBlock(config);
+    assert.ok(block.includes("NEVER pass the `model` parameter to `subagent()`"));
+  });
 });

@@ -1558,6 +1558,13 @@ function checkAgentFileIntegrity(
       problems.push({ status: "warning", text: `unknown thinking level "${thinking}"` });
     }
 
+    if (agent.frontmatter.model) {
+      problems.push({
+        status: "warning",
+        text: `frontmatter pins model "${agent.frontmatter.model}" — subagent will not inherit pi's default model; remove the model field unless intentional`,
+      });
+    }
+
     const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
     if (!body) {
       problems.push({ status: "error", text: "agent body is empty — no instructions" });

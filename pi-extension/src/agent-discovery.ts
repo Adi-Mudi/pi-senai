@@ -103,6 +103,7 @@ export interface AgentFrontmatter {
   skills?: string[];
   maxSubagentDepth?: number;
   thinking?: string;
+  model?: string;
 }
 
 export function parseAgentFile(
@@ -132,12 +133,13 @@ export function parseAgentFileFull(filePath: string): AgentFrontmatter | undefin
     const skills = parseStringArray(frontmatter.skills);
     const output = frontmatter.output ? String(frontmatter.output) : undefined;
     const thinking = frontmatter.thinking ? String(frontmatter.thinking) : undefined;
+    const model = frontmatter.model ? String(frontmatter.model) : undefined;
     const maxSubagentDepth =
       typeof frontmatter.maxSubagentDepth === "number"
         ? frontmatter.maxSubagentDepth
         : undefined;
 
-    return { name, description, filePath, tools, output, skills, maxSubagentDepth, thinking };
+    return { name, description, filePath, tools, output, skills, maxSubagentDepth, thinking, model };
   } catch {
     return undefined;
   }

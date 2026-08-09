@@ -1330,6 +1330,35 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("integrity check warns when an agent pins a model, and stays clean without one", () => {
+    const tmpDir = makeTmpDir("doctor-integrity-model-");
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "pinned.md"),
+      ["---", "name: pinned", "description: x", "tools: read", "model: anthropic/claude-haiku-4-5", "---", "", "# body"].join("\n"),
+    );
+    writeFile(
+      tmpDir,
+      path.join(".pi", "agents", "clean.md"),
+      ["---", "name: clean", "description: x", "tools: read", "---", "", "# body"].join("\n"),
+    );
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "pinned", "scout-3": "clean" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Agent file integrity");
+    const pinnedItem = section.items.find((i) => i.message.includes("pinned"));
+    assert.ok(pinnedItem, "should report the pinned agent");
+    assert.strictEqual(pinnedItem.status, "warning");
+    assert.ok(
+      pinnedItem.details?.some((d) => d.includes("anthropic/claude-haiku-4-5") && d.includes("default model")),
+      "should name the pinned model and explain the default-model impact",
+    );
+    assert.ok(
+      !section.items.some((i) => i.message.includes("clean")),
+      "agent without a model field must not be flagged",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("secret scan warns on a planted api key and passes a clean tree", () => {
     const tmpDir = makeTmpDir("doctor-secret-");
     writeFile(
