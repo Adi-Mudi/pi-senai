@@ -36,25 +36,45 @@ This guide walks you through running a full **Plan → Implement → Document �
 
 ## Configure the senai
 
-Before you run any stage, you must create three configuration files. Pi Senai will block stage commands until these exist and are valid.
+Before you run any stage, three configuration files must exist (`agents.json`, `files.json`, `agents_files.json`). The generate commands create `agents.json` for you. Run these commands in order:
 
-1. **Configure agents** — map each Senai role to a subagent name:
-
-   ```text
-   /senai-configure-agents
-   ```
-
-2. **Configure project files** — select code paths, input documents, and test paths:
+1. **Configure project files** — select code paths, input documents, and test paths:
 
    ```text
    /senai-configure-files
    ```
 
-3. **Configure agent document assignments** — assign truth and comparison documents per role:
+2. **Select architect inputs** — pick the documents the architect agent reads:
+
+   ```text
+   /senai-configure-architect-inputs
+   ```
+
+3. **Generate the architecture** — creates the architecture docs, agents, and skills, and maps the seven architecture-bound roles in `agents.json`:
+
+   ```text
+   /senai-generate-architect
+   ```
+
+4. **Generate the sub-agent team** — generates agents for the remaining fourteen roles and maps them in `agents.json`. Existing custom agents are skipped:
+
+   ```text
+   /senai-generate-sub-agents
+   ```
+
+5. **Configure agent document assignments** — assign truth and comparison documents per role:
 
    ```text
    /senai-configure-agents-files
    ```
+
+6. **Verify the setup** — run a full diagnostic and check the report:
+
+   ```text
+   /senai-doctor
+   ```
+
+`/senai-configure-agents` is optional: use it only to hand-pick your own agents instead of the generated ones.
 
 Check the current settings anytime with `/senai-agents`, `/senai-files`, and `/senai-agents-files`.
 

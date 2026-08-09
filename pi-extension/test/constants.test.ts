@@ -8,6 +8,7 @@ import {
   getArtifactPaths,
   getDefaultArtifactPaths,
   makeRunId,
+  STAGES,
   STAGE_TRANSITIONS,
   formatStageStatus,
   getArchitectStateDir,
@@ -151,6 +152,85 @@ describe("constants", () => {
     const status = formatStageStatus({ currentStage: "none" });
     assert.ok(status.includes("Active stage: none"));
     assert.ok(!status.includes("Mission:"));
+    assert.ok(!status.includes("Run ID:"));
+  });
+
+  it("makeRunId strips unicode and emoji from the mission slug", () => {
+    const runId = makeRunId("Fix the 🚀 login बग");
+    assert.match(runId, /^[a-z0-9-]+$/);
+  });
+
+  it("formatStageStatus shows runId when mission is missing", () => {
+    const status = formatStageStatus({ currentStage: "planning", runId: "run-1" });
+    assert.ok(status.includes("Run ID: run-1"));
+    assert.ok(!status.includes("Mission:"));
+  });
+
+  it("STAGE_TRANSITIONS has an entry for every stage", () => {
+    for (const stage of STAGES) {
+      assert.ok(Array.isArray(STAGE_TRANSITIONS[stage]), `Missing transitions for ${stage}`);
+    }
+  });
+
+  it("makeRunId falls back to run when the mission has no slug characters", () => {
+    const runId = makeRunId("!!!");
+    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-run$/);
+  });
+
+  it("makeRunId cuts the slug at exactly 40 characters", () => {
+    // A 40-character slug stays whole.
+    const exact = makeRunId("a".repeat(40));
+    const exactSlug = exact.split("-").slice(5).join("-");
+    assert.strictEqual(exactSlug, "a".repeat(40));
+
+    // A 41-character slug is cut at 40.
+    const longer = makeRunId("a".repeat(41));
+    const longerSlug = longer.split("-").slice(5).join("-");
+    assert.strictEqual(longerSlug, "a".repeat(40));
+
+    // Leading/trailing dashes are stripped before the slice, so a cut can
+    // leave a trailing "-" in place.
+    const dashed = makeRunId(`${"a".repeat(39)}!bbbb`);
+    const dashedSlug = dashed.split("-").slice(5).join("-");
+    assert.strictEqual(dashedSlug.length, 40);
+    assert.ok(dashedSlug.endsWith("-"));
+  });
+
+  it("getArtifactPaths returns all 19 fields", () => {
+    const artifacts = getArtifactPaths(cwd, "run-1");
+    const keys = Object.keys(artifacts).sort();
+    assert.deepStrictEqual(keys, [
+      "deliverDir",
+      "deliverSummary",
+      "discussionNotes",
+      "documentDir",
+      "implementDir",
+      "plan",
+      "planDir",
+      "planOverview",
+      "planReviewsDir",
+      "planScoutsDir",
+      "reviewCorrectness",
+      "reviewSecurity",
+      "reviewTests",
+      "runDir",
+      "scoutAngle1",
+      "scoutAngle2",
+      "scoutAngle3",
+      "scoutAngle4",
+      "securityReport",
+    ]);
+    const runDir = path.join(cwd, ".IDE_Plans/senai/runs/run-1");
+    assert.strictEqual(artifacts.scoutAngle2, path.join(runDir, "plan/scouts/scout-angle_2.md"));
+    assert.strictEqual(artifacts.scoutAngle3, path.join(runDir, "plan/scouts/scout-angle_3.md"));
+    assert.strictEqual(artifacts.reviewSecurity, path.join(runDir, "plan/reviews/review-security.md"));
+    assert.strictEqual(artifacts.reviewTests, path.join(runDir, "plan/reviews/review-tests.md"));
+    assert.strictEqual(artifacts.deliverSummary, path.join(runDir, "deliver/deliver-summary.md"));
+  });
+
+  it("formatStageStatus shows the mission line without a runId line", () => {
+    const status = formatStageStatus({ currentStage: "planning", mission: "test mission" });
+    assert.ok(status.includes("Mission: test mission"));
     assert.ok(!status.includes("Run ID:"));
   });
 });

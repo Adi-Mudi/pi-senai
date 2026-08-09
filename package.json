@@ -17,11 +17,7 @@
       "pi-extension/src/index.ts"
     ],
     "skills": [
-      "skills/senai-plan",
-      "skills/senai-implement",
-      "skills/senai-document",
-      "skills/senai-deliver",
-      "skills/senai-generate-architect"
+      "./skills"
     ]
   },
   "peerDependencies": {

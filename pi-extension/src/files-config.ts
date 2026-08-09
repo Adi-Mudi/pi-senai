@@ -1,7 +1,11 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { looksLikeTestPath } from "./files-discovery.js";
 
 export const FILES_CONFIG_FILE = "files.json";
+
+export const FILES_CONFIG_COMMENT =
+  "Senai config: project code paths, input documents, test paths, and excluded paths. Managed by /senai-configure-files.";
 
 export const CURRENT_FILES_CONFIG_VERSION = 2;
 
@@ -41,6 +45,7 @@ export function loadFilesConfig(cwd: string): FilesConfig | null {
   try {
     const raw = fs.readFileSync(configPath, "utf8");
     const parsed = JSON.parse(raw) as FilesConfigV1 | FilesConfig;
+    delete (parsed as unknown as Record<string, unknown>)._comment;
     if (parsed.version === 1) {
       return migrateFilesConfig(parsed as FilesConfigV1);
     }
@@ -55,7 +60,11 @@ export function loadFilesConfig(cwd: string): FilesConfig | null {
 export function saveFilesConfig(cwd: string, config: FilesConfig): void {
   const configPath = getFilesConfigPath(cwd);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({ _comment: FILES_CONFIG_COMMENT, ...config }, null, 2),
+    "utf8",
+  );
 }
 
 export function validateFilesConfig(config: FilesConfig): void {
@@ -85,14 +94,14 @@ export function migrateFilesConfig(v1: FilesConfigV1): FilesConfig {
   for (const f of v1.files) {
     const lower = f.toLowerCase();
     if (f.endsWith("/")) {
-      if (lower.includes("test") || lower.includes("spec")) {
+      if (looksLikeTestPath(f)) {
         testPaths.push(f);
       } else {
         codePaths.push(f);
       }
     } else if (lower.startsWith("doc/") || lower.startsWith("docs/")) {
       inputDocuments.push(f);
-    } else if (lower.includes("test") || lower.includes("spec")) {
+    } else if (looksLikeTestPath(f)) {
       testPaths.push(f);
     } else {
       inputDocuments.push(f);

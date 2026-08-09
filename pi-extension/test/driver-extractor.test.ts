@@ -276,4 +276,225 @@ describe("driver-extractor", () => {
     assert.strictEqual(normalized!.constraints[0].id, "C-1");
     assert.strictEqual(normalized!.technicalConcerns[0].id, "TC-1");
   });
+
+  it("normalizeDrivers returns null for non-object input", () => {
+    assert.strictEqual(normalizeDrivers(null), null);
+    assert.strictEqual(normalizeDrivers([1, 2, 3]), null);
+    assert.strictEqual(normalizeDrivers("drivers"), null);
+  });
+
+  it("mergeDrivers deduplicates uncertainties and keeps order", () => {
+    const a = { ...createEmptyDrivers(), uncertainties: ["U1", "U2"] };
+    const b = { ...createEmptyDrivers(), uncertainties: ["U2", "U3"] };
+    const merged = mergeDrivers(a, b);
+    assert.deepStrictEqual(merged.uncertainties, ["U1", "U2", "U3"]);
+  });
+
+  it("loadDrivers returns null for valid JSON with the wrong shape", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "drivers-shape-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"),
+      JSON.stringify({ foo: 1 }),
+      "utf8",
+    );
+    assert.strictEqual(loadDrivers(tmpDir), null);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("findDriverGaps treats performance and scalability categories as scale coverage", () => {
+    const performanceDrivers: ArchitecturalDrivers = {
+      functionalRequirements: [{ id: "FR-1", description: "Do X" }],
+      qualityAttributes: [{ id: "QA-1", category: "performance", description: "Fast" }],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    assert.ok(
+      !findDriverGaps(performanceDrivers).some((g) => g.category === "scale"),
+      "category \"performance\" suppresses the scale gap",
+    );
+
+    const scalabilityDrivers: ArchitecturalDrivers = {
+      functionalRequirements: [{ id: "FR-1", description: "Do X" }],
+      qualityAttributes: [{ id: "QA-1", category: "scalability", description: "Scales" }],
+      constraints: [],
+      technicalConcerns: [],
+      uncertainties: [],
+    };
+    assert.ok(
+      !findDriverGaps(scalabilityDrivers).some((g) => g.category === "scale"),
+      "category \"scalability\" suppresses the scale gap",
+    );
+  });
+
+  it("findDriverGaps treats environment/platform constraints and cloud concerns as deployment coverage", () => {
+    for (const category of ["environment", "platform"]) {
+      const drivers = createEmptyDrivers();
+      drivers.constraints.push({ id: "C-1", category, description: "Deploy target" });
+      assert.ok(
+        !findDriverGaps(drivers).some((g) => g.category === "deployment"),
+        `constraint category "${category}" suppresses the deployment gap`,
+      );
+    }
+
+    const cloudDrivers = createEmptyDrivers();
+    cloudDrivers.technicalConcerns.push({ id: "TC-1", description: "Runs in the cloud" });
+    assert.ok(
+      !findDriverGaps(cloudDrivers).some((g) => g.category === "deployment"),
+      "a technical concern mentioning cloud suppresses the deployment gap",
+    );
+  });
+
+  it("findDriverGaps detects the project type from a functional requirement mentioning web", () => {
+    const drivers = createEmptyDrivers();
+    drivers.functionalRequirements.push({ id: "FR-1", description: "Serve a web dashboard" });
+    assert.ok(
+      !findDriverGaps(drivers).some((g) => g.category === "project-type"),
+      "a web functional requirement suppresses the project-type gap",
+    );
+  });
+
+  it("findDriverGaps matches quality attribute categories case-insensitively", () => {
+    const drivers = createEmptyDrivers();
+    drivers.qualityAttributes.push({ id: "QA-1", category: "Performance", description: "Fast" });
+    assert.ok(
+      !findDriverGaps(drivers).some((g) => g.category === "scale"),
+      "capital-P Performance still suppresses the scale gap",
+    );
+  });
+
+  it("normalizeDrivers lands category-less legacy items in constraints and skips empty descriptions", () => {
+    const legacy = {
+      drivers: [
+        { id: "C-1", description: "No category given" },
+        { id: "X-1", description: "" },
+      ],
+    };
+    const normalized = normalizeDrivers(legacy);
+    assert.ok(normalized);
+    assert.strictEqual(normalized!.constraints.length, 1);
+    assert.strictEqual(normalized!.constraints[0].id, "C-1");
+    assert.strictEqual(normalized!.constraints[0].category, "general");
+    assert.strictEqual(normalized!.functionalRequirements.length, 0);
+    assert.strictEqual(normalized!.qualityAttributes.length, 0);
+    assert.strictEqual(normalized!.technicalConcerns.length, 0);
+  });
+
+  it("mergeDrivers keeps the first occurrence description for duplicate ids", () => {
+    const a = createEmptyDrivers();
+    a.functionalRequirements.push({ id: "FR-1", description: "first" });
+    const b = createEmptyDrivers();
+    b.functionalRequirements.push({ id: "FR-1", description: "second" });
+
+    const merged = mergeDrivers(a, b);
+    assert.strictEqual(merged.functionalRequirements.length, 1);
+    assert.strictEqual(merged.functionalRequirements[0].description, "first");
+  });
+
+  it("normalizeDriverItem rejects a whitespace-only description", () => {
+    assert.strictEqual(normalizeDriverItem({ id: "X-1", description: "   " }), null);
+  });
+
+  it("normalizeDriverItem trims the source field", () => {
+    const item = normalizeDriverItem({ id: "X-1", description: "Do X", source: "  docs/PRD.md  " });
+    assert.ok(item);
+    assert.strictEqual(item!.source, "docs/PRD.md");
+    const blankSource = normalizeDriverItem({ id: "X-1", description: "Do X", source: "   " });
+    assert.ok(blankSource);
+    assert.strictEqual(blankSource!.source, undefined, "whitespace-only source is dropped");
+  });
+});
+
+describe("coverage audit gaps", () => {
+  it("normalizeQualityAttributeItem sets target only for a non-blank string", () => {
+    const withTarget = normalizeQualityAttributeItem({
+      id: "QA-1",
+      category: "scale",
+      description: "Scale",
+      target: "  100 users  ",
+    });
+    assert.ok(withTarget);
+    assert.strictEqual(withTarget!.target, "100 users", "target is trimmed and kept");
+
+    const blankTarget = normalizeQualityAttributeItem({
+      id: "QA-1",
+      category: "scale",
+      description: "Scale",
+      target: "   ",
+    });
+    assert.ok(blankTarget);
+    assert.strictEqual(blankTarget!.target, undefined, "whitespace-only target is omitted");
+
+    const nonStringTarget = normalizeQualityAttributeItem({
+      id: "QA-1",
+      category: "scale",
+      description: "Scale",
+      target: 42,
+    });
+    assert.ok(nonStringTarget);
+    assert.strictEqual(nonStringTarget!.target, undefined, "non-string target is omitted");
+  });
+
+  it("normalizeDriverItem returns null for non-object input", () => {
+    assert.strictEqual(normalizeDriverItem("a string"), null);
+    assert.strictEqual(normalizeDriverItem(null), null);
+    assert.strictEqual(normalizeDriverItem(42), null);
+  });
+
+  it("normalizeDrivers legacy schema skips non-object items and filters non-string uncertainties", () => {
+    const legacy = {
+      drivers: [
+        "not-an-object",
+        null,
+        42,
+        { id: "FR-1", category: "functional", description: "Do X" },
+      ],
+      uncertainties: ["U1", 42, null],
+    };
+
+    const normalized = normalizeDrivers(legacy);
+    assert.ok(normalized);
+    assert.strictEqual(normalized!.functionalRequirements.length, 1);
+    assert.strictEqual(normalized!.functionalRequirements[0].id, "FR-1");
+    assert.strictEqual(normalized!.qualityAttributes.length, 0);
+    assert.strictEqual(normalized!.constraints.length, 0);
+    assert.deepStrictEqual(normalized!.uncertainties, ["U1"]);
+  });
+
+  it("findDriverGaps covers deploy constraints, on-premise/offline concerns, and project-type keywords", () => {
+    const deployDrivers = createEmptyDrivers();
+    deployDrivers.constraints.push({ id: "C-1", category: "deployment", description: "Ship as one binary" });
+    assert.ok(
+      !findDriverGaps(deployDrivers).some((g) => g.category === "deployment"),
+      "a deploy-category constraint suppresses the deployment gap",
+    );
+
+    for (const description of ["Must run on-premise", "Must work fully offline"]) {
+      const drivers = createEmptyDrivers();
+      drivers.technicalConcerns.push({ id: "TC-1", description });
+      assert.ok(
+        !findDriverGaps(drivers).some((g) => g.category === "deployment"),
+        `technical concern "${description}" suppresses the deployment gap`,
+      );
+    }
+
+    for (const description of ["A mobile client", "A desktop tool", "Controls a plc line", "Runs on embedded hardware", "An iot gateway"]) {
+      const drivers = createEmptyDrivers();
+      drivers.technicalConcerns.push({ id: "TC-1", description });
+      assert.ok(
+        !findDriverGaps(drivers).some((g) => g.category === "project-type"),
+        `technical concern "${description}" suppresses the project-type gap`,
+      );
+    }
+
+    for (const description of ["Sync with a mobile app", "Export to a desktop report"]) {
+      const drivers = createEmptyDrivers();
+      drivers.functionalRequirements.push({ id: "FR-1", description });
+      assert.ok(
+        !findDriverGaps(drivers).some((g) => g.category === "project-type"),
+        `functional requirement "${description}" suppresses the project-type gap`,
+      );
+    }
+  });
 });

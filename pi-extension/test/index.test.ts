@@ -145,4 +145,113 @@ describe("index", () => {
     assert.strictEqual(registeredCommands.length, 0);
     delete process.env.PI_SUBAGENT_NAME;
   });
+
+  it("before_agent_start rejects when state.json is corrupted", async () => {
+    const api = makeApi();
+    piSenaiExtension(api);
+
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), "{ not valid json");
+
+    await assert.rejects(
+      () => eventHandlers["before_agent_start"]({ systemPrompt: "base prompt" }, makeCtx()),
+      /Unexpected token|Expected property name/,
+    );
+  });
+
+  it("before_agent_start still appends the status block to an empty system prompt", async () => {
+    const api = makeApi();
+    piSenaiExtension(api);
+
+    const state = {
+      version: 1,
+      mission: "Test",
+      runId: "run-1",
+      currentStage: "implementing",
+      startedAt: "2026-06-12T00:00:00Z",
+      updatedAt: "2026-06-12T00:00:00Z",
+      stageResults: {},
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+
+    const result = await eventHandlers["before_agent_start"](
+      { systemPrompt: "" },
+      makeCtx(),
+    );
+
+    assert.ok(result.systemPrompt.includes("<pi-senai_status>"));
+    assert.ok(result.systemPrompt.includes("Active stage: implementing"));
+    assert.ok(result.systemPrompt.includes("</pi-senai_status>"));
+  });
+});
+
+describe("coverage audit gaps", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-index-test-"));
+  });
+
+  function makeApi(): ExtensionAPI {
+    return {
+      registerCommand: () => {},
+      registerTool: () => {},
+      registerMessageRenderer: () => {},
+      on: () => {},
+      sendUserMessage: () => {},
+      sendMessage: () => {},
+    } as unknown as ExtensionAPI;
+  }
+
+  it("logs legacy orchestra dir and architect state migrations on load", () => {
+    // The extension migrates under process.cwd(), so point it at the tmp dir.
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "orchestra"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "orchestra"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "architect"), { recursive: true });
+    fs.writeFileSync(
+      path.join(tmpDir, ".IDE_Plans", "architect", "architect-report.json"),
+      "{}",
+    );
+
+    const logs: string[] = [];
+    const originalLog = console.log;
+    const previousCwd = process.cwd();
+    console.log = (msg: any) => {
+      logs.push(String(msg));
+    };
+    try {
+      process.chdir(tmpDir);
+      piSenaiExtension(makeApi());
+    } finally {
+      process.chdir(previousCwd);
+      console.log = originalLog;
+    }
+
+    assert.ok(
+      logs.some((l) => l.includes("Migrated 1 architecture file(s) to .pi/architect/.")),
+      `expected the architect migration log line, got: ${logs.join(" | ")}`,
+    );
+    assert.ok(
+      logs.some((l) => l.includes("Migrated legacy directories:")),
+      `expected the orchestra dir migration log line, got: ${logs.join(" | ")}`,
+    );
+    assert.ok(fs.existsSync(path.join(tmpDir, ".IDE_Plans", "senai")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "architect", "architect-report.json")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans", "orchestra")));
+  });
+
+  it("registerArchitectTools registers both architect tools", () => {
+    const tools: string[] = [];
+    const api = makeApi();
+    (api as any).registerTool = (tool: { name: string }) => {
+      tools.push(tool.name);
+    };
+
+    piSenaiExtension(api);
+
+    assert.ok(tools.includes("senai_merge_architect_drivers"));
+    assert.ok(tools.includes("senai_finalize_architecture"));
+  });
 });

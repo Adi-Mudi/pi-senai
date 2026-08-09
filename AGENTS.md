@@ -59,6 +59,7 @@ npm test
 │   ├── agent-suggestions.ts # suggest agents per Senai role
 │   ├── agent-config.ts           # load/save/validate .pi/senai/agents.json
 │   ├── agent-registry.ts         # build agent registry prompt block
+│   ├── agent-generator.ts        # deterministic sub-agent generator (/senai-generate-sub-agents)
 │   ├── files-config.ts           # load/save/validate .pi/senai/files.json
 │   └── agents-files-config.ts    # load/save/validate .pi/senai/agents_files.json
 ├── pi-extension/test/   # unit tests
@@ -89,11 +90,13 @@ Three config files live under `.pi/senai/`:
 |---|---|---|
 | `agents.json` | `/senai-configure-agents` | Maps each Senai role to a subagent name. Roles are shown with friendly labels (e.g., `Scout 1 — Architecture / big-picture`). |
 | `files.json` | `/senai-configure-files` | Categorized project context: code paths, input documents, and test paths. |
-| `agents_files.json` | `/senai-configure-agents-files` | Per-role truth document and comparison documents. Document suggestions come from `files.json` `inputDocuments` and discovered markdown files. The custom role picker highlights roles that already have assignments. |
+| `agents_files.json` | `/senai-configure-agents-files` | Per-role truth document and comparison documents. The picker shows only the 7 picker-visible roles (`PICKER_ROLES` in `agent-suggestions.ts`) with colored guidance tags (`ROLE_GUIDANCE`); the 4 sequence-orchestrated roles (`SEQUENCE_ROLES`: discussion, planner, code-review, security-gate) and artifact-driven roles are hidden but stay valid in JSON, and doctor keeps suggesting documents for the sequence roles. Document suggestions come from `architect-inputs.json` document types first, then `files.json` `inputDocuments`. When recommended roles lack a truth document, doctor warns with concrete suggestions (`document-suggestions.ts`). Rows show the plain document type each role needs (`roleDocumentNeed` in `document-suggestions.ts`) and doctor's suggested file for unassigned roles. Misassignments are errors: artifact-driven roles carrying documents, or a truth document that contradicts the role's expected document type. Roles without suggestion rules (`scout-2`, `plan-overview`) are checked against the agent's mandate; `scout-3` stays existence-only; unverifiable assignments get an explicit warning. |
 
-All three files are required before any stage command (`/senai-plan`, `/senai-implement`, `/senai-document`, `/senai-deliver`) will run. Run the corresponding `/senai-configure-*` command for each missing file.
+All three files are required before any stage command (`/senai-plan`, `/senai-implement`, `/senai-document`, `/senai-deliver`) will run. `agents.json` is normally created by the generate commands (see below); `/senai-configure-agents` is the optional manual override for hand-picking custom agents. Run `/senai-configure-files` and `/senai-configure-agents-files` for the other two files.
 
-Use `/senai-doctor` to audit the full setup. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs.
+Every `.pi/senai/` config file (these three plus `architect-inputs.json`) starts with a `_comment` field: a one-line plain instruction saying what the file is for and which command manages it. Savers always write it; loaders strip it after parsing, so the in-memory shape and validation are unchanged.
+
+Use `/senai-doctor` to audit the full setup. Every report opens with a "Setup progress" section that marks the 7 setup steps done or pending and names the one next command, so a first-time user can follow it step by step. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs. Once an architecture exists, it also validates the architecture agent mapping (the seven architecture-bound roles must resolve to the generated agents (code-review shares the reviewer-correctness agent)), the generated agent file contents (tools, skill link, architecture.md/ADR references, forbidden patterns), and drift (content-hash manifest). Strict checks also cover generated team agents (mandate and technology craft), technology resources, every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), and a secret scan over agent, skill, and config files. Each run saves the report to `.IDE_Plans/senai/doctor-report.md`.
 
 ## Architecture factory layout
 
@@ -114,7 +117,7 @@ The `/senai-generate-architect` command produces a one-time architecture for the
 | `architect-report.json` | Full architecture report. |
 | `architecture.md` | Human-readable architecture description. |
 | `adrs/*.md` | Architecture decision records. |
-| `architect-map/*.json` | Intermediate per-document driver files (temporary). |
+| `.IDE_Plans/architect-map/*.json` | Intermediate per-document driver files (temporary; outside `.pi/`). |
 
 **Generated Pi-discoverable outputs (live in `.pi/` per Pi docs):**
 
@@ -125,8 +128,17 @@ The `/senai-generate-architect` command produces a one-time architecture for the
 
 The factory uses two deterministic tools to avoid LLM drift:
 
-- `senai_merge_architect_drivers` — merges map outputs and cleans stale root files.
-- `senai_finalize_architecture` — generates docs, agents, and skills with exact names.
+- `senai_merge_architect_drivers` — merges map outputs for the currently configured documents only, deletes stale map files from removed or renamed documents, and cleans stale root files.
+- `senai_finalize_architecture` — generates docs, agents, and skills with exact names. Removes agents and skills left over from previous architecture runs and regenerates the ADR set to match the report. Also auto-maps the seven architecture-bound roles in `agents.json` (creating the file if missing) via `autoMapArchitectureAgents`: roles on built-in defaults or pointing at stale generated agents for the same project are remapped; other custom mappings are never touched. The role→agent mapping lives in the shared `ARCHITECTURE_AGENT_MAPPING` constant in `architect.ts`, which doctor also uses.
+
+## Sub-agent generation
+
+`/senai-generate-sub-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context.
+
+- Technology resources live in `resources/technologies/` (bundled) and `.pi/technologies/` (project overrides). Adding a technology means adding one markdown file with `id`, `name`, `keywords` frontmatter — no code change. When nothing matches, the user chooses: fetch the resource from official documentation (distilled into `.pi/technologies/<tech>.md`), use `generic`, or cancel — generic is never a silent default.
+- Every resource must be sourced from official documentation with cited URLs and carry the template sections (core rules, testing patterns, tooling/limits, common mistakes). Doctor validates all of this in the "Technology resources" section, plus keyword matchability.
+- Only roles on built-in defaults are generated; existing custom agents and mappings are never touched. After one confirmation, files land in `.pi/agents/` and `agents.json` is updated (created if missing — no prior configuration is needed).
+
 
 ### `files.json` schema (version 2)
 

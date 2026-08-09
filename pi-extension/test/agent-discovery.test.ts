@@ -226,4 +226,185 @@ describe("agent-discovery", () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("parseAgentFileFull parses comma-string tools into an array", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "comma-agent.md");
+    fs.writeFileSync(
+      filePath,
+      "---\nname: comma-agent\ndescription: Comma agent\ntools: read, write\n---\n",
+      "utf8",
+    );
+    const parsed = parseAgentFileFull(filePath);
+    assert.deepStrictEqual(parsed?.tools, ["read", "write"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discoverAgents returns built-ins when no project agents exist", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-none-"));
+    const agents = discoverAgents(tmpDir);
+    const names = agents.map((a) => a.name);
+    assert.ok(names.includes("scout"));
+    assert.ok(names.includes("planner"));
+    assert.ok(names.includes("security-auditor"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFile returns undefined for broken frontmatter", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-broken-"));
+    const filePath = path.join(tmpDir, "broken.md");
+    fs.writeFileSync(filePath, "---\nname: [unclosed\n---\nbody", "utf8");
+    assert.strictEqual(parseAgentFile(filePath), undefined);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("a project agent named scout shadows the built-in scout without duplication", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    makeAgentFile(agentsDir, "scout", "---\nname: scout\ndescription: Project scout\n---\n");
+
+    const agents = discoverAgents(tmpDir);
+    const scouts = agents.filter((a) => a.name === "scout");
+    assert.strictEqual(scouts.length, 1);
+    assert.strictEqual(scouts[0].source, "project");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("skips a subdirectory named *.md inside .pi/agents without crashing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(path.join(agentsDir, "foo.md"), { recursive: true });
+
+    let agents: ReturnType<typeof discoverAgents> = [];
+    assert.doesNotThrow(() => {
+      agents = discoverAgents(tmpDir);
+    });
+    assert.ok(!agents.some((a) => a.filePath === path.join(agentsDir, "foo.md")));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("skips a broken symlink without throwing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.symlinkSync(path.join(tmpDir, "missing-target.md"), path.join(agentsDir, "broken.md"));
+
+    let agents: ReturnType<typeof discoverAgents> = [];
+    assert.doesNotThrow(() => {
+      agents = discoverAgents(tmpDir);
+    });
+    assert.ok(!agents.some((a) => a.name === "broken"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("findNearestProjectAgentsDir returns null when no ancestor has .pi/agents", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-null-"));
+    const deep = path.join(tmpDir, "a", "b", "c");
+    fs.mkdirSync(deep, { recursive: true });
+
+    // Assumes no ancestor of os.tmpdir() itself provides .pi/agents.
+    assert.strictEqual(findNearestProjectAgentsDir(deep), null);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("findNearestProjectAgentsDir returns the nearest .pi/agents when nested and parent both have one", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const outerAgentsDir = path.join(tmpDir, ".pi", "agents");
+    const nestedDir = path.join(tmpDir, "sub");
+    const innerAgentsDir = path.join(nestedDir, ".pi", "agents");
+    fs.mkdirSync(outerAgentsDir, { recursive: true });
+    fs.mkdirSync(innerAgentsDir, { recursive: true });
+
+    assert.strictEqual(findNearestProjectAgentsDir(nestedDir), innerAgentsDir);
+    assert.strictEqual(findNearestProjectAgentsDir(path.join(nestedDir, "deeper", "dir")), innerAgentsDir);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFile returns undefined for a file with no frontmatter", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "plain.md");
+    fs.writeFileSync(filePath, "# Just a heading\n\nNo frontmatter here.\n", "utf8");
+
+    assert.strictEqual(parseAgentFile(filePath), undefined);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFile returns undefined for a nonexistent file", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    assert.strictEqual(parseAgentFile(path.join(tmpDir, "does-not-exist.md")), undefined);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFile treats a whitespace-only name as missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "whitespace.md");
+    fs.writeFileSync(filePath, '---\nname: "   "\ndescription: Whitespace name\n---\n', "utf8");
+
+    assert.strictEqual(parseAgentFile(filePath), undefined);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFileFull returns undefined when description is missing", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "no-desc-full.md");
+    fs.writeFileSync(filePath, "---\nname: no-desc-full\n---\n", "utf8");
+
+    assert.strictEqual(parseAgentFileFull(filePath), undefined);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFileFull ignores a string maxSubagentDepth", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "str-depth.md");
+    fs.writeFileSync(
+      filePath,
+      '---\nname: str-depth\ndescription: String depth\nmaxSubagentDepth: "2"\n---\n',
+      "utf8",
+    );
+
+    const parsed = parseAgentFileFull(filePath);
+    assert.ok(parsed);
+    assert.strictEqual(parsed.maxSubagentDepth, undefined);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("coverage audit gaps", () => {
+  it("parseAgentFileFull ignores array fields that are neither string nor array", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+    const filePath = path.join(tmpDir, "numeric-tools.md");
+    fs.writeFileSync(
+      filePath,
+      "---\nname: numeric-tools\ndescription: Numeric tools field\ntools: 5\n---\n",
+      "utf8",
+    );
+
+    const parsed = parseAgentFileFull(filePath);
+    assert.ok(parsed);
+    assert.strictEqual(parsed.tools, undefined, "a numeric tools value must not be parsed into an array");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("parseAgentFileFull returns undefined for a nonexistent or unreadable file", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-disc-"));
+
+    assert.strictEqual(parseAgentFileFull(path.join(tmpDir, "does-not-exist.md")), undefined);
+
+    // A directory named *.md cannot be read as a file; the catch must return undefined.
+    const dirPath = path.join(tmpDir, "unreadable.md");
+    fs.mkdirSync(dirPath, { recursive: true });
+    assert.strictEqual(parseAgentFileFull(dirPath), undefined);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

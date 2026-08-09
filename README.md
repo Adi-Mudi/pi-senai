@@ -31,27 +31,41 @@ npm test
 
 ## Before your first run
 
-Pi Senai requires three configuration files before any stage command will run:
+Run these commands in order. The generate commands create your sub-agent team and the `agents.json` mapping for you:
 
-1. **Agent configuration** — map each Senai role to a subagent name:
-
-   ```
-   /senai-configure-agents
-   ```
-
-2. **Project file configuration** — tell Senai which code, input documents, and tests to include:
+1. **Project file configuration** — tell Senai which code, input documents, and tests to include:
 
    ```
    /senai-configure-files
    ```
 
-3. **Agent document assignments** — assign truth and comparison documents to each role:
+2. **Architect inputs** — select the documents the architect agent reads:
+
+   ```
+   /senai-configure-architect-inputs
+   ```
+
+3. **Architecture generation** — create the architecture documents, agents, and skills. This also creates `.pi/senai/agents.json` and maps the seven architecture-bound roles:
+
+   ```
+   /senai-generate-architect
+   ```
+
+4. **Sub-agent generation** — generate agents for the remaining fourteen roles and map them in `agents.json`. Existing custom agents are skipped, never touched:
+
+   ```
+   /senai-generate-sub-agents
+   ```
+
+5. **Agent document assignments** — assign truth and comparison documents to each role:
 
    ```
    /senai-configure-agents-files
    ```
 
 You can check the current settings with `/senai-agents`, `/senai-files`, and `/senai-agents-files`.
+
+`/senai-configure-agents` is optional: use it only to hand-pick your own agents instead of the generated ones. Pi Senai requires all three configuration files (`agents.json`, `files.json`, `agents_files.json`) before any stage command will run.
 
 After configuring, run a full diagnostic:
 
@@ -60,6 +74,12 @@ After configuring, run a full diagnostic:
 ```
 
 This checks that all config files exist, every mapped agent is found in the right place, each agent has the right tools for its Senai role, file scopes are valid, truth documents exist, and you are running inside a supported terminal multiplexer.
+
+Once an architecture is generated, doctor also validates it: the seven architecture-bound roles (`scout-1`, `planner`, `implementer`, `reviewer-correctness`, `reviewer-security`, `reviewer-tests`, `code-review`) must map to the generated agents, each generated agent file must be intact (tools, a working skill link, and references to `architecture.md`, the ADRs, and the forbidden patterns), and no generated file may be modified after generation (drift warning).
+
+Doctor is the final authority on your setup. Every report opens with a **Setup progress** section that shows which of the 7 setup steps are done and names the one next command — run `/senai-doctor` after every step and follow the arrow. Beyond the basics it also checks: generated team agents (mandate and technology craft present), technology resources (valid frontmatter, `generic` fallback present), every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), document misassignments (artifact-driven roles carrying truth/comparison documents, a truth document that contradicts the role's expected document type, or a document that does not match the agent's mandate — all errors, with an explicit warning when an assignment cannot be verified), and secrets accidentally committed in agent, skill, or config files.
+
+Every run saves the full report to `.IDE_Plans/senai/doctor-report.md` (overwritten each run).
 
 ## Usage
 
@@ -142,13 +162,15 @@ This command deep-scans your project and suggests real files and folders. It spl
 
 The scanner recognizes both standard folder names (like `src/`, `docs/`, `tests/`) and custom names by looking at the file types inside each folder. If you select a folder, the tool will not let you also select a file inside it, and vice versa, to avoid conflicts.
 
+The picker shows two clear sections: `✅ Selected (N)` pinned on top and `💡 Suggestions (N)` below, with uniform markers — Enter toggles an item between the groups. Long paths are middle-truncated so the filename always stays visible, and the focused row shows its full path in a detail line below the list.
+
 Configure document assignments for each role:
 
 ```
 /senai-configure-agents-files
 ```
 
-This command shows every Senai role in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Selecting a role opens the same custom list editor used by `/senai-configure-files`, pre-filled with documents from `/senai-configure-files` (the `inputDocuments` pool plus discovered markdown files).
+This command shows the document-reading Senai roles in a custom top-level picker with friendly labels (e.g., `Scout 1 — Architecture / big-picture`) so you can see what each role does before assigning documents. Only the 7 picker-visible roles are listed — the four scouts and the three reviewers. The sequence-orchestrated roles (discussion, planner, code review, security gate) follow stage artifacts automatically and are hidden; the artifact-driven roles (implementer, linter, writers, archive, …) consume stage outputs and are also hidden. Hidden roles stay valid in `agents_files.json` if you want to assign them by hand, and `/senai-doctor` still suggests documents for the sequence roles. Roles that already have a truth document or comparison documents are highlighted, so configured and unconfigured roles are easy to tell apart. Each row also shows a colored guidance tag: `[design-defined]` (green — set by the architecture factory), `[recommended]` (yellow — should be configured), or `[optional]` (dim — your choice). Rows also name the plain document type each role needs (e.g., `needs: RTM / traceability document`), and unassigned roles show doctor's concrete suggestion (e.g., `suggested: docs/RTM.md`), so you can assign correctly without prior knowledge. Selecting a role opens the same custom list editor used by `/senai-configure-files`, pre-filled with documents from `/senai-configure-files` (the `inputDocuments` pool plus discovered markdown files). Assignments are optional; when recommended roles have no truth document, `/senai-doctor` warns and suggests specific documents (from your `architect-inputs.json` document types first).
 
 Each role can have:
 
@@ -201,7 +223,7 @@ Pi Senai can generate project-specific architecture agents and skills from your 
    - `.pi/architect/architect-report.json` — the full architecture report.
    - `.pi/architect/architecture.md` — the human-readable software architecture document.
    - `.pi/architect/adrs/*.md` — architecture decision records.
-   - `.pi/architect-map/*.json` — intermediate per-document driver files.
+   - `.IDE_Plans/architect-map/*.json` — intermediate per-document driver files (temporary).
 
    Generated Pi-discoverable outputs:
 
@@ -210,11 +232,23 @@ Pi Senai can generate project-specific architecture agents and skills from your 
 
    The generated planner agent is used for architecture scouting (`scout-1`), and all generated agents instruct subagents to read `.pi/architect/architecture.md` and the relevant ADRs before acting.
 
-   If the input documents change, `/senai-generate-architect` detects it and asks whether to re-run the full architecture factory.
+   If the input documents, the document list, or the additional constraints change, `/senai-generate-architect` detects it and asks whether to re-run the full architecture factory. Re-runs are safe: map files from removed documents are discarded before merging, agents and skills from a previous architecture are removed, and the ADR set is regenerated to match the new report.
 
    If the architecture library lacks a matching pattern, the agent falls back to web search to gather relevant guidance before generating the agents.
 
    After generation, `/senai-doctor` also validates the architecture setup.
+
+## Agent generation
+
+`/senai-generate-sub-agents` creates project-specific sub-agents for the 14 non-architecture Senai roles (scouts 2–4, discussion, plan overview, test skeleton, linter, full test, the four doc writers, security gate, archive). The 7 architecture-bound roles are owned by `/senai-generate-architect` and are never generated here.
+
+- **Basic mode (default):** if no architect report exists, you answer 3–4 questions (project type, language, framework) and the full team is generated with sensible defaults. With an architect report, the generator reuses its tech stack and constraints.
+- **Technology resources:** agent craft comes from bundled resource files in `resources/technologies/` (`google-apps-script`, `python`, `generic`). The generator matches your tech stack against them. Every resource is sourced from official documentation with cited URLs.
+- **No silent generic:** when no resource matches, you choose — **Fetch from official docs** (the agent searches official documentation and distills a real resource file into `.pi/technologies/<tech>.md`, cited per section; re-run the command to use it), **Use generic**, or **Cancel**.
+- **Safety:** only roles still on built-in defaults are generated. Existing custom agents are never overwritten, and existing custom mappings are never changed. After one confirmation, the new agents are written to `.pi/agents/` and mapped in `agents.json`.
+- Run `/senai-doctor` afterwards to validate the setup.
+
+To add a technology: copy `resources/technologies/_template.md` to `<technology>.md`, fill the sections from official documentation (cite the URLs), and it is picked up automatically — no code change needed. Projects can also add or override resources in `.pi/technologies/`.
 
 ## Artifact layout
 
@@ -249,8 +283,9 @@ Pi Senai can generate project-specific architecture agents and skills from your 
   architecture.md
   adrs/
     0001-<title>.md
-  architect-map/              # intermediate per-document drivers
-    <sanitized-path>.json
+
+.IDE_Plans/architect-map/   # intermediate per-document drivers (temporary)
+  <sanitized-path>.json
 ```
 
 ## Development

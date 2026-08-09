@@ -11,6 +11,9 @@ import {
 export const CONFIG_DIR = ".pi/senai";
 export const CONFIG_FILE = "agents.json";
 
+export const CONFIG_COMMENT =
+  "Senai config: maps each Senai role to an agent name. Managed by /senai-generate-architect and /senai-generate-sub-agents (manual override: /senai-configure-agents). Hand-edit only if you know the role names.";
+
 export interface AgentConfig {
   version: number;
   agents: Partial<Record<SenaiRole, string>>;
@@ -25,6 +28,7 @@ export function loadAgentConfig(cwd: string): AgentConfig | null {
   try {
     const raw = fs.readFileSync(configPath, "utf8");
     const parsed = JSON.parse(raw) as AgentConfig;
+    delete (parsed as unknown as Record<string, unknown>)._comment;
     validateAgentConfig(parsed);
     return parsed;
   } catch (err: any) {
@@ -36,17 +40,24 @@ export function loadAgentConfig(cwd: string): AgentConfig | null {
 export function saveAgentConfig(cwd: string, config: AgentConfig): void {
   const configPath = getConfigPath(cwd);
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(config, null, 2), "utf8");
+  fs.writeFileSync(
+    configPath,
+    JSON.stringify({ _comment: CONFIG_COMMENT, ...config }, null, 2),
+    "utf8",
+  );
 }
 
 export function validateAgentConfig(config: AgentConfig): void {
   if (typeof config.version !== "number") {
     throw new Error("Missing or invalid 'version' field");
   }
-  if (!config.agents || typeof config.agents !== "object") {
+  if (!config.agents || typeof config.agents !== "object" || Array.isArray(config.agents)) {
     throw new Error("Missing or invalid 'agents' field");
   }
-  for (const role of Object.keys(config.agents)) {
+  for (const [role, agentName] of Object.entries(config.agents)) {
+    if (agentName !== undefined && typeof agentName !== "string") {
+      throw new Error(`agents.${role} must be a string`);
+    }
     if (!SENAI_ROLES.includes(role as SenaiRole)) {
       throw new Error(
         `Unknown role "${role}". Allowed roles: ${SENAI_ROLES.map((r) => `${ROLE_LABELS[r]} (${r})`).join(", ")}`,

@@ -1,5 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
+import { parseFrontmatter, getAgentDir } from "@mariozechner/pi-coding-agent";
 import {
   findNearestProjectAgentsDir,
   getUserAgentsDir,
@@ -11,24 +13,34 @@ import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { loadAgentsFilesConfig, type AgentsFilesConfig } from "./agents-files-config.js";
 import {
   DEFAULT_AGENTS,
+  DOCUMENT_ROLES,
   SENAI_ROLES,
   ROLE_LABELS,
   type SenaiRole,
 } from "./agent-suggestions.js";
 import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
+import { suggestTruthDocuments } from "./document-suggestions.js";
 import {
   ARCHITECT_ROLES,
   ARCHITECT_STAGES,
+  ARCHITECTURE_AGENT_MAPPING,
   discoverArchitectureLibrary,
   loadArchitectProfile,
   loadArchitectReport,
+  loadGeneratedManifest,
   slugify,
   type ArchitectProfile,
   type ArchitectReport,
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
-import { parseAgentFile } from "./agent-discovery.js";
-import { getArchitectStateDir, getArchitectMapDir } from "./constants.js";
+import { getArchitectStateDir } from "./constants.js";
+import {
+  GENERATED_ROLES,
+  getBundledTechnologiesDir,
+  getProjectSlug,
+  getProjectTechnologiesDir,
+  parseKeywords,
+} from "./agent-generator.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 
@@ -49,7 +61,7 @@ export interface DiagnosticReport {
   sections: DiagnosticSection[];
 }
 
-interface ResolvedAgent {
+export interface ResolvedAgent {
   name: string;
   source: "project" | "user" | "builtin" | "not found";
   filePath: string | null;
@@ -59,42 +71,25 @@ interface ResolvedAgent {
 
 const BUILTIN_AGENT_NAMES = Array.from(new Set(Object.values(DEFAULT_AGENTS)));
 
+// Tool requirements for the 14 generator roles come from GENERATED_ROLES
+// (single source of truth); architecture-bound roles are listed explicitly.
 const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
-  "scout-1": ["read"],
-  "scout-2": ["read"],
-  "scout-3": ["read"],
-  "scout-4": ["read"],
-  discussion: ["read"],
-  planner: ["read"],
-  "plan-overview": ["read"],
-  "reviewer-correctness": ["read"],
-  "reviewer-security": ["read"],
-  "reviewer-tests": ["read"],
-  "test-skeleton": ["read", "write"],
+  ...Object.fromEntries(GENERATED_ROLES.map((def) => [def.role, def.tools])),
+  "scout-1": ["read", "write"],
+  planner: ["read", "write"],
+  "reviewer-correctness": ["read", "write"],
+  "reviewer-security": ["read", "write"],
+  "reviewer-tests": ["read", "write"],
   implementer: ["read", "write", "edit"],
-  linter: ["read", "bash"],
-  "code-review": ["read"],
-  "full-test": ["read", "bash"],
-  "readme-writer": ["read", "write"],
-  "changelog-writer": ["read", "write"],
-  "api-docs-writer": ["read", "write"],
-  "other-docs-writer": ["read", "write"],
-  "security-gate": ["read"],
-  archive: ["read", "write", "bash"],
+  "code-review": ["read", "write"],
 };
 
 const READONLY_ROLES: SenaiRole[] = [
-  "scout-1",
   "scout-2",
   "scout-3",
   "scout-4",
   "discussion",
-  "planner",
   "plan-overview",
-  "reviewer-correctness",
-  "reviewer-security",
-  "reviewer-tests",
-  "code-review",
   "security-gate",
 ];
 
@@ -110,7 +105,13 @@ const CONFLICTING_READONLY_PATTERNS = [
 export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const sections: DiagnosticSection[] = [];
 
-  const agentConfig = loadAgentConfig(cwd);
+  let agentConfig: AgentConfig | null = null;
+  let agentConfigError: string | null = null;
+  try {
+    agentConfig = loadAgentConfig(cwd);
+  } catch (err: any) {
+    agentConfigError = err.message;
+  }
 
   let filesConfig: FilesConfig | null = null;
   let filesConfigError: string | null = null;
@@ -120,9 +121,16 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
     filesConfigError = err.message;
   }
 
-  const agentsFilesConfig = loadAgentsFilesConfig(cwd);
+  let agentsFilesConfig: AgentsFilesConfig | null = null;
+  let agentsFilesConfigError: string | null = null;
+  try {
+    agentsFilesConfig = loadAgentsFilesConfig(cwd);
+  } catch (err: any) {
+    agentsFilesConfigError = err.message;
+  }
 
-  sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError));
+  sections.push(checkSetupProgress(cwd));
+  sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
 
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
   sections.push(checkAgentMappings(resolvedAgents));
@@ -133,11 +141,19 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   }
 
   if (agentsFilesConfig) {
-    sections.push(checkAgentsFiles(cwd, agentsFilesConfig, filesConfig));
+    sections.push(checkAgentsFiles(cwd, agentsFilesConfig, filesConfig, resolvedAgents));
   }
 
   sections.push(checkEnvironment());
   sections.push(checkArchitectureSetup(cwd));
+  sections.push(checkArchitectureAgentMapping(cwd, agentConfig));
+  sections.push(checkGeneratedAgentContent(cwd));
+  sections.push(checkArchitectureDrift(cwd));
+  sections.push(checkGeneratedTeamContent(cwd, agentConfig));
+  sections.push(checkTechnologyResources(cwd));
+  sections.push(checkAgentSkillReferences(cwd, resolvedAgents));
+  sections.push(checkAgentFileIntegrity(cwd, resolvedAgents));
+  sections.push(checkSecretScan(cwd));
 
   const summary = sections.reduce(
     (acc, section) => {
@@ -154,17 +170,117 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   return { ok, summary, sections };
 }
 
+/** Setup-progress guide: detects which of the documented one-time setup steps
+ *  are complete and names the one next command. Guidance only — never emits
+ *  errors, so it cannot change the report's pass/fail verdict. */
+function checkSetupProgress(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  let filesDone = false;
+  try {
+    filesDone = loadFilesConfig(cwd) !== null;
+  } catch {
+    filesDone = false; // corrupted counts as not done; the config section reports it
+  }
+
+  let inputsDone = false;
+  try {
+    inputsDone = loadArchitectInputsConfig(cwd) !== null;
+  } catch {
+    inputsDone = false;
+  }
+
+  let architectDone = false;
+  try {
+    architectDone = loadArchitectReport(cwd) !== null;
+  } catch {
+    architectDone = false;
+  }
+
+  let agentsDone = false;
+  try {
+    const agentConfig = loadAgentConfig(cwd);
+    if (agentConfig) {
+      const slug = getProjectSlug(cwd);
+      agentsDone = GENERATED_ROLES.some((def) => {
+        const expectedName = `${slug}-${def.role}`;
+        return (
+          resolveAgentName(agentConfig, def.role as SenaiRole) === expectedName &&
+          fs.existsSync(path.join(cwd, ".pi", "agents", `${expectedName}.md`))
+        );
+      });
+    }
+  } catch {
+    agentsDone = false;
+  }
+
+  let agentsFilesDone = false;
+  try {
+    // Done means at least one real assignment (truth or reads) — an empty
+    // agents_files.json means the step was never actually performed.
+    const agentsFilesConfig = loadAgentsFilesConfig(cwd);
+    agentsFilesDone =
+      agentsFilesConfig !== null &&
+      Object.values(agentsFilesConfig.documents).some(
+        (docs) => docs?.primary !== undefined || (docs?.reads?.length ?? 0) > 0,
+      );
+  } catch {
+    agentsFilesDone = false;
+  }
+
+  const steps: Array<{ done: boolean; label: string; command: string }> = [
+    { done: filesDone, label: "Project files configured", command: "/senai-configure-files" },
+    { done: inputsDone, label: "Architect inputs selected", command: "/senai-configure-architect-inputs" },
+    { done: architectDone, label: "Architecture generated", command: "/senai-generate-architect" },
+    { done: agentsDone, label: "Sub-agent team generated", command: "/senai-generate-sub-agents" },
+    { done: agentsFilesDone, label: "Agent documents assigned", command: "/senai-configure-agents-files" },
+  ];
+
+  const completed = steps.filter((s) => s.done).length;
+  const allDone = completed === steps.length;
+
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    items.push({
+      status: step.done ? "ok" : "info",
+      message: `${i + 1}. ${step.label} — ${step.done ? "done" : `pending (run ${step.command})`}`,
+    });
+  }
+  items.push({ status: "info", message: "6. Doctor verification — this command" });
+  items.push({
+    status: allDone ? "ok" : "info",
+    message: `7. First run — ${allDone ? "ready (/senai-plan <mission>)" : "pending"}`,
+  });
+
+  if (allDone) {
+    items.push({ status: "ok", message: "Setup complete — run /senai-plan <mission> to start your first run." });
+  } else {
+    const next = steps.find((s) => !s.done)!;
+    items.push({ status: "info", message: `Setup progress: ${completed}/5 checks complete. Next: run ${next.command}.` });
+  }
+
+  return { title: "Setup progress", items };
+}
+
 function checkConfigFiles(
   cwd: string,
   agentConfig: AgentConfig | null,
   filesConfig: FilesConfig | null,
   agentsFilesConfig: AgentsFilesConfig | null,
   filesConfigError: string | null,
+  agentConfigError: string | null,
+  agentsFilesConfigError: string | null,
 ): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
   const agentPath = path.join(cwd, ".pi", "senai", "agents.json");
-  if (agentConfig) {
+  if (agentConfigError) {
+    items.push({
+      status: "error",
+      message: agentConfigError,
+      details: ["Run /senai-configure-agents to recreate the file."],
+    });
+  } else if (agentConfig) {
     items.push({ status: "ok", message: `agents.json found and valid at ${agentPath}` });
     if (agentConfig.version !== 1) {
       items.push({
@@ -176,7 +292,7 @@ function checkConfigFiles(
     items.push({
       status: "error",
       message: `agents.json missing or invalid at ${agentPath}`,
-      details: ["Run /senai-configure-agents to create it."],
+      details: ["Run /senai-generate-sub-agents (or /senai-generate-architect) to create it, or /senai-configure-agents to configure agents manually."],
     });
   }
 
@@ -198,7 +314,13 @@ function checkConfigFiles(
   }
 
   const agentsFilesPath = path.join(cwd, ".pi", "senai", "agents_files.json");
-  if (agentsFilesConfig) {
+  if (agentsFilesConfigError) {
+    items.push({
+      status: "error",
+      message: agentsFilesConfigError,
+      details: ["Run /senai-configure-agents-files to recreate the file."],
+    });
+  } else if (agentsFilesConfig) {
     items.push({
       status: "ok",
       message: `agents_files.json found and valid at ${agentsFilesPath}`,
@@ -329,7 +451,12 @@ function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): Dia
     const agent = resolved[role];
     const label = ROLE_LABELS[role];
 
-    if (agent.source === "not found" || !agent.frontmatter) continue;
+    // Default mappings and built-ins are the documented pre-generation
+    // fallback (Pi ships its planner/scout/reviewer agents read-only by
+    // design; the main session compensates writes). Capability checks apply
+    // to custom-mapped agents only.
+    const isDefaultMapping = agent.name === DEFAULT_AGENTS[role];
+    if (agent.source === "not found" || agent.source === "builtin" || isDefaultMapping || !agent.frontmatter) continue;
 
     const requiredTools = ROLE_REQUIRED_TOOLS[role] ?? [];
     const tools = agent.frontmatter.tools;
@@ -481,6 +608,7 @@ function checkAgentsFiles(
   cwd: string,
   config: AgentsFilesConfig,
   filesConfig: FilesConfig | null,
+  resolved: Record<SenaiRole, ResolvedAgent>,
 ): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
@@ -532,6 +660,108 @@ function checkAgentsFiles(
     }
   }
 
+  // Artifact-driven roles consume stage outputs, not project documents. A
+  // hand-edited assignment on one of these roles is a configuration error
+  // (the /senai-configure-agents-files picker hides these roles by design).
+  for (const role of SENAI_ROLES) {
+    if ((DOCUMENT_ROLES as readonly string[]).includes(role)) continue;
+    const docs = config.documents[role];
+    if (!docs) continue;
+    const hasAssignment =
+      docs.primary !== undefined || (docs.reads?.length ?? 0) > 0;
+    if (!hasAssignment) continue;
+    const label = ROLE_LABELS[role];
+    items.push({
+      status: "error",
+      message: `${label} (${role}) has document assignments, but this role reads stage artifacts, not project documents.`,
+      details: [
+        ...(docs.primary ? [`Truth document assigned: ${docs.primary}`] : []),
+        ...(docs.reads?.length
+          ? [`Comparison documents assigned: ${docs.reads.join(", ")}`]
+          : []),
+        "Fix: remove this role from agents_files.json (run /senai-configure-agents-files; artifact-driven roles are hidden there by design).",
+      ],
+    });
+  }
+
+  // A truth document that contradicts the suggestion rules is a
+  // misassignment: the file exists, so the existence check passes, but the
+  // role should follow a different document type. Strict error per user
+  // decision; roles without a confident suggestion are not judged.
+  const allSuggestions = suggestTruthDocuments(cwd);
+  for (const s of allSuggestions) {
+    const assigned = config.documents[s.role]?.primary;
+    if (!assigned || assigned === s.path) continue;
+    if (!fs.existsSync(path.resolve(cwd, assigned))) continue; // the MISSING error above already covers this
+    const label = ROLE_LABELS[s.role];
+    items.push({
+      status: "error",
+      message: `${label} (${s.role}) truth document mismatch: assigned ${assigned}, but the expected ${s.reason} looks like ${s.path}.`,
+      details: [
+        "The assigned file exists, but it does not match the document type this role should follow.",
+        `Fix: run /senai-configure-agents-files and set the truth document to ${s.path}. If the assignment is intentional, re-classify the document type via /senai-configure-architect-inputs.`,
+      ],
+    });
+  }
+
+  // Layer 2 — mandate check for roles the suggestion rules do not cover.
+  // Compare what the agent does (mandate/description) with what the document
+  // is (type, filename, first heading). No overlap = clear contradiction =
+  // error. Not enough signal = reported as unverifiable, never silent.
+  const unverifiable: string[] = [];
+  for (const role of MANDATE_CHECK_ROLES) {
+    const assigned = config.documents[role]?.primary;
+    if (!assigned) continue;
+    const fullPath = path.resolve(cwd, assigned);
+    if (!fs.existsSync(fullPath)) continue; // the MISSING error above already covers this
+    const docWords = documentSignalWords(cwd, assigned, fullPath);
+    const mandateWords = significantWords(mandateTextForRole(resolved[role], role));
+    if (docWords.size === 0 || mandateWords.size === 0) {
+      unverifiable.push(`${ROLE_LABELS[role]} (${role}) → ${assigned}`);
+      continue;
+    }
+    if (!wordsOverlap(docWords, mandateWords)) {
+      const label = ROLE_LABELS[role];
+      items.push({
+        status: "error",
+        message: `${label} (${role}) truth document does not match the agent's mandate: ${assigned}.`,
+        details: [
+          `Agent mandate: ${mandateTextForRole(resolved[role], role)}`,
+          "The document shows no overlap with what this agent does.",
+          "Fix: run /senai-configure-agents-files and assign a document that fits the role, or remove the assignment.",
+        ],
+      });
+    }
+  }
+  if (unverifiable.length > 0) {
+    items.push({
+      status: "warning",
+      message: `Doctor cannot verify ${unverifiable.length} document assignment(s) (not enough signal to judge).`,
+      details: [
+        ...unverifiable,
+        "These assignments pass, but they are YOUR responsibility — doctor has no rule for them.",
+        "Tip: classify the document type via /senai-configure-architect-inputs and give the file a meaningful name and top heading to make it verifiable.",
+      ],
+    });
+  }
+
+  // Recommended roles without a truth document get a warning with concrete
+  // suggestions; the user approves by running /senai-configure-agents-files.
+  // Assignments stay optional.
+  const suggestions = allSuggestions.filter(
+    (s) => !config.documents[s.role]?.primary,
+  );
+  if (suggestions.length > 0) {
+    items.push({
+      status: "warning",
+      message: `${suggestions.length} recommended role(s) have no truth document.`,
+      details: [
+        ...suggestions.map((s) => `${ROLE_LABELS[s.role]} (${s.role}) → ${s.path} (${s.reason})`),
+        "Assignments are optional but recommended. Run /senai-configure-agents-files to assign.",
+      ],
+    });
+  }
+
   if (items.length === 0) {
     items.push({ status: "info", message: "No per-role document assignments configured." });
   }
@@ -570,6 +800,72 @@ function isPathConflict(a: string, b: string): boolean {
   return false;
 }
 
+/** Roles verified by the mandate layer: roles the suggestion rules
+ *  (ROLE_TYPE_RULES in document-suggestions.ts) do not cover. scout-3 is
+ *  excluded per user decision — it keeps existence-only checking. */
+const MANDATE_CHECK_ROLES: SenaiRole[] = ["scout-2", "plan-overview"];
+
+const MANDATE_STOPWORDS = new Set([
+  "the", "and", "for", "with", "that", "this", "from", "into", "your", "their",
+  "them", "they", "will", "shall", "must", "before", "after", "against", "about",
+  "report", "write", "reads", "read", "user", "agent", "role",
+]);
+
+/** Lowercase word set: drops stopwords and words shorter than 4 chars. */
+export function significantWords(text: string): Set<string> {
+  const words = new Set<string>();
+  for (const raw of text.toLowerCase().split(/[^a-z0-9]+/)) {
+    if (raw.length < 4) continue;
+    if (MANDATE_STOPWORDS.has(raw)) continue;
+    words.add(raw);
+  }
+  return words;
+}
+
+/** Exact match, or one word prefixing the other (code/codebase, test/testing). */
+export function wordsOverlap(a: Set<string>, b: Set<string>): boolean {
+  for (const wa of a) {
+    for (const wb of b) {
+      if (wa === wb) return true;
+      const [shorter, longer] = wa.length <= wb.length ? [wa, wb] : [wb, wa];
+      if (shorter.length >= 4 && longer.startsWith(shorter)) return true;
+    }
+  }
+  return false;
+}
+
+/** What the agent does: frontmatter description + generator mandate + label. */
+export function mandateTextForRole(agent: ResolvedAgent, role: SenaiRole): string {
+  const parts: string[] = [];
+  if (agent.frontmatter?.description) parts.push(agent.frontmatter.description);
+  const generated = GENERATED_ROLES.find((def) => def.role === role);
+  if (generated) parts.push(generated.mandate);
+  parts.push(ROLE_LABELS[role]);
+  return parts.join(". ");
+}
+
+/** What the document is: classified type + filename + first markdown heading. */
+export function documentSignalWords(cwd: string, relPath: string, fullPath: string): Set<string> {
+  const words = new Set<string>();
+  try {
+    const inputs = loadArchitectInputsConfig(cwd);
+    const entry = inputs?.documents.find((d) => d.path === relPath);
+    if (entry?.type) for (const w of significantWords(entry.type)) words.add(w);
+  } catch {
+    // Invalid architect inputs are reported in the architecture setup section.
+  }
+  const base = path.basename(relPath).replace(/\.[^.]+$/, "");
+  for (const w of significantWords(base)) words.add(w);
+  try {
+    const content = fs.readFileSync(fullPath, "utf8");
+    const heading = content.match(/^#\s+(.+)$/m);
+    if (heading) for (const w of significantWords(heading[1])) words.add(w);
+  } catch {
+    // Unreadable file: fall back to filename/type signals only.
+  }
+  return words;
+}
+
 function checkArchitectureSetup(cwd: string): DiagnosticSection {
   const items: DiagnosticItem[] = [];
   const architectStateDir = getArchitectStateDir(cwd);
@@ -588,8 +884,20 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
     });
   }
 
-  const inputsConfig = loadArchitectInputsConfig(cwd);
-  if (!inputsConfig) {
+  let inputsConfig: ReturnType<typeof loadArchitectInputsConfig> = null;
+  let inputsConfigError: string | null = null;
+  try {
+    inputsConfig = loadArchitectInputsConfig(cwd);
+  } catch (err: any) {
+    inputsConfigError = err.message;
+  }
+  if (inputsConfigError) {
+    items.push({
+      status: "error",
+      message: inputsConfigError,
+      details: ["Run /senai-configure-architect-inputs to recreate it, or fix the JSON manually."],
+    });
+  } else if (!inputsConfig) {
     items.push({
       status: "info",
       message: "No architect inputs configured. Run /senai-configure-architect-inputs to set them.",
@@ -822,6 +1130,519 @@ function checkArchitectureSetup(cwd: string): DiagnosticSection {
   }
 
   return { title: "Architecture setup", items };
+}
+
+// Roles that must resolve to the generated architecture agents once an
+// architecture has been generated. scout-1 shares the generated planner agent.
+// Role→suffix pairs come from ARCHITECTURE_AGENT_MAPPING (single source of
+// truth in architect.ts); labels below are doctor-only display text.
+const ARCHITECTURE_ROLE_LABELS: Record<string, string> = {
+  "scout-1": "Scout Architecture",
+  planner: "Architecture Planner",
+  implementer: "Architecture Implementer",
+  "reviewer-correctness": "Architecture Reviewer — Correctness",
+  "reviewer-security": "Architecture Reviewer — Security",
+  "reviewer-tests": "Architecture Reviewer — Tests",
+  "code-review": "Architecture Code Review",
+};
+
+const ARCHITECTURE_MAPPED_ROLES: Array<{ role: SenaiRole; label: string; expectedSuffix: string }> =
+  ARCHITECTURE_AGENT_MAPPING.map(({ role, suffix }) => ({
+    role,
+    label: ARCHITECTURE_ROLE_LABELS[role] ?? role,
+    expectedSuffix: suffix,
+  }));
+
+function checkArchitectureAgentMapping(cwd: string, agentConfig: AgentConfig | null): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  let profile: ArchitectProfile | null = null;
+  try {
+    profile = loadArchitectProfile(cwd);
+  } catch {
+    // An invalid profile is already reported by the architecture setup section.
+  }
+  if (!profile) {
+    items.push({
+      status: "info",
+      message: "No architecture generated yet. Mapping check skipped.",
+      details: ["Run /senai-generate-architect to generate project-specific architecture agents."],
+    });
+    return { title: "Architecture agent mapping", items };
+  }
+
+  for (const { role, label, expectedSuffix } of ARCHITECTURE_MAPPED_ROLES) {
+    const expected = `${profile.projectSlug}-${profile.selectedArchitecture}-${expectedSuffix}`;
+    const actual = resolveAgentName(agentConfig, role);
+
+    if (actual === expected) {
+      items.push({ status: "ok", message: `${label} (${role}) → ${actual}: correctly mapped` });
+    } else {
+      items.push({
+        status: "error",
+        message: `${label} (${role}) is mapped to "${actual}" but the architecture factory generated "${expected}".`,
+        details: [`Fix: re-run /senai-generate-architect to auto-map default or stale roles, or run /senai-configure-agents to map ${role} to ${expected} manually.`],
+      });
+    }
+  }
+
+  return { title: "Architecture agent mapping", items };
+}
+
+function checkGeneratedAgentContent(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  let profile: ArchitectProfile | null = null;
+  try {
+    profile = loadArchitectProfile(cwd);
+  } catch {
+    // An invalid profile is already reported by the architecture setup section.
+  }
+  if (!profile) {
+    items.push({ status: "info", message: "No architecture generated yet. Content check skipped." });
+    return { title: "Generated agent content", items };
+  }
+
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  const skillsDir = path.join(cwd, ".pi", "skills");
+
+  for (const role of ARCHITECT_ROLES) {
+    const agentName = `${profile.projectSlug}-${profile.selectedArchitecture}-${role}`;
+    const filePath = path.join(agentsDir, `${agentName}.md`);
+    if (!fs.existsSync(filePath)) continue; // Missing files are reported by the architecture setup section.
+
+    const content = fs.readFileSync(filePath, "utf8");
+    const problems: string[] = [];
+
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
+    if (!/^tools:/m.test(frontmatter)) {
+      problems.push("frontmatter is missing a tools: line");
+    }
+
+    const skillsMatch = frontmatter.match(/^skills:(.*)$/m);
+    if (!skillsMatch || !skillsMatch[1].trim()) {
+      problems.push("frontmatter is missing a skills: line");
+    } else {
+      const skillNames = skillsMatch[1]
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+      for (const skillName of skillNames) {
+        if (!fs.existsSync(path.join(skillsDir, skillName, "SKILL.md"))) {
+          problems.push(`referenced skill "${skillName}" not found at .pi/skills/${skillName}/SKILL.md`);
+        }
+      }
+    }
+
+    if (!content.includes(".pi/architect/architecture.md")) {
+      problems.push("body does not reference .pi/architect/architecture.md");
+    }
+    if (!content.includes("adrs/")) {
+      problems.push("body does not reference ADRs in .pi/architect/adrs/");
+    }
+    if (!/^##\s+Forbidden patterns/im.test(content)) {
+      problems.push("body is missing a '## Forbidden patterns' section");
+    }
+
+    if (problems.length === 0) {
+      items.push({ status: "ok", message: `${agentName}: content complete` });
+    } else {
+      items.push({
+        status: "error",
+        message: `${agentName}: content is incomplete`,
+        details: [...problems, "Fix: re-run /senai-generate-architect to regenerate the agent files."],
+      });
+    }
+  }
+
+  return { title: "Generated agent content", items };
+}
+
+function checkArchitectureDrift(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  const manifest = loadGeneratedManifest(cwd);
+  if (!manifest) {
+    items.push({
+      status: "info",
+      message: "No generation manifest found. Drift check skipped.",
+      details: [
+        "This architecture was generated before drift tracking existed.",
+        "Re-run /senai-generate-architect to enable drift detection.",
+      ],
+    });
+    return { title: "Architecture drift", items };
+  }
+
+  const problems: DiagnosticItem[] = [];
+  for (const [relPath, expectedHash] of Object.entries(manifest.files)) {
+    const filePath = path.resolve(cwd, relPath);
+    if (!fs.existsSync(filePath)) {
+      problems.push({
+        status: "warning",
+        message: `Generated file was deleted: ${relPath}`,
+        details: ["If this was not intentional, re-run /senai-generate-architect."],
+      });
+      continue;
+    }
+    const actualHash = createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+    if (actualHash !== expectedHash) {
+      problems.push({
+        status: "warning",
+        message: `${relPath} was modified after generation.`,
+        details: ["If this was not intentional, re-run /senai-generate-architect."],
+      });
+    }
+  }
+
+  if (problems.length === 0) {
+    items.push({
+      status: "ok",
+      message: `All ${Object.keys(manifest.files).length} generated files match the generation manifest.`,
+    });
+  } else {
+    items.push(...problems);
+  }
+
+  return { title: "Architecture drift", items };
+}
+
+function checkGeneratedTeamContent(cwd: string, agentConfig: AgentConfig | null): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const slug = getProjectSlug(cwd);
+  let found = 0;
+
+  for (const def of GENERATED_ROLES) {
+    const expectedName = `${slug}-${def.role}`;
+    const actual = resolveAgentName(agentConfig, def.role as SenaiRole);
+    if (actual !== expectedName) continue; // custom mapping — not a generated team agent
+
+    const filePath = path.join(cwd, ".pi", "agents", `${expectedName}.md`);
+    if (!fs.existsSync(filePath)) continue; // missing files are reported by the mapping sources section
+
+    found++;
+    const content = fs.readFileSync(filePath, "utf8");
+    const problems: string[] = [];
+
+    const frontmatterMatch = content.match(/^---\n([\s\S]*?)\n---/);
+    const frontmatter = frontmatterMatch ? frontmatterMatch[1] : "";
+    if (!/^tools:/m.test(frontmatter)) {
+      problems.push("frontmatter is missing a tools: line");
+    }
+    if (!content.includes("## Your mandate")) {
+      problems.push("body is missing the '## Your mandate' section");
+    }
+    if (!content.includes("## Technology craft")) {
+      problems.push("body is missing a '## Technology craft' section");
+    }
+
+    if (problems.length === 0) {
+      items.push({ status: "ok", message: `${expectedName}: content complete` });
+    } else {
+      items.push({
+        status: "error",
+        message: `${expectedName}: content is incomplete`,
+        details: [...problems, "Fix: delete the file and re-run /senai-generate-sub-agents."],
+      });
+    }
+  }
+
+  if (found === 0) {
+    items.push({
+      status: "info",
+      message: "No generated team agents found. Run /senai-generate-sub-agents to create them.",
+    });
+  }
+
+  return { title: "Generated team agents", items };
+}
+
+function checkTechnologyResources(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  const dirs: Array<{ dir: string; label: string }> = [
+    { dir: getBundledTechnologiesDir(), label: "bundled" },
+    { dir: getProjectTechnologiesDir(cwd), label: "project" },
+  ];
+
+  let bundledGenericFound = false;
+  let resourceCount = 0;
+
+  for (const { dir, label } of dirs) {
+    if (!fs.existsSync(dir)) continue;
+    for (const entry of fs.readdirSync(dir)) {
+      if (!entry.endsWith(".md") || entry === "_template.md") continue;
+      const filePath = path.join(dir, entry);
+      const problems: string[] = [];
+      try {
+        const content = fs.readFileSync(filePath, "utf8");
+        const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
+        const id = String(frontmatter.id ?? "").trim();
+        if (!id) problems.push("frontmatter is missing an id");
+        const keywords = parseKeywords(frontmatter.keywords);
+        const hasKeywords = keywords.length > 0;
+        if (!hasKeywords) problems.push("frontmatter has no keywords (matching will never find it)");
+        const normalizeKey = (s: string) => s.toLowerCase().replace(/[-\s]+/g, " ").trim();
+        if (id && hasKeywords && !keywords.some((k) => normalizeKey(k) === normalizeKey(id))) {
+          problems.push(`keywords do not include the resource id "${id}" (matching by name will miss it)`);
+        }
+        const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+        if (!body) problems.push("body is empty");
+
+        // Technical validation: craft sections and sourcing.
+        if (body) {
+          const missingSections: string[] = [];
+          if (!/^##\s+Core rules/im.test(body)) missingSections.push("## Core rules");
+          if (!/^##\s+Testing patterns/im.test(body)) missingSections.push("## Testing patterns");
+          if (!/^##\s+(Tooling and limits|Common mistakes)/im.test(body)) {
+            missingSections.push("## Tooling and limits or ## Common mistakes");
+          }
+          if (missingSections.length > 0) {
+            problems.push(`missing template section(s): ${missingSections.join(", ")}`);
+          }
+          if (id !== "generic" && !/https?:\/\//.test(body)) {
+            problems.push("no official source URL cited (sourcing rule)");
+          }
+        }
+
+        if (label === "bundled" && id === "generic" && problems.length === 0) {
+          bundledGenericFound = true;
+        }
+      } catch {
+        problems.push("file could not be parsed");
+      }
+
+      if (problems.length === 0) {
+        resourceCount++;
+      } else {
+        items.push({
+          status: "warning",
+          message: `${label} resource ${entry} has problems`,
+          details: problems,
+        });
+      }
+    }
+  }
+
+  if (!bundledGenericFound) {
+    items.push({
+      status: "error",
+      message: "The bundled generic.md fallback resource is missing or invalid.",
+      details: ["Restore resources/technologies/generic.md in the extension."],
+    });
+  }
+
+  if (resourceCount > 0) {
+    items.push({ status: "ok", message: `${resourceCount} technology resource(s) valid.` });
+  }
+
+  return { title: "Technology resources", items };
+}
+
+function resolveSkillFile(cwd: string, skillName: string): string | null {
+  const candidates = [
+    path.join(cwd, ".pi", "skills", skillName, "SKILL.md"),
+    path.join(getAgentDir(), "skills", skillName, "SKILL.md"),
+    path.resolve(getBundledTechnologiesDir(), "..", "..", "skills", `${skillName}.md`),
+  ];
+  for (const candidate of candidates) {
+    if (fs.existsSync(candidate)) return candidate;
+  }
+  return null;
+}
+
+function validateSkillFile(filePath: string): string[] {
+  const problems: string[] = [];
+  try {
+    const content = fs.readFileSync(filePath, "utf8");
+    const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
+    if (!String(frontmatter.name ?? "").trim()) problems.push("SKILL.md frontmatter is missing a name");
+    if (!String(frontmatter.description ?? "").trim()) problems.push("SKILL.md frontmatter is missing a description");
+    const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+    if (!body) problems.push("SKILL.md body is empty");
+  } catch {
+    problems.push("SKILL.md could not be parsed");
+  }
+  return problems;
+}
+
+function checkAgentSkillReferences(
+  cwd: string,
+  resolved: Record<SenaiRole, ResolvedAgent>,
+): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  let checked = 0;
+
+  for (const role of SENAI_ROLES) {
+    const agent = resolved[role];
+    if (!agent.frontmatter || !agent.frontmatter.skills || agent.frontmatter.skills.length === 0) continue;
+
+    for (const skillName of agent.frontmatter.skills) {
+      checked++;
+      const skillPath = resolveSkillFile(cwd, skillName);
+      if (!skillPath) {
+        items.push({
+          status: "error",
+          message: `${agent.name} (${role}) references missing skill "${skillName}"`,
+          details: [
+            `No SKILL.md found in .pi/skills/, the user skills dir, or the bundled skills.`,
+            `Create the skill or remove it from the agent's skills: line.`,
+          ],
+        });
+        continue;
+      }
+      const problems = validateSkillFile(skillPath);
+      if (problems.length > 0) {
+        items.push({
+          status: "warning",
+          message: `${agent.name} (${role}) references invalid skill "${skillName}"`,
+          details: problems.map((p) => `${skillPath}: ${p}`),
+        });
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    items.push({
+      status: checked === 0 ? "info" : "ok",
+      message: checked === 0 ? "No agents reference skills." : `All ${checked} skill reference(s) are valid.`,
+    });
+  }
+
+  return { title: "Agent skill references", items };
+}
+
+const KNOWN_TOOL_NAMES = new Set([
+  "read", "write", "edit", "bash", "grep", "find", "ls",
+  "askuserquestion", "intercom", "subagent",
+  "taskcreate", "taskexecute", "taskget", "tasklist", "taskoutput", "taskstop", "taskupdate",
+]);
+
+function isKnownToolName(tool: string): boolean {
+  if (tool.startsWith("ext:")) return tool.length > 4;
+  return KNOWN_TOOL_NAMES.has(tool.toLowerCase());
+}
+
+const VALID_THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
+
+function checkAgentFileIntegrity(
+  cwd: string,
+  resolved: Record<SenaiRole, ResolvedAgent>,
+): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  for (const role of SENAI_ROLES) {
+    const agent = resolved[role];
+    if (!agent.filePath || !agent.frontmatter) continue; // built-ins and missing agents are covered elsewhere
+
+    const problems: Array<{ status: DiagnosticStatus; text: string }> = [];
+    const fileName = path.basename(agent.filePath, ".md");
+    const content = fs.readFileSync(agent.filePath, "utf8");
+
+    if (agent.frontmatter.name !== fileName) {
+      problems.push({
+        status: "error",
+        text: `frontmatter name "${agent.frontmatter.name}" does not match the filename "${fileName}"`,
+      });
+    }
+
+    const tools = agent.frontmatter.tools ?? [];
+    const unknownTools = tools.filter((t) => !isKnownToolName(t));
+    if (unknownTools.length > 0) {
+      problems.push({ status: "error", text: `unknown tool name(s): ${unknownTools.join(", ")} (typo?)` });
+    }
+
+    const thinking = agent.frontmatter.thinking;
+    if (thinking && !VALID_THINKING_LEVELS.has(thinking.toLowerCase())) {
+      problems.push({ status: "warning", text: `unknown thinking level "${thinking}"` });
+    }
+
+    if (agent.frontmatter.model) {
+      problems.push({
+        status: "warning",
+        text: `frontmatter pins model "${agent.frontmatter.model}" — subagent will not inherit pi's default model; remove the model field unless intentional`,
+      });
+    }
+
+    const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
+    if (!body) {
+      problems.push({ status: "error", text: "agent body is empty — no instructions" });
+    }
+
+    if (problems.length === 0) continue;
+    items.push({
+      status: problems.some((p) => p.status === "error") ? "error" : "warning",
+      message: `${agent.name} (${role}) at ${path.relative(cwd, agent.filePath)}`,
+      details: problems.map((p) => p.text),
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({ status: "ok", message: "All mapped agent files are internally valid." });
+  }
+
+  return { title: "Agent file integrity", items };
+}
+
+const SECRET_PATTERNS: RegExp[] = [
+  /api[_-]?key\s*[:=]\s*["']?[A-Za-z0-9_\-]{8,}/i,
+  /secret\s*[:=]\s*["']?[A-Za-z0-9_\-]{8,}/i,
+  /password\s*[:=]\s*["']?[^\s"']{6,}/i,
+  /token\s*[:=]\s*["']?[A-Za-z0-9_\-.]{10,}/i,
+  /BEGIN [A-Z]+ PRIVATE KEY/,
+  /sk-[A-Za-z0-9]{20,}/,
+  /AIza[0-9A-Za-z_\-]{20,}/,
+];
+
+function checkSecretScan(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const filesToScan: string[] = [];
+
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  if (fs.existsSync(agentsDir)) {
+    for (const entry of fs.readdirSync(agentsDir)) {
+      if (entry.endsWith(".md")) filesToScan.push(path.join(agentsDir, entry));
+    }
+  }
+  const skillsDir = path.join(cwd, ".pi", "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
+      if (fs.existsSync(skillPath)) filesToScan.push(skillPath);
+    }
+  }
+  const senaiDir = path.join(cwd, ".pi", "senai");
+  if (fs.existsSync(senaiDir)) {
+    for (const entry of fs.readdirSync(senaiDir)) {
+      if (entry.endsWith(".json")) filesToScan.push(path.join(senaiDir, entry));
+    }
+  }
+
+  for (const filePath of filesToScan) {
+    let lines: string[];
+    try {
+      lines = fs.readFileSync(filePath, "utf8").split("\n");
+    } catch {
+      continue;
+    }
+    for (let i = 0; i < lines.length; i++) {
+      if (SECRET_PATTERNS.some((pattern) => pattern.test(lines[i]))) {
+        items.push({
+          status: "warning",
+          message: `Possible secret at ${path.relative(cwd, filePath)}:${i + 1}`,
+          details: ["Move secrets to environment variables. Never commit them."],
+        });
+      }
+    }
+  }
+
+  if (items.length === 0) {
+    items.push({ status: "ok", message: `No secrets found in ${filesToScan.length} scanned file(s).` });
+  }
+
+  return { title: "Secret scan", items };
 }
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {

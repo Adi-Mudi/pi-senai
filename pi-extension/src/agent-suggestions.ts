@@ -26,6 +26,25 @@ export const SENAI_ROLES = [
 
 export type SenaiRole = (typeof SENAI_ROLES)[number];
 
+/** Roles whose job is reading project documents. Only these appear in the
+ *  agents-files picker and in doctor's assignment suggestions. The remaining
+ *  roles consume stage artifacts (plan, scout reports, code) and normally
+ *  need no document assignments. The config format still accepts every role
+ *  for advanced hand-editing. */
+export const DOCUMENT_ROLES: SenaiRole[] = [
+  "scout-1",
+  "scout-2",
+  "scout-3",
+  "scout-4",
+  "discussion",
+  "planner",
+  "reviewer-correctness",
+  "reviewer-security",
+  "reviewer-tests",
+  "code-review",
+  "security-gate",
+];
+
 export const DEFAULT_AGENTS: Record<SenaiRole, string> = {
   "scout-1": "scout",
   "scout-2": "scout",
@@ -74,6 +93,42 @@ export const ROLE_LABELS: Record<SenaiRole, string> = {
   archive: "Archive",
 };
 
+/** Guidance tag shown per role in the agents-files picker (user-approved
+ *  wording and colors): scout-1 is fixed by the architecture factory,
+ *  scout-3 is optional, everything else should be configured. */
+export type RoleGuidance = "design-defined" | "recommended" | "optional";
+
+export const ROLE_GUIDANCE: Partial<Record<SenaiRole, RoleGuidance>> = {
+  "scout-1": "design-defined",
+  "scout-2": "recommended",
+  "scout-3": "optional",
+  "scout-4": "recommended",
+  discussion: "recommended",
+  planner: "recommended",
+  "reviewer-correctness": "recommended",
+  "reviewer-security": "recommended",
+  "reviewer-tests": "recommended",
+  "code-review": "recommended",
+  "security-gate": "recommended",
+};
+
+/** Sequence-orchestrated roles hidden from the agents-files picker (user
+ *  decision): their primary input is stage artifacts and Senai runs them
+ *  automatically. They stay in DOCUMENT_ROLES — assignments remain valid in
+ *  JSON and doctor keeps suggesting documents for them. */
+export const SEQUENCE_ROLES: SenaiRole[] = [
+  "discussion",
+  "planner",
+  "code-review",
+  "security-gate",
+];
+
+/** Roles actually shown in the agents-files picker: document roles minus the
+ *  hidden sequence roles. */
+export const PICKER_ROLES: SenaiRole[] = DOCUMENT_ROLES.filter(
+  (role) => !SEQUENCE_ROLES.includes(role),
+);
+
 export function suggestAgentForRole(
   role: SenaiRole,
   agents: DiscoveredAgent[],
@@ -89,7 +144,7 @@ export function suggestAgentForRole(
       return agent.name;
     }
     if (
-      role === "reviewer-correctness" &&
+      (role === "reviewer-correctness" || role === "code-review") &&
       agent.name.endsWith("-reviewer-correctness") &&
       agentText.includes("architecture")
     ) {

@@ -3,26 +3,31 @@ import * as path from "node:path";
 import { Type } from "typebox";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import {
+  autoMapArchitectureAgents,
   discoverArchitectureLibrary,
   generateAgentFiles,
   generateArchitectureDocs,
   generateSkillFiles,
   loadArchitectProfile,
   loadArchitectReport,
+  removeStaleArchitectureArtifacts,
+  slugify,
+  writeGeneratedManifest,
   type ArchitectureLibraryEntry,
 } from "./architect.js";
-import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
+import { getArchitectMapDir } from "./constants.js";
+import { loadAgentConfig } from "./agent-config.js";
 import {
+  DOCUMENT_MANIFEST_FILE,
   mergeMapOutputs,
   readMapOutputs,
+  sanitizeDocumentPath,
 } from "./document-ingest.js";
+import { loadArchitectInputsConfig } from "./architect-inputs-config.js";
 import {
-  getDriversPath,
-  loadDrivers,
   mergeDrivers,
   normalizeDrivers,
   saveDrivers,
-  type ArchitecturalDrivers,
 } from "./driver-extractor.js";
 
 export function registerArchitectTools(pi: ExtensionAPI): void {
@@ -37,7 +42,37 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
       const mapDir = getArchitectMapDir(cwd);
       fs.mkdirSync(mapDir, { recursive: true });
 
-      let merged = mergeMapOutputs(readMapOutputs(cwd));
+      // Only well-formed map outputs are mergeable (the document manifest is not).
+      let mapOutputs = readMapOutputs(cwd).filter(
+        (output) =>
+          output &&
+          typeof output.document === "string" &&
+          Array.isArray(output.functionalRequirements),
+      );
+
+      // When inputs are configured, only merge map outputs for the current
+      // document set and delete stale map files left by removed/renamed docs.
+      const deletedStaleMapFiles: string[] = [];
+      const inputsConfig = loadArchitectInputsConfig(cwd);
+      if (inputsConfig) {
+        const expectedFiles = new Set(
+          inputsConfig.documents.map((doc) => `${sanitizeDocumentPath(doc.path)}.json`),
+        );
+        for (const entry of fs.readdirSync(mapDir)) {
+          if (!entry.endsWith(".json") || entry === DOCUMENT_MANIFEST_FILE) continue;
+          if (expectedFiles.has(entry)) continue;
+          try {
+            fs.unlinkSync(path.join(mapDir, entry));
+            deletedStaleMapFiles.push(path.relative(cwd, path.join(mapDir, entry)));
+          } catch {
+            // Ignore deletion failures.
+          }
+        }
+        const expectedDocPaths = new Set(inputsConfig.documents.map((doc) => doc.path));
+        mapOutputs = mapOutputs.filter((output) => expectedDocPaths.has(output.document));
+      }
+
+      let merged = mergeMapOutputs(mapOutputs);
 
       // Also pull in any legacy intermediate files from the .pi/senai/ root.
       const legacyDir = path.join(cwd, ".pi", "senai");
@@ -88,6 +123,7 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
         technicalConcerns: merged.technicalConcerns.length,
         uncertainties: merged.uncertainties.length,
         deletedLegacy,
+        deletedStaleMapFiles,
       };
 
       return {
@@ -142,14 +178,30 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
         };
       }
 
+      // Validate agents.json before writing anything: a corrupted config would
+      // otherwise crash the auto-mapping step after artifacts were written.
+      loadAgentConfig(cwd);
+
+      // Remove agents/skills left over from previous architecture runs before
+      // generating the current set, so orphans never survive a re-run.
+      const removedStaleArtifacts = removeStaleArchitectureArtifacts(cwd, profile);
+
       const createdDocs = generateArchitectureDocs(cwd, profile, report);
       const createdAgents = generateAgentFiles(cwd, profile, architecture);
       const createdSkills = generateSkillFiles(cwd, profile, architecture);
+
+      const manifest = writeGeneratedManifest(cwd, [...createdDocs, ...createdAgents, ...createdSkills]);
+
+      const archId = architecture.id || slugify(architecture.name);
+      const mappedRoles = autoMapArchitectureAgents(cwd, profile, archId);
 
       const summary = {
         docs: createdDocs.map((p) => path.relative(cwd, p)),
         agents: createdAgents.map((p) => path.relative(cwd, p)),
         skills: createdSkills.map((p) => path.relative(cwd, p)),
+        removedStaleArtifacts,
+        manifestFiles: Object.keys(manifest.files).length,
+        mappedRoles,
       };
 
       return {

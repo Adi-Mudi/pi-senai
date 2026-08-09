@@ -1,14 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { DynamicBorder } from "@mariozechner/pi-coding-agent";
-import {
-  Container,
-  Key,
-  SelectList,
-  Text,
-  matchesKey,
-  type Component,
-  type SelectItem,
-} from "@mariozechner/pi-tui";
+import { Key, matchesKey } from "@mariozechner/pi-tui";
 
 export type ListEditorItemKind = "suggestion" | "selected" | "action";
 
@@ -60,107 +51,19 @@ function matchesFilter(path: string, query: string): boolean {
   return path.toLowerCase().includes(query.toLowerCase());
 }
 
-/** Build the ordered item list shown by both renderers. */
-function buildEditorItems(
-  options: ListEditorOptions,
-  currentPaths: string[],
-  suggestions: string[],
-): ListEditorItem[] {
-  const items: ListEditorItem[] = [];
-  const query = options.filterQuery ?? "";
-
-  if (options.enableFilter) {
-    items.push({
-      id: FILTER_ID,
-      kind: "action",
-      label: query ? `Filter: ${query} (clear)` : "Filter suggestions...",
-      value: FILTER_ID,
-    });
+/** Truncate a path so the filename stays visible: head + … + filename.
+ *  If the filename alone is too long, keep its tail (extension visible).
+ *  User decision: a truncated row must still be identifiable. */
+export function truncateMiddle(text: string, maxWidth: number): string {
+  if (maxWidth < 1) return "";
+  if (text.length <= maxWidth) return text;
+  if (maxWidth === 1) return "…";
+  const base = text.replace(/\/+$/, "").split("/").pop() ?? text;
+  if (base.length + 1 < maxWidth) {
+    const head = maxWidth - base.length - 1;
+    return `${text.slice(0, head)}…${base}`;
   }
-
-  for (const path of suggestions) {
-    if (currentPaths.includes(path)) continue;
-    if (matchesFilter(path, query)) {
-      items.push({
-        id: `suggest:${path}`,
-        kind: "suggestion",
-        label: `⬜ Suggest: ${path}`,
-        value: path,
-      });
-    }
-  }
-
-  for (const action of options.customActions ?? []) {
-    items.push({
-      id: `custom:${action.id}`,
-      kind: "action",
-      label: action.label,
-      value: action.id,
-    });
-  }
-
-  for (const path of currentPaths) {
-    items.push({
-      id: `selected:${path}`,
-      kind: "selected",
-      label: `✅ Remove: ${path}`,
-      value: path,
-    });
-  }
-
-  items.push({
-    id: BACK_ID,
-    kind: "action",
-    label: "Back",
-    value: BACK_ID,
-  });
-
-  return items;
-}
-
-/** Pure state manager. Keeps selection stable when the item list changes. */
-class ListEditorState {
-  private items: ListEditorItem[];
-  private selectedId: string;
-
-  constructor(items: ListEditorItem[], selectedId?: string) {
-    this.items = items;
-    this.selectedId = selectedId ?? items[0]?.id ?? "";
-  }
-
-  getItems(): ListEditorItem[] {
-    return this.items;
-  }
-
-  getSelectedIndex(): number {
-    const idx = this.items.findIndex((i) => i.id === this.selectedId);
-    return idx >= 0 ? idx : 0;
-  }
-
-  getSelectedItem(): ListEditorItem | undefined {
-    return this.items[this.getSelectedIndex()];
-  }
-
-  move(delta: number): void {
-    const idx = this.getSelectedIndex();
-    const newIndex = (idx + delta + this.items.length) % this.items.length;
-    this.selectedId = this.items[newIndex]?.id ?? "";
-  }
-
-  setSelectedId(id: string): void {
-    if (this.items.some((i) => i.id === id)) {
-      this.selectedId = id;
-    }
-  }
-
-  updateItems(items: ListEditorItem[]): void {
-    const oldIndex = this.getSelectedIndex();
-    this.items = items;
-    if (!this.items.some((i) => i.id === this.selectedId)) {
-      const newIndex = Math.max(0, Math.min(oldIndex, this.items.length - 1));
-      this.selectedId = this.items[newIndex]?.id ?? "";
-    }
-  }
+  return `…${text.slice(-(maxWidth - 1))}`;
 }
 
 export async function runListEditor(
@@ -319,36 +222,9 @@ function buildActionItems(options: ListEditorOptions): ListEditorItem[] {
   return items;
 }
 
-function buildContentItems(
-  options: ListEditorOptions,
-  currentPaths: string[],
-  suggestions: string[],
-): ListEditorItem[] {
-  const items: ListEditorItem[] = [];
-  const query = options.filterQuery ?? "";
-
-  for (const path of suggestions) {
-    if (currentPaths.includes(path)) continue;
-    if (matchesFilter(path, query)) {
-      items.push({
-        id: `suggest:${path}`,
-        kind: "suggestion",
-        label: `⬜ Suggest: ${path}`,
-        value: path,
-      });
-    }
-  }
-
-  for (const path of currentPaths) {
-    items.push({
-      id: `selected:${path}`,
-      kind: "selected",
-      label: `✅ Remove: ${path}`,
-      value: path,
-    });
-  }
-
-  return items;
+interface ContentRow {
+  kind: "selected" | "suggestion";
+  path: string;
 }
 
 async function runCustomListEditor(
@@ -363,37 +239,70 @@ async function runCustomListEditor(
       .filter((i) => i.kind === "suggestion")
       .map((i) => i.value);
 
-    const container = new Container();
-    container.addChild(
-      new DynamicBorder((s: string) => theme.fg("accent", s)),
-    );
-    container.addChild(
-      new Text(theme.fg("accent", theme.bold(options.title)), 1, 0),
-    );
-
     const actionItems = buildActionItems(options);
-    let actionIndex = 0;
     let focusArea: "actions" | "content" = "actions";
-    let contentSelectedIndex = 0;
-    let contentList: SelectList | null = null;
-    let contentPlaceholder: Text | null = null;
+    let actionIndex = 0;
+    let contentIndex = 0;
+    let scrollOffset = 0;
+    const pageSize = options.pageSize ?? 10;
 
-    const selectListTheme = {
-      selectedPrefix: (t: string) => theme.fg("accent", t),
-      selectedText: (t: string) => theme.fg("accent", t),
-      description: (t: string) => theme.fg("muted", t),
-      scrollInfo: (t: string) => theme.fg("dim", t),
-      noMatch: (t: string) => theme.fg("warning", t),
-    };
+    function rows(): ContentRow[] {
+      const query = options.filterQuery ?? "";
+      const selected = currentPaths.map((path) => ({ kind: "selected" as const, path }));
+      const suggestions = allSuggestions
+        .filter((s) => !currentPaths.includes(s) && matchesFilter(s, query))
+        .map((path) => ({ kind: "suggestion" as const, path }));
+      return [...selected, ...suggestions];
+    }
 
-    const actionText = new Text("", 1, 0);
-    container.addChild(actionText);
-    container.addChild(
-      new DynamicBorder((s: string) => theme.fg("borderMuted", s)),
-    );
+    function clamp() {
+      const total = rows().length;
+      if (total === 0) {
+        contentIndex = 0;
+        scrollOffset = 0;
+        return;
+      }
+      contentIndex = Math.max(0, Math.min(contentIndex, total - 1));
+      if (contentIndex < scrollOffset) scrollOffset = contentIndex;
+      if (contentIndex >= scrollOffset + pageSize) {
+        scrollOffset = contentIndex - pageSize + 1;
+      }
+    }
 
-    function updateActionText() {
-      const labels = actionItems.map((action, i) => {
+    function detailLines(width: number): string[] {
+      if (focusArea !== "content") return [theme.fg("dim", " ")];
+      const row = rows()[contentIndex];
+      if (!row) return [theme.fg("dim", " ")];
+      const text = ` 📄 ${row.path}`;
+      if (text.length <= width) return [theme.fg("dim", text)];
+      const first = text.slice(0, width);
+      const rest = text.slice(width);
+      if (rest.length <= width - 3) {
+        return [theme.fg("dim", first), theme.fg("dim", `   ${rest}`)];
+      }
+      return [theme.fg("dim", first), theme.fg("dim", `  …${rest.slice(-(width - 3))}`)];
+    }
+
+    function renderRow(row: ContentRow, focused: boolean, width: number): string {
+      const prefix = focused ? "→ " : "  ";
+      const marker = row.kind === "selected" ? "✅" : "⬜";
+      const text = truncateMiddle(row.path, Math.max(1, width - 6));
+      const base = `${marker} ${text}`;
+      if (focused) return `${prefix}${theme.fg("accent", theme.bold(base))}`;
+      return row.kind === "selected"
+        ? `${prefix}${theme.fg("success", base)}`
+        : `${prefix}${theme.fg("dim", base)}`;
+    }
+
+    function render(width: number): string[] {
+      const all = rows();
+      const selCount = currentPaths.length;
+      const lines: string[] = [];
+      const border = "─".repeat(Math.max(2, width));
+      lines.push(theme.fg("accent", border));
+      lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
+
+      const actionLabels = actionItems.map((action, i) => {
         const focused = focusArea === "actions" && i === actionIndex;
         const prefix = focused ? "→ " : "  ";
         const label = focused
@@ -401,62 +310,40 @@ async function runCustomListEditor(
           : theme.fg("text", action.label);
         return `${prefix}${label}`;
       });
-      actionText.setText(labels.join("   "));
-    }
+      lines.push(actionLabels.join("   "));
+      lines.push(theme.fg("borderMuted", border));
 
-    function mountContentList(items: ListEditorItem[]) {
-      if (contentList) {
-        container.removeChild(contentList);
-        contentList = null;
+      lines.push(theme.fg("success", ` ✅ Selected (${selCount})`));
+      if (selCount === 0) {
+        lines.push(theme.fg("dim", "  (none)"));
       }
-      if (contentPlaceholder) {
-        container.removeChild(contentPlaceholder);
-        contentPlaceholder = null;
+      const visible = all.slice(scrollOffset, scrollOffset + pageSize);
+      let emittedSuggestions = 0;
+      for (let i = 0; i < visible.length; i++) {
+        const row = visible[i];
+        if (row.kind === "suggestion" && emittedSuggestions === 0) {
+          lines.push(theme.fg("dim", "  ── enter adds/removes ──"));
+          lines.push(theme.fg("warning", ` 💡 Suggestions (${all.length - selCount})`));
+        }
+        lines.push(renderRow(row, focusArea === "content" && scrollOffset + i === contentIndex, width));
+        if (row.kind === "suggestion") emittedSuggestions++;
+      }
+      if (all.length - selCount === 0) {
+        lines.push(theme.fg("dim", "  ── enter adds/removes ──"));
+        lines.push(theme.fg("warning", " 💡 Suggestions (0)"));
+        lines.push(theme.fg("dim", "  (none)"));
+      }
+      if (all.length > pageSize) {
+        lines.push(theme.fg("dim", `  (${scrollOffset + 1}-${Math.min(scrollOffset + pageSize, all.length)}/${all.length})`));
       }
 
-      if (items.length === 0) {
-        contentPlaceholder = new Text(theme.fg("dim", "  (no items)"), 1, 0);
-        container.addChild(contentPlaceholder);
-        return;
-      }
-
-      const list = new SelectList(
-        toSelectItems(items),
-        options.pageSize ?? 10,
-        selectListTheme,
-      );
-      list.onSelect = handleContentSelect;
-      list.onCancel = () => done({ kind: "back" });
-      contentList = list;
-      container.addChild(contentList);
-      syncContentHighlight();
-    }
-
-    function syncContentHighlight() {
-      if (!contentList) return;
-      const listState = contentList as unknown as {
-        selectedIndex: number;
-        items: SelectItem[];
-      };
-      if (focusArea === "actions") {
-        listState.selectedIndex = -1;
-      } else {
-        listState.selectedIndex = Math.min(
-          contentSelectedIndex,
-          listState.items.length - 1,
-        );
-      }
-    }
-
-    function rebuild() {
-      const contentItems = buildContentItems(
-        options,
-        currentPaths,
-        allSuggestions,
-      );
-      mountContentList(contentItems);
-      updateActionText();
-      tui.requestRender();
+      lines.push(...detailLines(width));
+      lines.push(theme.fg("accent", border));
+      const footer = "↑↓ navigate • enter add/remove • esc cancel";
+      const footerShort = "↑↓ move • enter toggle • esc";
+      lines.push(theme.fg("dim", (footer.length <= width ? footer : footerShort).slice(0, Math.max(2, width))));
+      lines.push(theme.fg("accent", border));
+      return lines;
     }
 
     async function handleAction(action: ListEditorItem) {
@@ -464,148 +351,84 @@ async function runCustomListEditor(
         done({ kind: "done", paths: currentPaths });
         return;
       }
-
       if (action.id === FILTER_ID) {
         const input = await ctx.ui.input("Filter by name (empty clears):");
         const query = (input ?? "").trim().toLowerCase();
         done({ kind: "filter", query, paths: currentPaths });
         return;
       }
-
       if (action.id.startsWith("custom:")) {
-        done({
-          kind: "custom",
-          id: action.value,
-          paths: currentPaths,
-        });
-        return;
+        done({ kind: "custom", id: action.value, paths: currentPaths });
       }
     }
 
-    async function handleContentSelect(item: SelectItem) {
-      const contentItems = buildContentItems(
-        options,
-        currentPaths,
-        allSuggestions,
-      );
-      const editorItem = contentItems.find((i) => i.id === item.value);
-      if (!editorItem) return;
-
-      if (editorItem.kind === "suggestion") {
-        const path = editorItem.value;
-        if (!currentPaths.includes(path)) {
-          currentPaths.push(path);
-          rebuild();
-        }
-        return;
+    function toggleFocused() {
+      const row = rows()[contentIndex];
+      if (!row) return;
+      if (row.kind === "suggestion") {
+        if (!currentPaths.includes(row.path)) currentPaths.push(row.path);
+      } else {
+        currentPaths = currentPaths.filter((p) => p !== row.path);
       }
-
-      if (editorItem.kind === "selected") {
-        const path = editorItem.value;
-        currentPaths = currentPaths.filter((p) => p !== path);
-        rebuild();
-        return;
-      }
+      clamp();
+      tui.requestRender();
     }
 
-    rebuild();
-
-    container.addChild(
-      new Text(
-        theme.fg("dim", "↑↓ navigate • enter select • esc cancel"),
-        1,
-        0,
-      ),
-    );
-    container.addChild(
-      new DynamicBorder((s: string) => theme.fg("accent", s)),
-    );
+    clamp();
 
     return {
-      render: (width: number) => container.render(width),
-      invalidate: () => container.invalidate(),
+      render,
+      invalidate: () => {},
       handleInput: (data: string) => {
         if (matchesKey(data, Key.escape)) {
           done({ kind: "back" });
           return;
         }
-
         if (matchesKey(data, Key.enter)) {
           if (focusArea === "actions") {
-            handleAction(actionItems[actionIndex]);
+            void handleAction(actionItems[actionIndex]);
           } else {
-            const item = contentList?.getSelectedItem();
-            if (item) contentList?.onSelect?.(item);
+            toggleFocused();
           }
           return;
         }
-
         if (matchesKey(data, Key.up)) {
+          const total = rows().length;
           if (focusArea === "actions") {
-            if (actionIndex > 0) {
-              actionIndex--;
-            } else {
+            if (actionIndex > 0) actionIndex--;
+            else if (total > 0) {
               focusArea = "content";
-              const listState = contentList
-                ? (contentList as unknown as { items: SelectItem[] })
-                : null;
-              contentSelectedIndex = Math.max(
-                0,
-                (listState?.items.length ?? 1) - 1,
-              );
+              contentIndex = total - 1;
             }
-          } else if (contentList) {
-            const listState = contentList as unknown as {
-              selectedIndex: number;
-              items: SelectItem[];
-            };
-            if (listState.selectedIndex > 0) {
-              contentSelectedIndex = listState.selectedIndex - 1;
-            } else {
-              focusArea = "actions";
-              actionIndex = actionItems.length - 1;
-            }
+          } else if (contentIndex > 0) {
+            contentIndex--;
+          } else {
+            focusArea = "actions";
+            actionIndex = actionItems.length - 1;
           }
-          syncContentHighlight();
-          updateActionText();
+          clamp();
           tui.requestRender();
           return;
         }
-
         if (matchesKey(data, Key.down)) {
+          const total = rows().length;
           if (focusArea === "actions") {
-            if (actionIndex < actionItems.length - 1) {
-              actionIndex++;
-            } else {
+            if (actionIndex < actionItems.length - 1) actionIndex++;
+            else if (total > 0) {
               focusArea = "content";
-              contentSelectedIndex = 0;
+              contentIndex = 0;
             }
-          } else if (contentList) {
-            const listState = contentList as unknown as {
-              selectedIndex: number;
-              items: SelectItem[];
-            };
-            if (listState.selectedIndex < listState.items.length - 1) {
-              contentSelectedIndex = listState.selectedIndex + 1;
-            } else {
-              focusArea = "actions";
-              actionIndex = 0;
-            }
+          } else if (contentIndex < total - 1) {
+            contentIndex++;
+          } else {
+            focusArea = "actions";
+            actionIndex = 0;
           }
-          syncContentHighlight();
-          updateActionText();
+          clamp();
           tui.requestRender();
           return;
         }
       },
     };
   });
-}
-
-function toSelectItems(items: ListEditorItem[]): SelectItem[] {
-  return items.map((i) => ({
-    value: i.id,
-    label: i.label,
-    description: i.description,
-  }));
 }

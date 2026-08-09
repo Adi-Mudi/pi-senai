@@ -1,9 +1,13 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { createHash } from "node:crypto";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
+import { getArchitectInputsConfigPath } from "./architect-inputs-config.js";
 import { getDriversPath, type ArchitecturalDrivers } from "./driver-extractor.js";
 import { getArchitectStateDir } from "./constants.js";
+import { loadAgentConfig, resolveAgentName, saveAgentConfig } from "./agent-config.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "./agent-suggestions.js";
 
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
 export const ARCHITECT_REPORT_FILE = "architect-report.json";
@@ -87,6 +91,28 @@ export const ARCHITECT_ROLES = [
 ] as const;
 
 export const ARCHITECT_STAGES = ["plan", "implement", "document", "deliver"] as const;
+
+/** Maps each architecture-bound Senai role to its generated agent name suffix.
+ *  Single source of truth — doctor.ts derives its checks from this. */
+export const ARCHITECTURE_AGENT_MAPPING: Array<{ role: SenaiRole; suffix: string }> = [
+  { role: "scout-1", suffix: "planner" },
+  { role: "planner", suffix: "planner" },
+  { role: "implementer", suffix: "implementer" },
+  { role: "reviewer-correctness", suffix: "reviewer-correctness" },
+  { role: "reviewer-security", suffix: "reviewer-security" },
+  { role: "reviewer-tests", suffix: "reviewer-tests" },
+  { role: "code-review", suffix: "reviewer-correctness" },
+];
+
+// Maps each generated architecture role to the stage skill it should reference.
+// Reviewers act in the plan stage: their review artifacts live under plan/reviews/.
+export const ARCHITECT_ROLE_STAGE: Record<string, string> = {
+  planner: "plan",
+  implementer: "implement",
+  "reviewer-correctness": "plan",
+  "reviewer-security": "plan",
+  "reviewer-tests": "plan",
+};
 
 export function getArchitectProfilePath(cwd: string): string {
   return path.join(getArchitectStateDir(cwd), ARCHITECT_PROFILE_FILE);
@@ -186,11 +212,75 @@ export function loadArchitectReport(cwd: string): ArchitectReport | null {
         .filter((adr): adr is ArchitectAdr => adr !== null);
     }
 
+    // Older reports store confidence as a number (e.g. 95). Normalize it to
+    // the string scale so downstream checks read it correctly.
+    if (typeof record.confidence === "number" && Number.isFinite(record.confidence)) {
+      normalized.confidence = record.confidence >= 80 ? "high" : record.confidence >= 50 ? "medium" : "low";
+    }
+
     return normalized;
   } catch (err: any) {
     if (err.code === "ENOENT") return null;
     throw new Error(`Invalid architect report at ${reportPath}: ${err.message}`);
   }
+}
+
+export const GENERATED_MANIFEST_FILE = "generated-manifest.json";
+
+export interface GeneratedManifest {
+  version: 1;
+  generatedAt: string;
+  files: Record<string, string>;
+}
+
+// Records the content hash of every generated file at generation time. The
+// drift check compares against these hashes, never against timestamps.
+export function writeGeneratedManifest(cwd: string, files: string[]): GeneratedManifest {
+  const manifest: GeneratedManifest = {
+    version: 1,
+    generatedAt: new Date().toISOString(),
+    files: {},
+  };
+  for (const filePath of files) {
+    const hash = createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+    manifest.files[path.relative(cwd, filePath)] = hash;
+  }
+  const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  return manifest;
+}
+
+export function loadGeneratedManifest(cwd: string): GeneratedManifest | null {
+  const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
+  try {
+    const raw = fs.readFileSync(manifestPath, "utf8");
+    const parsed = JSON.parse(raw) as GeneratedManifest;
+    if (parsed.version !== 1 || typeof parsed.files !== "object" || parsed.files === null) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+// Merges new files into an existing manifest without wiping other entries.
+// Used when a second generator (e.g. the sub-agent generator) adds files to
+// drift tracking after the architecture factory wrote its own entries.
+export function addToGeneratedManifest(cwd: string, files: string[]): GeneratedManifest {
+  const existing = loadGeneratedManifest(cwd);
+  const manifest: GeneratedManifest = existing ?? { version: 1, generatedAt: "", files: {} };
+  for (const filePath of files) {
+    if (!fs.existsSync(filePath)) continue;
+    const hash = createHash("sha256").update(fs.readFileSync(filePath)).digest("hex");
+    manifest.files[path.relative(cwd, filePath)] = hash;
+  }
+  manifest.generatedAt = new Date().toISOString();
+  const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
+  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  return manifest;
 }
 
 export function saveArchitectReport(cwd: string, report: ArchitectReport): void {
@@ -329,12 +419,40 @@ export function generateAgentFiles(
     const agentName = `${profile.projectSlug}-${archId}-${role}`;
     const filePath = path.join(agentsDir, `${agentName}.md`);
 
-    const content = buildAgentMarkdown(agentName, role, profile, architecture, rules);
+    const content = buildAgentMarkdown(agentName, role, profile, architecture, rules, archId);
     fs.writeFileSync(filePath, content, "utf8");
     created.push(filePath);
   }
 
   return created;
+}
+
+/** Auto-map architecture-bound roles in agents.json to the generated agents.
+ *  Remaps roles still on built-in defaults or pointing at previously generated
+ *  agents for this project (stale after an architecture change). Never touches
+ *  other custom mappings. Creates agents.json if missing. Returns mapped roles. */
+export function autoMapArchitectureAgents(cwd: string, profile: ArchitectProfile, archId: string): SenaiRole[] {
+  const config = loadAgentConfig(cwd) ?? { version: 1, agents: {} };
+  const agents = { ...config.agents } as Record<string, string>;
+  const mapped: SenaiRole[] = [];
+  for (const { role, suffix } of ARCHITECTURE_AGENT_MAPPING) {
+    const expected = `${profile.projectSlug}-${archId}-${suffix}`;
+    const current = resolveAgentName(config, role);
+    const isDefault = current === DEFAULT_AGENTS[role];
+    // Stale = looks generated for this project but the agent file is gone
+    // (e.g. removed by removeStaleArchitectureArtifacts on a re-run). A user's
+    // own slug-prefixed agent file on disk is never treated as stale.
+    const agentFileExists = fs.existsSync(path.join(cwd, ".pi", "agents", `${current}.md`));
+    const isStaleGenerated = current.startsWith(`${profile.projectSlug}-`) && !agentFileExists;
+    if (!isDefault && !isStaleGenerated) continue;
+    if (agents[role] === expected) continue;
+    agents[role] = expected;
+    mapped.push(role);
+  }
+  if (mapped.length > 0) {
+    saveAgentConfig(cwd, { ...config, agents });
+  }
+  return mapped;
 }
 
 export function generateSkillFiles(
@@ -416,6 +534,12 @@ export function areDriversStale(cwd: string, inputsConfig: ArchitectInputsConfig
     return true;
   }
   const driversMtime = fs.statSync(driversPath).mtimeMs;
+  // The inputs config itself is watched: editing additionalConstraints or the
+  // document list rewrites it, and both must trigger a re-run.
+  const configPath = getArchitectInputsConfigPath(cwd);
+  if (fs.existsSync(configPath) && fs.statSync(configPath).mtimeMs > driversMtime) {
+    return true;
+  }
   for (const doc of inputsConfig.documents) {
     const docPath = path.resolve(cwd, doc.path);
     if (fs.existsSync(docPath)) {
@@ -443,6 +567,17 @@ export function generateArchitectureDocs(
   fs.writeFileSync(architecturePath, buildArchitectureMarkdown(profile, report), "utf8");
   created.push(architecturePath);
 
+  // Regeneration replaces the ADR set: remove old ADRs so the folder always
+  // matches the current report exactly.
+  for (const entry of fs.readdirSync(adrsDir)) {
+    if (!entry.endsWith(".md")) continue;
+    try {
+      fs.unlinkSync(path.join(adrsDir, entry));
+    } catch {
+      // Ignore deletion failures.
+    }
+  }
+
   for (const adr of report.adrs) {
     const adrFileName = `${adr.id}-${slugify(adr.title)}.md`;
     const adrPath = path.join(adrsDir, adrFileName);
@@ -451,6 +586,59 @@ export function generateArchitectureDocs(
   }
 
   return created;
+}
+
+// Removes generated agents and skills from PREVIOUS architecture runs of this
+// project (same project slug, different architecture id). Files that do not
+// match both the slug prefix and an architect role/stage suffix are untouched,
+// so user-created agents and skills stay safe.
+export function removeStaleArchitectureArtifacts(cwd: string, profile: ArchitectProfile): string[] {
+  const removed: string[] = [];
+  const prefix = `${profile.projectSlug}-`;
+
+  const expectedAgents = new Set(
+    ARCHITECT_ROLES.map((role) => `${profile.projectSlug}-${profile.selectedArchitecture}-${role}`),
+  );
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  if (fs.existsSync(agentsDir)) {
+    for (const entry of fs.readdirSync(agentsDir)) {
+      if (!entry.endsWith(".md")) continue;
+      const name = entry.slice(0, -3);
+      if (!name.startsWith(prefix)) continue;
+      if (!ARCHITECT_ROLES.some((role) => name.endsWith(`-${role}`))) continue;
+      if (expectedAgents.has(name)) continue;
+      const filePath = path.join(agentsDir, entry);
+      try {
+        fs.unlinkSync(filePath);
+        removed.push(path.relative(cwd, filePath));
+      } catch {
+        // Ignore deletion failures.
+      }
+    }
+  }
+
+  const expectedSkills = new Set(
+    ARCHITECT_STAGES.map((stage) => `${profile.projectSlug}-${profile.selectedArchitecture}-${stage}`),
+  );
+  const skillsDir = path.join(cwd, ".pi", "skills");
+  if (fs.existsSync(skillsDir)) {
+    for (const entry of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const name = entry.name;
+      if (!name.startsWith(prefix)) continue;
+      if (!ARCHITECT_STAGES.some((stage) => name.endsWith(`-${stage}`))) continue;
+      if (expectedSkills.has(name)) continue;
+      const dirPath = path.join(skillsDir, name);
+      try {
+        fs.rmSync(dirPath, { recursive: true, force: true });
+        removed.push(path.relative(cwd, dirPath));
+      } catch {
+        // Ignore deletion failures.
+      }
+    }
+  }
+
+  return removed;
 }
 
 export function slugify(text: string): string {
@@ -751,6 +939,7 @@ function buildAgentMarkdown(
   profile: ArchitectProfile,
   architecture: ArchitectureLibraryEntry,
   rules: string[],
+  archId: string,
 ): string {
   const roleDescription: Record<string, string> = {
     planner: "plans architecture-aware implementation",
@@ -765,7 +954,7 @@ function buildAgentMarkdown(
     `name: ${agentName}`,
     `description: ${roleDescription[role] ?? role} for ${profile.projectName} using ${architecture.name}`,
     "tools: read, write, edit, bash",
-    `skills: ${profile.projectSlug}-${architecture.name}-plan`,
+    `skills: ${profile.projectSlug}-${archId}-${ARCHITECT_ROLE_STAGE[role] ?? "plan"}`,
     "---",
     "",
     `# ${agentName}`,

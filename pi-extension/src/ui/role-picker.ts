@@ -1,5 +1,6 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Key, matchesKey, type Component } from "@mariozechner/pi-tui";
+import { Key, matchesKey } from "@mariozechner/pi-tui";
+import type { RoleGuidance } from "../agent-suggestions.js";
 
 export interface RolePickerItem {
   id: string;
@@ -7,7 +8,17 @@ export interface RolePickerItem {
   agent: string;
   summary: string;
   assigned: boolean;
+  guidance?: RoleGuidance;
+  needs?: string;
 }
+
+/** User-approved colors: green = handled by design, yellow = please
+ *  configure, gray = your choice. */
+const GUIDANCE_COLORS: Record<RoleGuidance, "success" | "warning" | "dim"> = {
+  "design-defined": "success",
+  recommended: "warning",
+  optional: "dim",
+};
 
 export interface RolePickerOptions {
   title: string;
@@ -15,6 +26,7 @@ export interface RolePickerOptions {
   pageSize?: number;
   subtitle?: string;
   initialSelectedId?: string;
+  showBack?: boolean;
 }
 
 export type RolePickerResult =
@@ -41,16 +53,24 @@ export async function runRolePicker(
 }
 
 const FINISH_ID = "__finish__";
+const BACK_ID = "__back__";
 
 function makeFallbackOptions(
   items: RolePickerItem[],
+  showBack?: boolean,
 ): { options: string[]; idMap: Map<string, string> } {
   const options: string[] = [];
   const idMap = new Map<string, string>();
+  if (showBack) {
+    options.push("Back");
+    idMap.set("Back", BACK_ID);
+  }
   for (const item of items) {
     const marker = item.assigned ? "✅" : "⬜";
     const agentPart = item.agent ? ` (${item.agent})` : "";
-    const label = `${marker} ${item.id}: ${item.label}${agentPart} — ${item.summary}`;
+    const needsPart = item.needs ? ` (needs: ${item.needs})` : "";
+    const guidancePart = item.guidance ? ` [${item.guidance}]` : "";
+    const label = `${marker} ${item.id}: ${item.label}${needsPart}${agentPart} — ${item.summary}${guidancePart}`;
     options.push(label);
     idMap.set(label, item.id);
   }
@@ -64,10 +84,11 @@ async function runFallbackRolePicker(
   ctx: ExtensionContext,
   options: RolePickerOptions,
 ): Promise<RolePickerResult> {
-  const { options: labels, idMap } = makeFallbackOptions(options.items);
+  const { options: labels, idMap } = makeFallbackOptions(options.items, options.showBack);
   const choice = await ctx.ui.select(options.title, labels);
   if (!choice) return { kind: "back" };
   const id = idMap.get(choice);
+  if (id === BACK_ID) return { kind: "back" };
   if (!id || id === FINISH_ID) return { kind: "finish" };
   return { kind: "role", role: id };
 }
@@ -86,6 +107,15 @@ async function runCustomRolePicker(
       summary: "",
       assigned: false,
     });
+    if (options.showBack) {
+      items.unshift({
+        id: BACK_ID,
+        label: "Back",
+        agent: "",
+        summary: "",
+        assigned: false,
+      });
+    }
 
     let selectedIndex = Math.max(
       0,
@@ -106,9 +136,16 @@ async function runCustomRolePicker(
     function renderRow(item: RolePickerItem, focused: boolean): string {
       const prefix = focused ? "→ " : "  ";
       const agentPart = item.agent ? ` (${item.agent})` : "";
-      const base = `${item.label}${agentPart} — ${item.summary}`;
+      const needsPart = item.needs ? ` (needs: ${item.needs})` : "";
+      const guidancePart = item.guidance
+        ? ` ${theme.fg(GUIDANCE_COLORS[item.guidance], `[${item.guidance}]`)}`
+        : "";
+      const base = `${item.label}${needsPart}${agentPart} — ${item.summary}${guidancePart}`;
       if (item.id === FINISH_ID) {
         return `${prefix}${theme.fg("text", "Finish")}`;
+      }
+      if (item.id === BACK_ID) {
+        return `${prefix}${theme.fg("text", "Back")}`;
       }
       if (focused) {
         return `${prefix}${theme.fg("accent", theme.bold(base))}`;
@@ -124,7 +161,7 @@ async function runCustomRolePicker(
       const border = "─".repeat(Math.max(2, width));
       lines.push(theme.fg("accent", border));
       lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
-      const subtitle = options.subtitle ?? " Tip: scouts and reviewers usually need documents; other roles use stage artifacts.";
+      const subtitle = options.subtitle ?? " Only roles that read project documents are shown; other roles use stage artifacts.";
       lines.push(theme.fg("warning", subtitle));
       lines.push(theme.fg("accent", border));
 
@@ -166,6 +203,8 @@ async function runCustomRolePicker(
           const item = items[selectedIndex];
           if (item.id === FINISH_ID) {
             done({ kind: "finish" });
+          } else if (item.id === BACK_ID) {
+            done({ kind: "back" });
           } else {
             done({ kind: "role", role: item.id });
           }

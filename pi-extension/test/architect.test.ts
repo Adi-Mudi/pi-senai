@@ -4,7 +4,9 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import {
+  addToGeneratedManifest,
   areDriversStale,
+  autoMapArchitectureAgents,
   buildArchitectPrompt,
   discoverArchitectureLibrary,
   generateAgentFiles,
@@ -15,13 +17,17 @@ import {
   isFeasible,
   loadArchitectProfile,
   loadArchitectReport,
+  loadGeneratedManifest,
   migrateLegacyArchitectState,
+  removeStaleArchitectureArtifacts,
   saveArchitectProfile,
   saveArchitectReport,
   selectArchitecture,
   slugify,
 } from "../src/architect.js";
+import { saveAgentConfig } from "../src/agent-config.js";
 import type { ArchitectProfile, ArchitectReport, ArchitectureLibraryEntry } from "../src/architect.js";
+import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import type { ArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { createEmptyDrivers } from "../src/driver-extractor.js";
 
@@ -672,6 +678,787 @@ describe("architect", () => {
     assert.strictEqual(moved.length, 1);
     assert.ok(fs.existsSync(path.join(targetDir, "architecture.md")));
     assert.ok(!fs.existsSync(path.join(targetDir, "architect-map")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateAgentFiles links each agent to its stage skill using the architecture id", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-agent-skills-"));
+    const profile: ArchitectProfile = {
+      projectName: "Inventory App",
+      projectSlug: "inventory-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
+      name: "Modular Monolith",
+      filePath: "",
+      domain: ["web"],
+      teamSize: "small",
+      complexity: "low",
+      bestForDrivers: ["small team"],
+      notForDrivers: ["large independent teams"],
+      content: "",
+    };
+    generateAgentFiles(tmpDir, profile, entry);
+    const skillPaths = generateSkillFiles(tmpDir, profile, entry);
+    const skillNames = new Set(skillPaths.map((p) => path.basename(path.dirname(p))));
+
+    const readSkillRef = (role: string): string => {
+      const content = fs.readFileSync(
+        path.join(tmpDir, ".pi", "agents", `inventory-app-modular-monolith-${role}.md`),
+        "utf8",
+      );
+      const match = content.match(/^skills:\s*(.+)$/m);
+      assert.ok(match, `agent ${role} should have a skills frontmatter line`);
+      return match[1].trim();
+    };
+
+    assert.strictEqual(readSkillRef("planner"), "inventory-app-modular-monolith-plan");
+    assert.strictEqual(readSkillRef("implementer"), "inventory-app-modular-monolith-implement");
+    assert.strictEqual(readSkillRef("reviewer-correctness"), "inventory-app-modular-monolith-plan");
+    assert.strictEqual(readSkillRef("reviewer-security"), "inventory-app-modular-monolith-plan");
+    assert.strictEqual(readSkillRef("reviewer-tests"), "inventory-app-modular-monolith-plan");
+
+    for (const role of ["planner", "implementer", "reviewer-correctness", "reviewer-security", "reviewer-tests"]) {
+      assert.ok(
+        skillNames.has(readSkillRef(role)),
+        `referenced skill for ${role} should match a generated skill folder`,
+      );
+    }
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns true when the inputs config is newer than drivers", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-config-"));
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(tmpDir, "docs", "PRD.md"), old, old);
+    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), old, old);
+    const inputsConfig = {
+      version: 1 as const,
+      documents: [{ type: "prd" as const, path: "docs/PRD.md" }],
+      additionalConstraints: ["changed constraint"],
+    };
+    saveArchitectInputsConfig(tmpDir, inputsConfig);
+    assert.strictEqual(areDriversStale(tmpDir, inputsConfig), true);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns false when config and documents are older than drivers", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-config-ok-"));
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+    const inputsConfig = {
+      version: 1 as const,
+      documents: [{ type: "prd" as const, path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    };
+    saveArchitectInputsConfig(tmpDir, inputsConfig);
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(tmpDir, "docs", "PRD.md"), old, old);
+    fs.utimesSync(path.join(tmpDir, ".pi", "senai", "architect-inputs.json"), old, old);
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    assert.strictEqual(areDriversStale(tmpDir, inputsConfig), false);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts removes only previous-architecture files", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-"));
+    const profile: ArchitectProfile = {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "hexagonal",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "test-project-monolith-planner.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-monolith-implementer.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-hexagonal-planner.md"), "current", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "my-helper.md"), "user", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-notes.md"), "user file with slug prefix", "utf8");
+    const oldSkillDir = path.join(tmpDir, ".pi", "skills", "test-project-monolith-plan");
+    fs.mkdirSync(oldSkillDir, { recursive: true });
+    fs.writeFileSync(path.join(oldSkillDir, "SKILL.md"), "old", "utf8");
+    const currentSkillDir = path.join(tmpDir, ".pi", "skills", "test-project-hexagonal-plan");
+    fs.mkdirSync(currentSkillDir, { recursive: true });
+    fs.writeFileSync(path.join(currentSkillDir, "SKILL.md"), "current", "utf8");
+
+    const removed = removeStaleArchitectureArtifacts(tmpDir, profile);
+
+    assert.strictEqual(removed.length, 3);
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-planner.md")));
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-implementer.md")));
+    assert.ok(!fs.existsSync(oldSkillDir));
+    assert.ok(fs.existsSync(path.join(agentsDir, "test-project-hexagonal-planner.md")));
+    assert.ok(fs.existsSync(path.join(agentsDir, "my-helper.md")));
+    assert.ok(fs.existsSync(path.join(agentsDir, "test-project-notes.md")));
+    assert.ok(fs.existsSync(path.join(currentSkillDir, "SKILL.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs replaces the ADR set on regeneration", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-adr-clear-"));
+    const profile: ArchitectProfile = {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const baseReport: ArchitectReport = {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [{ id: "0001", title: "Use modular monolith", context: "c", decision: "d", consequences: "x" }],
+      constraints: [],
+    };
+
+    generateArchitectureDocs(tmpDir, profile, baseReport);
+    const adrsDir = path.join(tmpDir, ".pi", "architect", "adrs");
+    assert.ok(fs.existsSync(path.join(adrsDir, "0001-use-modular-monolith.md")));
+
+    const newReport: ArchitectReport = {
+      ...baseReport,
+      adrs: [{ id: "0001", title: "Adopt plugin kernel", context: "c", decision: "d", consequences: "x" }],
+    };
+    generateArchitectureDocs(tmpDir, profile, newReport);
+
+    assert.deepStrictEqual(fs.readdirSync(adrsDir), ["0001-adopt-plugin-kernel.md"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeArchReport(adrs: ArchitectReport["adrs"]): ArchitectReport {
+    return {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs,
+      constraints: [],
+    };
+  }
+
+  function makeCleanupProfile(): ArchitectProfile {
+    return {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "hexagonal",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+  }
+
+  it("removeStaleArchitectureArtifacts clears multiple old architectures and keeps lookalikes", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-multi-"));
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    fs.writeFileSync(path.join(agentsDir, "test-project-monolith-planner.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-layered-architecture-implementer.md"), "old", "utf8");
+    fs.writeFileSync(path.join(agentsDir, "test-project-hexagonal-planner-backup.md"), "lookalike", "utf8");
+
+    const removed = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
+
+    assert.strictEqual(removed.length, 2);
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-planner.md")));
+    assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-layered-architecture-implementer.md")));
+    assert.ok(fs.existsSync(path.join(agentsDir, "test-project-hexagonal-planner-backup.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts keeps skill-like files that are not directories", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-file-"));
+    const skillsDir = path.join(tmpDir, ".pi", "skills");
+    fs.mkdirSync(skillsDir, { recursive: true });
+    fs.writeFileSync(path.join(skillsDir, "test-project-monolith-plan"), "a file, not a dir", "utf8");
+
+    const removed = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
+
+    assert.deepStrictEqual(removed, []);
+    assert.ok(fs.existsSync(path.join(skillsDir, "test-project-monolith-plan")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts handles missing agents and skills directories", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-empty-"));
+    assert.deepStrictEqual(removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile()), []);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs keeps non-markdown files in the adrs folder", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-adr-keep-"));
+    const adrsDir = path.join(tmpDir, ".pi", "architect", "adrs");
+    fs.mkdirSync(adrsDir, { recursive: true });
+    fs.writeFileSync(path.join(adrsDir, "notes.txt"), "keep me", "utf8");
+    fs.writeFileSync(path.join(adrsDir, "0099-old-decision.md"), "old", "utf8");
+
+    generateArchitectureDocs(tmpDir, makeCleanupProfile(), makeArchReport([
+      { id: "0001", title: "First decision", context: "c", decision: "d", consequences: "x" },
+    ]));
+
+    assert.ok(fs.existsSync(path.join(adrsDir, "notes.txt")));
+    assert.ok(!fs.existsSync(path.join(adrsDir, "0099-old-decision.md")));
+    assert.ok(fs.existsSync(path.join(adrsDir, "0001-first-decision.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs with zero ADRs empties the adrs folder", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-adr-zero-"));
+    const adrsDir = path.join(tmpDir, ".pi", "architect", "adrs");
+    fs.mkdirSync(adrsDir, { recursive: true });
+    fs.writeFileSync(path.join(adrsDir, "0001-old-decision.md"), "old", "utf8");
+
+    generateArchitectureDocs(tmpDir, makeCleanupProfile(), makeArchReport([]));
+
+    assert.deepStrictEqual(fs.readdirSync(adrsDir), []);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("areDriversStale returns false when config and drivers have the same mtime", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-stale-equal-"));
+    fs.mkdirSync(path.join(tmpDir, "docs"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, "docs", "PRD.md"), "# PRD", "utf8");
+    const inputsConfig = {
+      version: 1 as const,
+      documents: [{ type: "prd" as const, path: "docs/PRD.md" }],
+      additionalConstraints: [],
+    };
+    saveArchitectInputsConfig(tmpDir, inputsConfig);
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), "{}", "utf8");
+    const same = new Date(Date.now() - 60_000);
+    fs.utimesSync(path.join(tmpDir, "docs", "PRD.md"), same, same);
+    fs.utimesSync(path.join(tmpDir, ".pi", "senai", "architect-inputs.json"), same, same);
+    fs.utimesSync(path.join(tmpDir, ".pi", "architect", "architectural-drivers.json"), same, same);
+    assert.strictEqual(areDriversStale(tmpDir, inputsConfig), false);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport normalizes numeric confidence", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-confidence-"));
+
+    saveArchitectReport(tmpDir, { ...makeArchReport([]), confidence: 95 } as unknown as ArchitectReport);
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "high");
+
+    saveArchitectReport(tmpDir, { ...makeArchReport([]), confidence: 60 } as unknown as ArchitectReport);
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "medium");
+
+    saveArchitectReport(tmpDir, { ...makeArchReport([]), confidence: 10 } as unknown as ArchitectReport);
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "low");
+
+    saveArchitectReport(tmpDir, makeArchReport([]));
+    assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, "high");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function makeAutoMapProfile(): ArchitectProfile {
+    return {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+  }
+
+  it("autoMapArchitectureAgents creates agents.json and maps all seven roles", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-automap-"));
+
+    const mapped = autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith");
+
+    assert.deepStrictEqual(mapped, [
+      "scout-1",
+      "planner",
+      "implementer",
+      "reviewer-correctness",
+      "reviewer-security",
+      "reviewer-tests",
+      "code-review",
+    ]);
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(saved.agents["scout-1"], "test-project-modular-monolith-planner");
+    assert.strictEqual(saved.agents["planner"], "test-project-modular-monolith-planner");
+    assert.strictEqual(saved.agents["implementer"], "test-project-modular-monolith-implementer");
+    assert.strictEqual(saved.agents["reviewer-correctness"], "test-project-modular-monolith-reviewer-correctness");
+    assert.strictEqual(saved.agents["reviewer-security"], "test-project-modular-monolith-reviewer-security");
+    assert.strictEqual(saved.agents["reviewer-tests"], "test-project-modular-monolith-reviewer-tests");
+    assert.strictEqual(saved.agents["code-review"], "test-project-modular-monolith-reviewer-correctness");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("autoMapArchitectureAgents preserves custom mappings and remaps stale generated ones", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-automap-custom-"));
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: {
+        implementer: "my-custom-coder",
+        planner: "test-project-old-arch-planner",
+      },
+    });
+
+    const mapped = autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith");
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(saved.agents["implementer"], "my-custom-coder", "custom mapping must stay untouched");
+    assert.strictEqual(
+      saved.agents["planner"],
+      "test-project-modular-monolith-planner",
+      "stale generated mapping must be remapped",
+    );
+    assert.ok(!mapped.includes("implementer"));
+    assert.ok(mapped.includes("planner"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("autoMapArchitectureAgents is a no-op when mappings are already correct", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-automap-noop-"));
+
+    const first = autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith");
+    assert.strictEqual(first.length, 7);
+    const before = fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8");
+
+    const second = autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith");
+
+    assert.deepStrictEqual(second, []);
+    const after = fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8");
+    assert.strictEqual(after, before, "agents.json must not be rewritten on a no-op run");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport maps a free-text ADR string to id ADR-000 and keeps the title", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-rep-adr000-"));
+    saveArchitectReport(tmpDir, {
+      ...makeArchReport([]),
+      adrs: ["Use a single deployable unit for everything"],
+    } as unknown as ArchitectReport);
+
+    const loaded = loadArchitectReport(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.adrs.length, 1);
+    assert.strictEqual(loaded!.adrs[0].id, "ADR-000");
+    assert.strictEqual(loaded!.adrs[0].title, "Use a single deployable unit for everything");
+    assert.strictEqual(loaded!.adrs[0].context, "");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport drops empty strings, numbers, nulls, and id-less objects from adrs", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-rep-adr-filter-"));
+    saveArchitectReport(tmpDir, {
+      ...makeArchReport([]),
+      adrs: [
+        "",
+        42,
+        null,
+        { id: "", title: "x" },
+        { id: "ADR-7", title: "Valid decision", context: "c", decision: "d", consequences: "x" },
+      ],
+    } as unknown as ArchitectReport);
+
+    const loaded = loadArchitectReport(tmpDir);
+    assert.ok(loaded);
+    assert.strictEqual(loaded!.adrs.length, 1, "only the fully valid entry survives");
+    assert.strictEqual(loaded!.adrs[0].id, "ADR-7");
+    assert.strictEqual(loaded!.adrs[0].title, "Valid decision");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadArchitectReport maps numeric confidence at the 80/50 boundaries", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-confidence-edge-"));
+    const cases: Array<[number, string]> = [
+      [80, "high"],
+      [79, "medium"],
+      [50, "medium"],
+      [49, "low"],
+    ];
+    for (const [value, expected] of cases) {
+      saveArchitectReport(tmpDir, { ...makeArchReport([]), confidence: value } as unknown as ArchitectReport);
+      assert.strictEqual(loadArchitectReport(tmpDir)?.confidence, expected, `confidence ${value}`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  function writeManifest(tmpDir: string, content: string): void {
+    fs.mkdirSync(path.join(tmpDir, ".pi", "architect"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "architect", "generated-manifest.json"), content, "utf8");
+  }
+
+  it("loadGeneratedManifest returns null for a wrong version", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-manifest-ver-"));
+    writeManifest(tmpDir, JSON.stringify({ version: 2, generatedAt: "", files: {} }));
+    assert.strictEqual(loadGeneratedManifest(tmpDir), null);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadGeneratedManifest returns null when files is not an object", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-manifest-files-"));
+    writeManifest(tmpDir, JSON.stringify({ version: 1, generatedAt: "", files: "nope" }));
+    assert.strictEqual(loadGeneratedManifest(tmpDir), null);
+    writeManifest(tmpDir, JSON.stringify({ version: 1, generatedAt: "", files: null }));
+    assert.strictEqual(loadGeneratedManifest(tmpDir), null);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("loadGeneratedManifest returns null for malformed JSON", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-manifest-json-"));
+    writeManifest(tmpDir, "{ not valid");
+    assert.strictEqual(loadGeneratedManifest(tmpDir), null);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("addToGeneratedManifest skips missing files and hashes only real ones", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-manifest-add-"));
+    const realPath = path.join(tmpDir, "real-file.txt");
+    fs.writeFileSync(realPath, "content", "utf8");
+    const missingPath = path.join(tmpDir, "does-not-exist.txt");
+
+    const manifest = addToGeneratedManifest(tmpDir, [realPath, missingPath]);
+
+    assert.deepStrictEqual(Object.keys(manifest.files), ["real-file.txt"]);
+    assert.match(manifest.files["real-file.txt"], /^[0-9a-f]{64}$/);
+    const persisted = loadGeneratedManifest(tmpDir);
+    assert.deepStrictEqual(Object.keys(persisted!.files), ["real-file.txt"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("migrateLegacyArchitectState returns empty when no legacy dir exists", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-migrate-none-"));
+    assert.deepStrictEqual(migrateLegacyArchitectState(tmpDir), []);
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "architect")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("migrateLegacyArchitectState does not clobber an existing .pi/architect", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-migrate-clobber-"));
+    const legacyDir = path.join(tmpDir, ".IDE_Plans", "architect");
+    const targetDir = path.join(tmpDir, ".pi", "architect");
+    fs.mkdirSync(legacyDir, { recursive: true });
+    fs.writeFileSync(path.join(legacyDir, "old.md"), "old", "utf8");
+    fs.mkdirSync(targetDir, { recursive: true });
+    fs.writeFileSync(path.join(targetDir, "current.md"), "current", "utf8");
+
+    assert.deepStrictEqual(migrateLegacyArchitectState(tmpDir), []);
+    assert.ok(fs.existsSync(path.join(legacyDir, "old.md")), "legacy dir stays untouched");
+    assert.strictEqual(fs.readFileSync(path.join(targetDir, "current.md"), "utf8"), "current");
+    assert.ok(!fs.existsSync(path.join(targetDir, "old.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("selectArchitecture keeps the first entry on ties and on all-negative scores", () => {
+    const drivers = createEmptyDrivers();
+    drivers.functionalRequirements.push({ id: "FR-1", description: "plain requirement" });
+    const makeEntry = (id: string, notFor: string[]): ArchitectureLibraryEntry => ({
+      id,
+      name: id,
+      filePath: "",
+      domain: [],
+      teamSize: "",
+      complexity: "",
+      bestForDrivers: [],
+      notForDrivers: notFor,
+      content: "",
+    });
+
+    const tie = selectArchitecture(drivers, [makeEntry("first", []), makeEntry("second", [])]);
+    assert.strictEqual(tie?.id, "first", "equal scores keep library order");
+
+    const negativeDrivers = createEmptyDrivers();
+    negativeDrivers.functionalRequirements.push({ id: "FR-1", description: "needs kubernetes" });
+    const negative = selectArchitecture(negativeDrivers, [
+      makeEntry("first", ["kubernetes"]),
+      makeEntry("second", ["kubernetes"]),
+    ]);
+    assert.strictEqual(negative?.id, "first", "all-negative scores still return scored[0]");
+  });
+
+  it("slugify truncates at 40 characters and returns empty for all-symbol input", () => {
+    const long = "a".repeat(60);
+    assert.strictEqual(slugify(long).length, 40);
+    assert.strictEqual(slugify(long), "a".repeat(40));
+    assert.strictEqual(slugify("!!!"), "");
+  });
+
+  it("generateArchitectureDocs fills fallback lines when report sections are empty", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-docs-empty-"));
+    const profile: ArchitectProfile = {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+
+    generateArchitectureDocs(tmpDir, profile, makeArchReport([]));
+
+    const content = fs.readFileSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), "utf8");
+    assert.ok(content.includes("Not provided."), "empty text sections use the Not provided fallback");
+    assert.ok(content.includes("No components defined."));
+    assert.ok(content.includes("No interfaces defined."));
+    assert.ok(content.includes("No technology stack defined."));
+    assert.ok(content.includes("No development order defined."));
+    assert.ok(content.includes("No atomic functions defined."));
+    assert.ok(content.includes("No quality attribute mapping defined."));
+    assert.ok(content.includes("No constraints defined."));
+    assert.ok(content.includes("No ADRs defined."));
+    assert.ok(content.includes("participant System"), "zero-component sequence diagram uses the System fallback");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("autoMapArchitectureAgents throws on a corrupted agents.json", () => {
+    // NOTE: possible bug — see Doc/test-plan.md known issues
+    // (throw propagates through finalize after artifacts are already written)
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-automap-corrupt-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "{ not valid json", "utf8");
+
+    assert.throws(
+      () => autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith"),
+      /Invalid agent config/,
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("autoMapArchitectureAgents preserves a custom agent whose name starts with the project slug", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-automap-prefix-"));
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: { implementer: "test-project-my-handmade-agent" },
+    });
+    // The hand-made agent file exists on disk, so it is never treated as stale.
+    fs.mkdirSync(path.join(tmpDir, ".pi", "agents"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "agents", "test-project-my-handmade-agent.md"), "custom", "utf8");
+
+    const mapped = autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith");
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(
+      saved.agents["implementer"],
+      "test-project-my-handmade-agent",
+      "hand-made agent with the slug prefix must stay untouched",
+    );
+    assert.ok(!mapped.includes("implementer"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("autoMapArchitectureAgents leaves agents generated for a different project untouched", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-automap-other-"));
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: { planner: "other-project-modular-monolith-planner" },
+    });
+
+    const mapped = autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith");
+
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(saved.agents["planner"], "other-project-modular-monolith-planner");
+    assert.ok(!mapped.includes("planner"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("autoMapArchitectureAgents returns only the roles it actually changed", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-automap-mixed-"));
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: {
+        planner: "test-project-modular-monolith-planner", // already correct
+        implementer: "test-project-old-arch-implementer", // stale generated
+      },
+    });
+
+    const mapped = autoMapArchitectureAgents(tmpDir, makeAutoMapProfile(), "modular-monolith");
+
+    assert.deepStrictEqual(mapped, [
+      "scout-1",
+      "implementer",
+      "reviewer-correctness",
+      "reviewer-security",
+      "reviewer-tests",
+      "code-review",
+    ]);
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(
+      saved.agents["planner"],
+      "test-project-modular-monolith-planner",
+      "already-correct mapping is not rewritten",
+    );
+    assert.strictEqual(saved.agents["implementer"], "test-project-modular-monolith-implementer");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("coverage audit gaps", () => {
+  function makeGapProfile(overrides?: Partial<ArchitectProfile>): ArchitectProfile {
+    return {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+      ...overrides,
+    };
+  }
+
+  function makeGapReport(overrides?: Partial<ArchitectReport>): ArchitectReport {
+    return {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+      ...overrides,
+    };
+  }
+
+  it("discoverArchitectureLibrary accepts a JSON file holding a single object", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-lib-single-"));
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "single.json"),
+      JSON.stringify({ id: "solo-arch", name: "Solo Arch", description: "One object, not an array." }),
+      "utf8",
+    );
+
+    const entries = discoverArchitectureLibrary(tmpDir);
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].id, "solo-arch");
+    assert.strictEqual(entries[0].name, "Solo Arch");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("discoverArchitectureLibrary skips name-less JSON items, uses domain when platform is absent, and ignores other files", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-lib-json-edge-"));
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "library.json"),
+      JSON.stringify([
+        { id: "no-name-here" },
+        { name: "Domain Only Arch", domain: ["embedded", "plc"] },
+      ]),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(libDir, "notes.txt"), "name: Not An Entry", "utf8");
+
+    const entries = discoverArchitectureLibrary(tmpDir);
+    assert.strictEqual(entries.length, 1);
+    assert.strictEqual(entries[0].name, "Domain Only Arch");
+    assert.strictEqual(entries[0].id, "domain-only-arch");
+    assert.deepStrictEqual(entries[0].domain, ["embedded", "plc"]);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs draws system-context edges for external interfaces only", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-docs-ext-"));
+    const report = makeGapReport({
+      interfaces: [
+        { name: "Payment Gateway", type: "external", description: "Card payments" },
+        { name: "Internal Bus", type: "internal", description: "In-process events" },
+      ],
+    });
+
+    generateArchitectureDocs(tmpDir, makeGapProfile(), report);
+
+    const content = fs.readFileSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), "utf8");
+    assert.ok(content.includes("id_payment-gateway[Payment Gateway]"));
+    assert.ok(content.includes("System --> id_payment-gateway"));
+    assert.ok(!content.includes("id_internal-bus"), "internal interfaces are not external context nodes");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs chains sequence edges and caps participants at six", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-docs-seq-"));
+    const components = Array.from({ length: 8 }, (_, i) => ({
+      name: `Comp ${i + 1}`,
+      responsibility: "Part of the chain",
+      dependencies: [],
+    }));
+    const report = makeGapReport({ components });
+
+    generateArchitectureDocs(tmpDir, makeGapProfile(), report);
+
+    const content = fs.readFileSync(path.join(tmpDir, ".pi", "architect", "architecture.md"), "utf8");
+    assert.ok(content.includes("U->>id_comp-1: initiates request"));
+    assert.ok(content.includes("id_comp-1->>id_comp-2: processes"));
+    assert.ok(content.includes("id_comp-5->>id_comp-6: processes"));
+    assert.ok(content.includes("id_comp-6-->>U: returns result"));
+    assert.ok(!content.includes("participant id_comp-7"), "participants are capped by slice(0, 6)");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateAgentFiles includes the additional constraints block when configured", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-agent-constraints-"));
+    const profile = makeGapProfile({ additionalConstraints: ["Must run offline", "No paid services"] });
+    const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
+      name: "Modular Monolith",
+      filePath: "",
+      domain: [],
+      teamSize: "",
+      complexity: "",
+      bestForDrivers: [],
+      notForDrivers: [],
+      content: "",
+    };
+
+    generateAgentFiles(tmpDir, profile, entry);
+
+    const content = fs.readFileSync(
+      path.join(tmpDir, ".pi", "agents", "test-project-modular-monolith-planner.md"),
+      "utf8",
+    );
+    assert.ok(content.includes("## Additional constraints"));
+    assert.ok(content.includes("- Must run offline"));
+    assert.ok(content.includes("- No paid services"));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

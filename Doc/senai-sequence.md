@@ -48,7 +48,10 @@ Configuration commands:
 - `/senai-files` — show the configured project file list.
 - `/senai-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/senai/agents_files.json`.
 - `/senai-agents-files` — show configured document assignments per role.
-- `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, and runtime environment.
+- `/senai-configure-architect-inputs` — select the documents and constraints the architect agent reads (`.pi/senai/architect-inputs.json`).
+- `/senai-generate-architect` — generate the project architecture, five architecture agents, and four architecture skills; creates or updates `.pi/senai/agents.json` and auto-maps the seven architecture-bound roles.
+- `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, runtime environment, and the architecture factory output (agent mapping, generated agent content, drift).
+- `/senai-generate-sub-agents` — generate project-specific sub-agents for the 14 non-architecture roles from bundled technology resources (basic mode: 3–4 questions). Only roles on built-in defaults are generated; one confirmation before writing and mapping.
 
 Other commands:
 
@@ -279,4 +282,4 @@ All auto-generated files go into `.IDE_Plans/senai/`:
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
 8. **Approve auto-runs the next stage.** `/senai-approve` is the single command that moves the run forward; manual stage commands are still available as overrides.
 9. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
-10. **Configure first.** Stage commands require valid `.pi/senai/agents.json`, `.pi/senai/files.json`, and `.pi/senai/agents_files.json`. Run `/senai-configure-agents`, `/senai-configure-files`, and `/senai-configure-agents-files` before the first stage.
+10. **Configure first.** Stage commands require valid `.pi/senai/agents.json`, `.pi/senai/files.json`, and `.pi/senai/agents_files.json`. One-time setup order: `/senai-configure-files` → `/senai-configure-architect-inputs` → `/senai-generate-architect` → `/senai-generate-sub-agents` → `/senai-configure-agents-files` → `/senai-doctor`. The generate commands create and update `agents.json`; `/senai-configure-agents` is the optional manual override.

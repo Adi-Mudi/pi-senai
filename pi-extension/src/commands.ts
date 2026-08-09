@@ -2,7 +2,6 @@ import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-age
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
-  getConfigPath,
   loadAgentConfig,
   resolveAgentName,
   saveAgentConfig,
@@ -18,20 +17,22 @@ import {
 } from "./agents-files-config.js";
 import { discoverProjectFiles, safeReadDir, isExcluded } from "./files-discovery.js";
 import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./files-config.js";
-import { buildAgentRegistryBlock } from "./agent-registry.js";
 import {
   DEFAULT_AGENTS,
+  PICKER_ROLES,
   SENAI_ROLES,
+  ROLE_GUIDANCE,
   ROLE_LABELS,
   type SenaiRole,
   buildSuggestionMap,
 } from "./agent-suggestions.js";
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
+import { roleDocumentNeed, suggestTruthDocuments } from "./document-suggestions.js";
 import {
   formatDiagnosticReport,
   runSenaiDiagnostic,
 } from "./doctor.js";
-import { buildStagePrompt } from "./prompt.js";
+import { buildStagePrompt, resolveSkillPath } from "./prompt.js";
 import {
   runListEditor,
   type ListEditorCustomAction,
@@ -41,6 +42,11 @@ import {
   runRolePicker,
   type RolePickerItem,
 } from "./ui/role-picker.js";
+import {
+  runSimpleConfirm,
+  runSimplePicker,
+  type SimplePickerItem,
+} from "./ui/simple-picker.js";
 import {
   advanceStage,
   loadState,
@@ -53,45 +59,23 @@ import {
   getSelectedInputPaths,
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
-  type ArchitectDocumentInput,
   type ArchitectDocumentType,
   type ArchitectInputsConfig,
 } from "./architect-inputs-config.js";
-import {
-  buildDocumentIngestPrompt,
-  buildIngestBatches,
-  buildMapOutputPath,
-  loadDocumentManifest,
-  mergeMapOutputs,
-  readMapOutputs,
-  saveDocumentManifest,
-  type DocumentManifest,
-} from "./document-ingest.js";
-import { getArchitectMapDir } from "./constants.js";
-import {
-  createEmptyDrivers,
-  findDriverGaps,
-  loadDrivers,
-  saveDrivers,
-  type ArchitecturalDrivers,
-  type DriverGap,
-} from "./driver-extractor.js";
+import { loadDrivers } from "./driver-extractor.js";
 import {
   areDriversStale,
-  buildArchitectPrompt,
-  discoverArchitectureLibrary,
-  generateAgentFiles,
-  generateSkillFiles,
-  loadArchitectProfile,
   loadArchitectReport,
-  saveArchitectProfile,
-  saveArchitectReport,
-  selectArchitecture,
   slugify,
-  type ArchitectProfile,
   type ArchitectReport,
-  type ArchitectureLibraryEntry,
 } from "./architect.js";
+import {
+  GENERATED_ROLES,
+  discoverTechnologyResources,
+  matchTechnologies,
+  planAgentGeneration,
+  writeGeneratedAgents,
+} from "./agent-generator.js";
 
 const NEXT_COMMAND: Record<string, string> = {
   planning: "/senai-approve",
@@ -307,7 +291,8 @@ export function registerCommands(pi: ExtensionAPI) {
         return;
       }
 
-      const confirmed = await ctx.ui.confirm(
+      const confirmed = await runSimpleConfirm(
+        ctx,
         "Approve stage",
         `Approve '${state.currentStage}' and run the next stage?`,
       );
@@ -360,7 +345,8 @@ export function registerCommands(pi: ExtensionAPI) {
         ctx.ui.notify("No active senai run to reset.", "info");
         return;
       }
-      const confirmed = await ctx.ui.confirm(
+      const confirmed = await runSimpleConfirm(
+        ctx,
         "Reset senai run",
         `Reset run "${state.mission}"? This only deletes the state file; artifacts are preserved.`,
       );
@@ -510,7 +496,7 @@ function ensureAgentConfig(cwd: string, ctx: ExtensionContext): boolean {
   const config = loadAgentConfig(cwd);
   if (!config) {
     ctx.ui.notify(
-      "No Pi Senai agent configuration found. Please run /senai-configure-agents first.",
+      "No Pi Senai agent configuration found. Run /senai-generate-sub-agents to generate your team, or /senai-configure-agents to configure agents manually.",
       "warning",
     );
     return false;
@@ -558,7 +544,7 @@ export function registerAgentCommands(pi: ExtensionAPI) {
       const config = loadAgentConfig(ctx.cwd);
       if (!config) {
         ctx.ui.notify(
-          "No agent configuration found. Run /senai-configure-agents first.",
+          "No agent configuration found. Run /senai-generate-sub-agents or /senai-configure-agents to create it.",
           "warning",
         );
         return;
@@ -588,67 +574,89 @@ export function registerAgentCommands(pi: ExtensionAPI) {
       const suggestions = buildSuggestionMap(agents);
       const existing = loadAgentConfig(ctx.cwd);
       const mapping: Partial<Record<SenaiRole, string>> = {};
-      let i = 0;
 
-      while (i < SENAI_ROLES.length) {
-        const role = SENAI_ROLES[i];
-        const existingValue = existing?.agents?.[role];
+      const effectiveAgent = (role: SenaiRole): string =>
+        mapping[role] ?? existing?.agents?.[role] ?? suggestions[role] ?? DEFAULT_AGENTS[role];
+
+      let lastSelectedId: string | undefined;
+      let editing = true;
+      while (editing) {
+        const items: RolePickerItem[] = SENAI_ROLES.map((role) => {
+          const effective = effectiveAgent(role);
+          const suggested = suggestions[role];
+          const isCustom = Boolean(mapping[role] ?? existing?.agents?.[role]);
+          return {
+            id: role,
+            label: ROLE_LABELS[role],
+            agent: effective,
+            summary:
+              suggested && suggested !== effective
+                ? `suggested: ${suggested}`
+                : isCustom
+                  ? "custom"
+                  : "default",
+            assigned: isCustom,
+          };
+        });
+
+        const action = await runRolePicker(ctx, {
+          title: "Configure agents",
+          subtitle: " Enter edits one role • Finish saves all • Back cancels. Unedited roles keep their current or suggested agent.",
+          items,
+          initialSelectedId: lastSelectedId,
+          showBack: true,
+        });
+
+        if (action.kind === "back") {
+          ctx.ui.notify("Agent configuration cancelled — no changes saved.", "info");
+          return;
+        }
+        if (action.kind !== "role") {
+          editing = false;
+          break;
+        }
+
+        const role = action.role as SenaiRole;
+        lastSelectedId = role;
         const suggested = suggestions[role] ?? DEFAULT_AGENTS[role];
-        const current = mapping[role] ?? existingValue ?? suggested;
+        const current = effectiveAgent(role);
 
-        const options: string[] = [];
-        if (existingValue) {
-          options.push(`Keep current: ${existingValue}`);
+        const pickerItems: SimplePickerItem[] = [];
+        pickerItems.push({ id: "keep", label: `Keep current: ${current}` });
+        if (suggested !== current) {
+          pickerItems.push({ id: "accept", label: `Accept suggestion: ${suggested}` });
         }
-        if (!existingValue || existingValue !== suggested) {
-          options.push(`Accept suggestion: ${suggested}`);
-        }
-        options.push("Choose different");
-        options.push(`Use default: ${DEFAULT_AGENTS[role]}`);
-        if (i > 0) {
-          options.push("← Back");
-        }
-        if (i < SENAI_ROLES.length - 1) {
-          options.push("Next →");
-        } else {
-          options.push("Finish");
-        }
+        pickerItems.push({ id: "choose", label: "Choose different" });
+        pickerItems.push({ id: "default", label: `Use default: ${DEFAULT_AGENTS[role]}` });
 
-        const choice = await ctx.ui.select(`Configure agent for ${ROLE_LABELS[role]} (${role})`, options);
+        const choice = await runSimplePicker(ctx, {
+          title: `Configure agent for ${ROLE_LABELS[role]} (${role})`,
+          items: pickerItems,
+        });
 
-        if (choice?.startsWith("Keep current:")) {
-          mapping[role] = existingValue!;
-          i++;
-        } else if (choice?.startsWith("Accept suggestion:")) {
+        if (choice === "keep") {
+          mapping[role] = current;
+        } else if (choice === "accept") {
           mapping[role] = suggested;
-          i++;
-        } else if (choice === "Choose different") {
-          const agentOptions = agents.map((a) => `${a.name} (${a.source})`);
-          const selected = await ctx.ui.select(`Select agent for ${ROLE_LABELS[role]} (${role})`, agentOptions);
-          if (selected) {
-            mapping[role] = selected.split(" ")[0];
-          } else {
-            mapping[role] = DEFAULT_AGENTS[role];
-          }
-          i++;
-        } else if (choice?.startsWith("Use default:")) {
+        } else if (choice === "choose") {
+          const agentItems: SimplePickerItem[] = agents.map((a) => ({
+            id: a.name,
+            label: `${a.name} (${a.source})`,
+          }));
+          const selected = await runSimplePicker(ctx, {
+            title: `Select agent for ${ROLE_LABELS[role]} (${role})`,
+            items: agentItems,
+          });
+          mapping[role] = selected ?? DEFAULT_AGENTS[role];
+        } else if (choice === "default") {
           mapping[role] = DEFAULT_AGENTS[role];
-          i++;
-        } else if (choice === "← Back") {
-          i = Math.max(0, i - 1);
-        } else if (choice === "Next →" || choice === "Finish") {
-          mapping[role] = current;
-          i++;
-        } else {
-          // Unexpected cancellation / empty selection: keep current and advance.
-          mapping[role] = current;
-          i++;
         }
+        // undefined (esc): no change, back to the list.
       }
 
       const finalMapping: Partial<Record<SenaiRole, string>> = {};
       for (const role of SENAI_ROLES) {
-        finalMapping[role] = mapping[role] ?? existing?.agents?.[role] ?? DEFAULT_AGENTS[role];
+        finalMapping[role] = effectiveAgent(role);
       }
 
       const config = { version: 1, agents: finalMapping };
@@ -708,30 +716,30 @@ export function registerFilesCommands(pi: ExtensionAPI) {
 
       let editing = true;
       while (editing) {
-        const choice = await ctx.ui.select(
-          `Project files — ${config.codePaths.length} code, ${config.inputDocuments.length} docs, ${config.testPaths.length} tests`,
-          [
-            "Edit code paths",
-            "Edit input documents",
-            "Edit test paths",
-            "Edit excluded paths",
-            "Finish",
+        const choice = await runSimplePicker(ctx, {
+          title: `Project files — ${config.codePaths.length} code, ${config.inputDocuments.length} docs, ${config.testPaths.length} tests`,
+          items: [
+            { id: "code", label: "Edit code paths" },
+            { id: "docs", label: "Edit input documents" },
+            { id: "tests", label: "Edit test paths" },
+            { id: "excluded", label: "Edit excluded paths" },
+            { id: "finish", label: "Finish" },
           ],
-        );
+        });
 
-        if (choice === "Edit code paths") {
+        if (choice === "code") {
           await editCategory(ctx, config, "codePaths", discovered.codeFolders.map((f) => f.path));
-        } else if (choice === "Edit input documents") {
+        } else if (choice === "docs") {
           await editCategory(ctx, config, "inputDocuments", [
             ...discovered.documentFolders.map((f) => f.path),
             ...discovered.documentFiles,
           ]);
-        } else if (choice === "Edit test paths") {
+        } else if (choice === "tests") {
           await editCategory(ctx, config, "testPaths", [
             ...discovered.testFolders.map((f) => f.path),
             ...discovered.testFiles,
           ]);
-        } else if (choice === "Edit excluded paths") {
+        } else if (choice === "excluded") {
           await editExcludedPaths(ctx, config);
         } else {
           editing = false;
@@ -939,41 +947,40 @@ async function browsePath(
         return a.name.localeCompare(b.name);
       });
 
-    const options: string[] = [];
+    const pickerItems: SimplePickerItem[] = [];
     if (relativeDir && mode !== "file") {
-      options.push(`📁 Select this folder (${relativeDir}/)`);
+      pickerItems.push({ id: "select-current", label: `📁 Select this folder (${relativeDir}/)` });
     }
     for (const entry of entries) {
       if (isFolderLike(currentDir, entry)) {
-        options.push(`📂 ${entry.name}/`);
+        pickerItems.push({ id: `dir:${entry.name}`, label: `📂 ${entry.name}/` });
       } else if (mode !== "folder") {
-        options.push(`📄 ${entry.name}`);
+        pickerItems.push({ id: `file:${entry.name}`, label: `📄 ${entry.name}` });
       }
     }
     if (currentDir !== root) {
-      options.push("⬆️ ../");
+      pickerItems.push({ id: "up", label: "⬆️ ../" });
     }
-    options.push("❌ Cancel");
+    pickerItems.push({ id: "cancel", label: "❌ Cancel" });
 
     const title = relativeDir ? `Browsing ${relativeDir}/` : "Browsing project root";
-    const choice = await ctx.ui.select(title, options);
+    const choice = await runSimplePicker(ctx, { title, items: pickerItems });
 
-    if (choice === "❌ Cancel") return null;
-    if (choice === "⬆️ ../") {
+    if (choice === "cancel") return null;
+    if (choice === undefined) continue; // esc redraws the browser, same as before
+    if (choice === "up") {
       currentDir = path.dirname(currentDir);
       continue;
     }
-    if (choice?.startsWith("📁 Select this folder")) {
+    if (choice === "select-current") {
       return `${relativeDir}/`;
     }
-    if (choice?.startsWith("📂 ")) {
-      const name = choice.replace("📂 ", "").replace(/\/$/, "");
-      currentDir = path.join(currentDir, name);
+    if (choice.startsWith("dir:")) {
+      currentDir = path.join(currentDir, choice.slice(4));
       continue;
     }
-
-    if (choice?.startsWith("📄 ")) {
-      const name = choice.replace("📄 ", "");
+    if (choice.startsWith("file:")) {
+      const name = choice.slice(5);
       return relativeDir ? `${relativeDir}/${name}` : name;
     }
   }
@@ -1018,7 +1025,13 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       const filesConfig = loadFilesConfig(ctx.cwd);
       const candidates = buildDocumentCandidates(ctx.cwd, filesConfig);
 
-      const pickerItems: RolePickerItem[] = SENAI_ROLES.map((role) => {
+      // Only picker-visible document roles are shown (PICKER_ROLES).
+      // Sequence roles (discussion, planner, code-review, security-gate) and
+      // artifact-driven roles are hidden; JSON stays valid for all roles.
+      const truthSuggestions = new Map(
+        suggestTruthDocuments(ctx.cwd).map((s) => [s.role, s.path]),
+      );
+      const pickerItems: RolePickerItem[] = PICKER_ROLES.map((role) => {
         const agent = resolveAgentName(agentConfig, role);
         const docs = config.documents[role];
         let summary: string;
@@ -1030,7 +1043,8 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           summary = `reads=${docs.reads.length}`;
           assigned = true;
         } else {
-          summary = "not set";
+          const suggested = truthSuggestions.get(role);
+          summary = suggested ? `not set, suggested: ${suggested}` : "not set";
         }
         return {
           id: role,
@@ -1038,6 +1052,8 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
           agent,
           summary,
           assigned,
+          guidance: ROLE_GUIDANCE[role],
+          needs: roleDocumentNeed(role),
         };
       });
 
@@ -1045,6 +1061,7 @@ export function registerAgentsFilesCommands(pi: ExtensionAPI) {
       while (editing) {
         const action = await runRolePicker(ctx, {
           title: "Configure agent documents",
+          subtitle: " Sequence roles (discussion, planner, code review, security gate) follow stage artifacts automatically — assign them by editing agents_files.json directly.",
           items: pickerItems,
         });
 
@@ -1131,8 +1148,9 @@ async function editRoleDocuments(
         reads = action.paths;
         updateRoleDocs(config, role, primary, reads);
         if (action.id === "set-truth") {
-          const truth = await pickTruthDocument(ctx, primary, reads, candidates);
-          if (truth !== undefined) primary = truth;
+          const result = await pickTruthDocument(ctx, primary, reads, candidates);
+          if (result.action === "set") primary = result.value;
+          else if (result.action === "clear") primary = undefined;
           updateRoleDocs(config, role, primary, reads);
         } else if (action.id === "clear-truth") {
           primary = undefined;
@@ -1199,22 +1217,27 @@ function updateRoleDocs(
   config.documents[role] = docs;
 }
 
+type TruthPickResult =
+  | { action: "set"; value: string }
+  | { action: "clear" }
+  | { action: "cancel" };
+
 async function pickTruthDocument(
   ctx: ExtensionContext,
   current: string | undefined,
   reads: string[],
   candidates: string[],
-): Promise<string | undefined> {
-  const options: string[] = [];
-  if (current) options.push("(clear truth document)");
+): Promise<TruthPickResult> {
+  const pickerItems: SimplePickerItem[] = [];
+  if (current) pickerItems.push({ id: "__clear__", label: "(clear truth document)" });
   for (const c of candidates) {
     if (c === current || reads.includes(c)) continue;
-    options.push(c);
+    pickerItems.push({ id: c, label: c });
   }
-  const choice = await ctx.ui.select("Select truth document", options);
-  if (!choice) return current;
-  if (choice === "(clear truth document)") return undefined;
-  return choice;
+  const choice = await runSimplePicker(ctx, { title: "Select truth document", items: pickerItems });
+  if (choice === undefined) return { action: "cancel" };
+  if (choice === "__clear__") return { action: "clear" };
+  return { action: "set", value: choice };
 }
 
 
@@ -1224,7 +1247,10 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const report = runSenaiDiagnostic(ctx.cwd);
       const text = formatDiagnosticReport(report);
-      pi.sendUserMessage(text);
+      const reportPath = path.join(ctx.cwd, ".IDE_Plans", "senai", "doctor-report.md");
+      fs.mkdirSync(path.dirname(reportPath), { recursive: true });
+      fs.writeFileSync(reportPath, text, "utf8");
+      pi.sendUserMessage(`${text}\n\nReport saved to .IDE_Plans/senai/doctor-report.md`);
     },
   });
 }
@@ -1449,9 +1475,7 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
         return;
       }
 
-      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
-
-      const skillPath = path.resolve(ctx.cwd, "skills", "senai-generate-architect.md");
+      const skillPath = resolveSkillPath("generate-architect");
       let skill = "";
       try {
         skill = fs.readFileSync(skillPath, "utf8").replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
@@ -1465,7 +1489,8 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
       let changeNote = "";
       if (stale) {
         if (drivers) {
-          const proceed = await ctx.ui.confirm(
+          const proceed = await runSimpleConfirm(
+            ctx,
             "Architecture inputs changed",
             "Input documents are newer than the generated architecture. Re-run the full architecture factory?",
           );
@@ -1533,4 +1558,166 @@ export function defaultArchitectSkill(): string {
     `12. Notify the user of the results.`,
 
   ].join("\n");
+}
+
+export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
+  const command = {
+    description: "Generate project-specific sub-agents for the non-architecture Senai roles",
+    handler: async (_args: string, ctx: ExtensionContext) => {
+      // agents.json is optional here: this command creates/updates it.
+      // Roles without a mapping resolve to built-in defaults.
+      const config = loadAgentConfig(ctx.cwd) ?? { version: 1, agents: {} };
+
+      // Target only roles still on built-in defaults. Custom agents and custom
+      // mappings are never touched.
+      const targets = GENERATED_ROLES.filter(
+        (def) => resolveAgentName(config, def.role as SenaiRole) === DEFAULT_AGENTS[def.role as SenaiRole],
+      );
+
+      if (targets.length === 0) {
+        ctx.ui.notify(
+          "All non-architecture roles already have custom agents. Nothing to generate.",
+          "info",
+        );
+        return;
+      }
+
+      // Project context: reuse the architect report when it exists, otherwise
+      // ask the basic questions (basic mode).
+      let report: ArchitectReport | null = null;
+      try {
+        report = loadArchitectReport(ctx.cwd);
+      } catch {
+        report = null;
+      }
+
+      let stackHints: string[] = [];
+      if (report) {
+        stackHints = [...report.techStack, ...report.constraints];
+      } else {
+        const projectType = await runSimplePicker(ctx, {
+          title: "Project type?",
+          items: [
+            { id: "automation / scripts", label: "automation / scripts" },
+            { id: "web application", label: "web application" },
+            { id: "cli tool", label: "cli tool" },
+            { id: "library / package", label: "library / package" },
+            { id: "other", label: "other" },
+          ],
+        });
+        const language = await ctx.ui.input("Primary language? (e.g., python, typescript, apps script)");
+        const framework = await ctx.ui.input(
+          "Framework or platform? (e.g., fastapi, react, google sheets) — optional, press Enter to skip",
+        );
+        stackHints = [projectType, language, framework].filter(
+          (hint): hint is string => typeof hint === "string" && hint.trim() !== "",
+        );
+      }
+
+      const resources = discoverTechnologyResources(ctx.cwd);
+      const matched = matchTechnologies(stackHints, resources);
+      if (matched.length === 0) {
+        ctx.ui.notify(
+          "No technology resources found. Check resources/technologies/ in the extension.",
+          "error",
+        );
+        return;
+      }
+
+      // When only the generic fallback matches, the user chooses: fetch real
+      // documentation, use generic explicitly, or cancel. Generic is never a
+      // silent default.
+      const onlyGeneric = matched.every((r) => r.id === "generic");
+      if (onlyGeneric) {
+        const hintText = stackHints.length > 0 ? ` (${stackHints.join(", ")})` : "";
+        const choice = await runSimplePicker(ctx, {
+          title: `No technology resource matches this project${hintText}. What do you want to do?`,
+          items: [
+            { id: "fetch", label: "Fetch from official docs (recommended)" },
+            { id: "generic", label: "Use generic resource" },
+            { id: "cancel", label: "Cancel" },
+          ],
+        });
+        if (!choice || choice === "cancel") {
+          ctx.ui.notify("Agent generation cancelled.", "info");
+          return;
+        }
+        if (choice === "fetch") {
+          let techHint = stackHints.join(" ").trim();
+          if (!techHint) {
+            const answer = await ctx.ui.input(
+              "Which technology should I fetch? (e.g., rust, django, react)",
+            );
+            techHint = (answer ?? "").trim();
+            if (!techHint) {
+              ctx.ui.notify("No technology given. Agent generation cancelled.", "info");
+              return;
+            }
+          }
+          const techId = slugify(techHint);
+          const resourcePath = `.pi/technologies/${techId}.md`;
+          const prompt = [
+            `<pi-senai-fetch-technology>`,
+            ``,
+            `Create a technology resource file for: ${techHint}`,
+            ``,
+            `Steps:`,
+            `1. Search the web for the OFFICIAL documentation of ${techHint} (official docs site, official guides, official API reference). Do not use blogs or unofficial sources.`,
+            `2. Fetch 2-4 official pages.`,
+            `3. Write ${resourcePath} following the template at resources/technologies/_template.md:`,
+            `   - YAML frontmatter: id: ${techId}, name: <human-readable name>, keywords: [<lowercase keywords including "${techId}">]`,
+            `   - Sections: ## Core rules, ## Testing patterns, ## Tooling and limits, ## Common mistakes`,
+            `   - Cite the official source URL for every section, like (source: https://...)`,
+            `   - Craft only: patterns, limits, testing, common mistakes. No generic advice.`,
+            `   - End with a "_Last updated: <date>_" line.`,
+            `4. Do NOT guess limits or quotas. If the official docs do not state something, leave it out.`,
+            ``,
+            `After writing the file, tell the user: "Technology resource created at ${resourcePath}. Re-run /senai-generate-sub-agents to generate your team."`,
+            ``,
+            `</pi-senai-fetch-technology>`,
+          ].join("\n");
+          pi.sendUserMessage(prompt);
+          return;
+        }
+        // "Use generic resource" falls through with the generic match.
+      }
+
+      const plans = planAgentGeneration(ctx.cwd, targets, matched, report);
+      const resourceList = matched.map((r) => r.name).join(", ");
+      const roleList = plans.map((p) => `  - ${p.role} → ${p.agentName}`).join("\n");
+      const proceed = await runSimpleConfirm(
+        ctx,
+        "Generate sub-agents",
+        `Technology resources: ${resourceList}\n\nAgents to generate and map in agents.json:\n${roleList}\n\nExisting custom agents and mappings are not touched. Proceed?`,
+      );
+      if (!proceed) {
+        ctx.ui.notify("Agent generation cancelled.", "info");
+        return;
+      }
+
+      const result = writeGeneratedAgents(ctx.cwd, plans);
+
+      // Auto-map only roles whose files were actually created.
+      const createdNames = new Set(result.created.map((rel) => path.basename(rel, ".md")));
+      const mapped = plans.filter((p) => createdNames.has(p.agentName));
+      if (mapped.length > 0) {
+        const agents = { ...config.agents } as Record<string, string>;
+        for (const p of mapped) {
+          agents[p.role] = p.agentName;
+        }
+        saveAgentConfig(ctx.cwd, { ...config, agents });
+      }
+
+      const lines = [`Generated ${result.created.length} agent(s) using: ${resourceList}.`];
+      if (result.skipped.length > 0) {
+        lines.push(`Skipped ${result.skipped.length} existing file(s): ${result.skipped.join(", ")}`);
+      }
+      if (mapped.length > 0) {
+        lines.push(`Mapped ${mapped.length} role(s) in agents.json.`);
+      }
+      lines.push("Next: run /senai-doctor to verify the setup.");
+      ctx.ui.notify(lines.join("\n"), "info");
+    },
+  };
+  pi.registerCommand("senai-generate-sub-agents", command);
 }
