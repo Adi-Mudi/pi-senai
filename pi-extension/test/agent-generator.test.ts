@@ -442,4 +442,118 @@ describe("model inheritance", () => {
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("generated agents carry orchestration frontmatter (all 14 roles)", () => {
+    const tmpDir = makeTmpDir("agent-gen-frontmatter-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    for (const plan of plans) {
+      const frontmatter = plan.content.split("---")[1] ?? "";
+      assert.ok(/^session-mode: lineage-only$/m.test(frontmatter), `${plan.agentName} needs session-mode: lineage-only`);
+      assert.ok(/^auto-exit: true$/m.test(frontmatter), `${plan.agentName} needs auto-exit: true`);
+      assert.ok(/^spawning: false$/m.test(frontmatter), `${plan.agentName} needs spawning: false`);
+      assert.ok(plan.content.includes("## Completion contract"), `${plan.agentName} needs the completion contract`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("artifact-writing roles get the write tool and discussion is interactive", () => {
+    const tmpDir = makeTmpDir("agent-gen-tools-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    const writingRoles = ["scout-2", "scout-3", "scout-4", "discussion", "plan-overview", "security-gate"];
+    for (const role of writingRoles) {
+      const plan = plans.find((p) => p.role === role);
+      assert.ok(plan, `missing plan for ${role}`);
+      const frontmatter = plan.content.split("---")[1] ?? "";
+      assert.ok(/^tools:.*\bwrite\b/m.test(frontmatter), `${role} must carry the write tool`);
+    }
+    const discussion = plans.find((p) => p.role === "discussion");
+    const discussionFrontmatter = discussion?.content.split("---")[1] ?? "";
+    assert.ok(/^interactive: true$/m.test(discussionFrontmatter), "discussion must be interactive");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("non-discussion roles never carry the interactive flag", () => {
+    const tmpDir = makeTmpDir("agent-gen-nointeractive-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    for (const plan of plans) {
+      if (plan.role === "discussion") continue;
+      const frontmatter = plan.content.split("---")[1] ?? "";
+      assert.ok(!/^interactive:/m.test(frontmatter), `${plan.agentName} must not be interactive`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("write-tool roles have exactly read+write and report-only roles have no write", () => {
+    const tmpDir = makeTmpDir("agent-gen-exacttools-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    const writingRoles = ["scout-2", "scout-3", "scout-4", "discussion", "plan-overview", "security-gate"];
+    for (const role of writingRoles) {
+      const frontmatter = plans.find((p) => p.role === role)?.content.split("---")[1] ?? "";
+      assert.ok(/^tools: read, write$/m.test(frontmatter), `${role} must have exactly 'tools: read, write'`);
+    }
+    for (const role of ["linter", "full-test"]) {
+      const frontmatter = plans.find((p) => p.role === role)?.content.split("---")[1] ?? "";
+      assert.ok(/^tools: read, bash$/m.test(frontmatter), `${role} must have exactly 'tools: read, bash'`);
+      assert.ok(!/^tools:.*\bwrite\b/m.test(frontmatter), `${role} must not carry write`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("completion contract appears exactly once, before the technology craft sections", () => {
+    const tmpDir = makeTmpDir("agent-gen-contract-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    for (const plan of plans) {
+      assert.strictEqual(
+        plan.content.split("## Completion contract").length - 1,
+        1,
+        `${plan.agentName} must have exactly one completion contract`,
+      );
+      const contractIndex = plan.content.indexOf("## Completion contract");
+      const craftIndex = plan.content.indexOf("## Technology craft");
+      if (craftIndex !== -1) {
+        assert.ok(contractIndex < craftIndex, `${plan.agentName}: contract must precede craft sections`);
+      }
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("frontmatter key order is stable for drift detection", () => {
+    const tmpDir = makeTmpDir("agent-gen-order-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    const expectedOrder = ["name:", "description:", "tools:", "session-mode:", "auto-exit:", "spawning:"];
+    for (const plan of plans) {
+      const frontmatter = (plan.content.split("---")[1] ?? "").trim().split("\n");
+      const keys = frontmatter.filter((l) => expectedOrder.some((k) => l.startsWith(k)));
+      assert.deepStrictEqual(
+        keys.map((l) => expectedOrder.find((k) => l.startsWith(k))),
+        expectedOrder,
+        `${plan.agentName} frontmatter key order changed`,
+      );
+    }
+    const discussion = plans.find((p) => p.role === "discussion");
+    const discussionLines = (discussion?.content.split("---")[1] ?? "").trim().split("\n");
+    assert.ok(
+      discussionLines.indexOf("interactive: true") === discussionLines.length - 1,
+      "interactive flag must be the last frontmatter line for discussion",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

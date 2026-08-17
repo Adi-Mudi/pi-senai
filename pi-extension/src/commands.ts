@@ -332,6 +332,16 @@ export function registerCommands(pi: ExtensionAPI) {
         "info",
       );
 
+      // Stage boundary: compact a large parent context before injecting the
+      // next stage prompt. The senai session_before_compact hook supplies a
+      // deterministic summary, so run state survives compaction.
+      const usage = ctx.getContextUsage();
+      if (usage?.percent != null && usage.percent >= 50) {
+        ctx.compact({
+          customInstructions: "Pi Senai stage boundary. Preserve the run state summary.",
+        });
+      }
+
       const { prompt } = buildStagePrompt(ctx.cwd, secondAdvance.state, STAGE_SKILL[nextWorkingStage]);
       pi.sendUserMessage(prompt);
     },

@@ -11,6 +11,7 @@ import {
   registerFilesCommands,
 } from "./commands.js";
 import { loadState } from "./state.js";
+import { buildSenaiCompactionSummary } from "./compaction.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
 import { migrateLegacyOrchestraDirs } from "./migrate.js";
@@ -42,6 +43,20 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   registerArchitectCommand(pi);
   registerAgentGeneratorCommand(pi);
   registerArchitectTools(pi);
+
+  // Supply a deterministic compaction summary while a senai run is active,
+  // so compaction costs no extra LLM call and run/artifact paths survive.
+  pi.on("session_before_compact", async (event, ctx) => {
+    const summary = buildSenaiCompactionSummary(ctx.cwd);
+    if (!summary) return;
+    return {
+      compaction: {
+        summary,
+        firstKeptEntryId: event.preparation.firstKeptEntryId,
+        tokensBefore: event.preparation.tokensBefore,
+      },
+    };
+  });
 
   // Inject senai status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {

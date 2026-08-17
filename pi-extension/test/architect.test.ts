@@ -1462,3 +1462,77 @@ describe("coverage audit gaps", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+
+describe("architect agent orchestration frontmatter", () => {
+  function makeProfile(): ArchitectProfile {
+    return {
+      projectName: "Inventory App",
+      projectSlug: "inventory-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+  }
+
+  function makeEntry(): ArchitectureLibraryEntry {
+    return {
+      id: "modular-monolith",
+      name: "Modular Monolith",
+      filePath: "",
+      domain: ["web"],
+      teamSize: "small",
+      complexity: "low",
+      bestForDrivers: ["small team"],
+      notForDrivers: ["large independent teams"],
+      content: "",
+    };
+  }
+
+  const ARCH_AGENT_ROLES = ["planner", "implementer", "reviewer-correctness", "reviewer-security", "reviewer-tests"];
+
+  function readAgent(tmpDir: string, role: string): string {
+    return fs.readFileSync(
+      path.join(tmpDir, ".pi", "agents", `inventory-app-modular-monolith-${role}.md`),
+      "utf8",
+    );
+  }
+
+  it("planner and implementer keep the full tool set", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-tools-full-"));
+    generateAgentFiles(tmpDir, makeProfile(), makeEntry());
+    for (const role of ["planner", "implementer"]) {
+      assert.ok(
+        /^tools: read, write, edit, bash$/m.test(readAgent(tmpDir, role)),
+        `${role} must keep 'tools: read, write, edit, bash'`,
+      );
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reviewer agents lose the edit tool but keep write", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-tools-reviewer-"));
+    generateAgentFiles(tmpDir, makeProfile(), makeEntry());
+    for (const role of ["reviewer-correctness", "reviewer-security", "reviewer-tests"]) {
+      const content = readAgent(tmpDir, role);
+      assert.ok(/^tools: read, write, bash$/m.test(content), `${role} must be 'tools: read, write, bash'`);
+      assert.ok(!/^tools:.*\bedit\b/m.test(content), `${role} must not carry edit`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("all architecture agents carry orchestration frontmatter and the completion contract", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-frontmatter-"));
+    generateAgentFiles(tmpDir, makeProfile(), makeEntry());
+    for (const role of ARCH_AGENT_ROLES) {
+      const content = readAgent(tmpDir, role);
+      const frontmatter = content.split("---")[1] ?? "";
+      assert.ok(/^session-mode: lineage-only$/m.test(frontmatter), `${role} needs session-mode: lineage-only`);
+      assert.ok(/^auto-exit: true$/m.test(frontmatter), `${role} needs auto-exit: true`);
+      assert.ok(/^spawning: false$/m.test(frontmatter), `${role} needs spawning: false`);
+      assert.ok(!/^model:/m.test(frontmatter), `${role} must not pin a model`);
+      assert.ok(content.includes("## Completion contract"), `${role} needs the completion contract`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

@@ -55,6 +55,8 @@ describe("smoke", () => {
         input: async () => "",
         select: async () => "",
       },
+      getContextUsage: () => undefined,
+      compact: () => {},
     } as unknown as ExtensionContext;
   }
 

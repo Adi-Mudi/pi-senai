@@ -15,6 +15,16 @@ Run a final security check and package the result.
 
 - Document stage must be complete (`documented` or `delivering`).
 
+## Subagent rules
+
+- Every `subagent()` call MUST include `agent:` with the mapped agent name from the Agent Registry block in your stage prompt — not the placeholder names in the examples below.
+- Use `session-mode: lineage-only` (registry agents already declare it). Never use `fork` — it copies the parent's full conversation into the child.
+- Pass artifact paths in the task; the subagent reads files itself. Do not paste file contents.
+- After spawning, do NOT poll. Completion and stall notifications arrive automatically.
+- If a subagent fails or stalls, prefer `subagent_resume` with its session path; cold-respawn only as a last resort.
+- NEVER do a subagent's job yourself. If it cannot finish, fix the spawn and relaunch.
+- The subagent tool has no `isolation` parameter; never pass one.
+
 ## Sequence
 
 ```
@@ -28,7 +38,7 @@ Spawn a security auditor.
 ```typescript
 subagent({
   name: "security-gate",
-  agent: "reviewer",
+  agent: "<mapped security-gate agent>",
   task: `Perform a final security audit of the project. Read the plan at <plan>, the implemented code, and docs. Write the security report to <securityReport>. Focus on secrets, injection, auth, and dependency risks. Do not edit source files.`,
 });
 ```
@@ -44,7 +54,7 @@ If the security gate passes, package the deliverable:
 ```typescript
 subagent({
   name: "archive",
-  agent: "worker",
+  agent: "<mapped archive agent>",
   task: `Package the final deliverable. Write a deliver summary to <deliverSummary>. Create any archive artifact if appropriate.`,
 });
 ```

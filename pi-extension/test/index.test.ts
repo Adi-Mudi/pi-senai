@@ -184,6 +184,58 @@ describe("index", () => {
     assert.ok(result.systemPrompt.includes("Active stage: implementing"));
     assert.ok(result.systemPrompt.includes("</pi-senai_status>"));
   });
+
+  it("registers a session_before_compact handler", () => {
+    piSenaiExtension(makeApi());
+    assert.ok(eventHandlers["session_before_compact"]);
+  });
+
+  it("session_before_compact returns undefined when no run is active", async () => {
+    piSenaiExtension(makeApi());
+
+    const result = await eventHandlers["session_before_compact"](
+      { preparation: { firstKeptEntryId: "id-1", tokensBefore: 1000 } },
+      makeCtx(),
+    );
+
+    assert.strictEqual(result, undefined);
+  });
+
+  it("session_before_compact supplies a deterministic summary when a run is active", async () => {
+    piSenaiExtension(makeApi());
+    const state = {
+      version: 1,
+      mission: "Test",
+      runId: "run-1",
+      currentStage: "planning",
+      startedAt: "2026-08-12T00:00:00Z",
+      updatedAt: "2026-08-12T00:00:00Z",
+      stageResults: {},
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+
+    const result = await eventHandlers["session_before_compact"](
+      { preparation: { firstKeptEntryId: "id-1", tokensBefore: 4321 } },
+      makeCtx(),
+    );
+
+    assert.ok(result?.compaction);
+    assert.strictEqual(result.compaction.firstKeptEntryId, "id-1");
+    assert.strictEqual(result.compaction.tokensBefore, 4321);
+    assert.ok(result.compaction.summary.includes("Run ID: run-1"));
+    assert.ok(result.compaction.summary.includes("Current stage: planning"));
+  });
+
+  it("does not register the compaction hook inside subagent processes", () => {
+    process.env.PI_SUBAGENT_NAME = "worker";
+    try {
+      piSenaiExtension(makeApi());
+      assert.strictEqual(Object.keys(eventHandlers).length, 0);
+    } finally {
+      delete process.env.PI_SUBAGENT_NAME;
+    }
+  });
 });
 
 describe("coverage audit gaps", () => {

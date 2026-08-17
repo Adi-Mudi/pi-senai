@@ -132,6 +132,79 @@ describe("prompt", () => {
     assert.ok(prompt.includes("Run ID: (none)"));
   });
 
+  it("buildStagePrompt slims long missions into mission.md", () => {
+    const longMission = "A".repeat(1500);
+    const state = { ...makeState("planning", "run-long"), mission: longMission };
+
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+
+    assert.ok(prompt.includes("Mission (preview):"));
+    assert.ok(prompt.includes("mission.md"));
+    assert.ok(!prompt.includes(longMission));
+    const missionPath = path.join(tmpDir, ".IDE_Plans/senai/runs/run-long", "mission.md");
+    assert.ok(fs.existsSync(missionPath));
+    assert.strictEqual(fs.readFileSync(missionPath, "utf8"), longMission);
+  });
+
+  it("buildStagePrompt keeps short missions inline and writes no mission.md", () => {
+    const state = makeState("planning", "run-short");
+
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+
+    assert.ok(prompt.includes("Mission: Build CLI"));
+    assert.ok(!prompt.includes("Mission (preview):"));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans/senai/runs/run-short", "mission.md")));
+  });
+
+  it("buildStagePrompt inlines a mission of exactly 1000 chars but slims 1001", () => {
+    const atLimit = { ...makeState("planning", "run-1000"), mission: "A".repeat(1000) };
+    const { prompt: inlinePrompt } = buildStagePrompt(tmpDir, atLimit, "plan");
+    assert.ok(inlinePrompt.includes(`Mission: ${"A".repeat(1000)}`));
+    assert.ok(!inlinePrompt.includes("Mission (preview):"));
+
+    const overLimit = { ...makeState("planning", "run-1001"), mission: "B".repeat(1001) };
+    const { prompt: slimPrompt } = buildStagePrompt(tmpDir, overLimit, "plan");
+    assert.ok(slimPrompt.includes("Mission (preview):"));
+    assert.ok(!slimPrompt.includes("B".repeat(1001)));
+  });
+
+  it("buildStagePrompt keeps a long mission inline when runId is empty", () => {
+    const longMission = "C".repeat(1500);
+    const state = { ...makeState("none", ""), mission: longMission };
+
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+
+    assert.ok(prompt.includes(`Mission: ${longMission}`));
+    assert.ok(!prompt.includes("Mission (preview):"));
+  });
+
+  it("buildStagePrompt does not overwrite an existing mission.md", () => {
+    const runDir = path.join(tmpDir, ".IDE_Plans/senai/runs/run-existing");
+    fs.mkdirSync(runDir, { recursive: true });
+    const missionPath = path.join(runDir, "mission.md");
+    fs.writeFileSync(missionPath, "ORIGINAL", "utf8");
+
+    const state = { ...makeState("planning", "run-existing"), mission: "D".repeat(1500) };
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+
+    assert.ok(prompt.includes("Mission (preview):"));
+    assert.strictEqual(fs.readFileSync(missionPath, "utf8"), "ORIGINAL");
+  });
+
+  it("buildStagePrompt handles missions with newlines and quotes", () => {
+    const mission = `Line one "quoted"\n${"E".repeat(1500)}`;
+    const state = { ...makeState("planning", "run-quotes"), mission };
+
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+
+    assert.ok(prompt.startsWith('<pi-senai stage="plan">'));
+    assert.ok(prompt.includes("Mission (preview): Line one \"quoted\""));
+    assert.strictEqual(
+      fs.readFileSync(path.join(tmpDir, ".IDE_Plans/senai/runs/run-quotes", "mission.md"), "utf8"),
+      mission,
+    );
+  });
+
   it("buildStagePrompt constructs prompts for every stage", () => {
     const stages = ["plan", "implement", "document", "deliver"];
     for (const stage of stages) {

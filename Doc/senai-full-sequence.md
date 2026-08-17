@@ -179,10 +179,10 @@ Auto-starts Implement
 | 1 | scout-2 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_2.md` |
 | 1 | scout-3 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_3.md` |
 | 1 | scout-4 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_4.md` |
-| 2 | discussion | fork | Drafts interview questions for the user |
+| 2 | discussion | lineage-only | Drafts interview questions for the user |
 | 3 | parent + user | main session | User answers via `AskUserQuestion` |
-| 4 | planner | fork | `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` |
-| 5 | plan-overview | fork | `.IDE_Plans/senai/runs/<run-id>/plan/plan-overview.md` |
+| 4 | planner | lineage-only | `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` |
+| 5 | plan-overview | lineage-only | `.IDE_Plans/senai/runs/<run-id>/plan/plan-overview.md` |
 | 6 | reviewer-correctness | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-correctness.md` |
 | 6 | reviewer-security | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-security.md` |
 | 6 | reviewer-tests | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-tests.md` |
@@ -236,8 +236,8 @@ Auto-starts Document
 
 | Step | Agent | Context | Purpose |
 |------|-------|---------|---------|
-| 1 | test-skeleton | fork | Write test stubs and scaffolding first |
-| 2 | implementer | fork | Implement the approved plan |
+| 1 | test-skeleton | lineage-only | Write test stubs and scaffolding first |
+| 2 | implementer | lineage-only | Implement the approved plan |
 | 3 | linter | fresh | Run linter and report style issues |
 | 4 | test | fresh | Run unit tests |
 | 5 | code-review | fresh | Review the diff for correctness and regressions |
@@ -322,7 +322,7 @@ Run marked delivered
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
 | 1 | security-gate | fresh | `.IDE_Plans/senai/runs/<run-id>/deliver/security-report.md` |
-| 2 | archive | fork | `.IDE_Plans/senai/runs/<run-id>/deliver/deliver-summary.md` + archive artifact |
+| 2 | archive | lineage-only | `.IDE_Plans/senai/runs/<run-id>/deliver/deliver-summary.md` + archive artifact |
 
 ### Approval Gate
 - If security gate passes → run `/senai-approve` to finish the run.
@@ -367,16 +367,18 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 | Stage | Agent | Context | Why |
 |-------|-------|---------|-----|
 | Plan | scouts | fresh | Adversarial eyes on codebase |
-| Plan | discussion | fork | Needs scout context for decisions |
-| Plan | planner | fork | Needs scout and discussion context |
-| Plan | plan-overview | fork | Needs the approved plan |
+| Plan | discussion | lineage-only | Reads the scout report paths passed in its task |
+| Plan | planner | lineage-only | Reads scout reports and discussion notes from disk |
+| Plan | plan-overview | lineage-only | Reads the plan from disk |
 | Plan | reviewers | fresh | Adversarial review of plan |
-| Implement | test-skeleton | fork | Needs plan context |
-| Implement | implementer | fork | Needs plan context |
+| Implement | test-skeleton | lineage-only | Reads the plan from disk |
+| Implement | implementer | lineage-only | Reads the plan from disk |
 | Implement | lint / test / code-review / full-test | fresh | Stateless checks |
 | Document | all writers | fresh | Parallel work on different files |
 | Deliver | security-gate | fresh | Adversarial security review |
-| Deliver | archive | fork | Needs full project context |
+| Deliver | archive | lineage-only | Reads run artifacts from disk |
+
+`fork` is banned for senai agents: it copies the parent's full conversation into the child and wastes tokens. Every agent that needs context gets artifact paths in its task and reads the files itself.
 
 ---
 
@@ -393,6 +395,8 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 9. **Approve auto-runs the next stage.** `/senai-approve` is the single command to move forward; manual stage commands are still available as overrides.
 10. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
 11. **Configure first.** Valid `.pi/senai/agents.json`, `.pi/senai/files.json`, and `.pi/senai/agents_files.json` are required before any stage command will run.
+12. **Parent never does a subagent's job.** If a subagent cannot finish, fix the spawn (agent, tools, task) and relaunch — prefer `subagent_resume` over a cold respawn. No polling while waiting; completion notifications arrive automatically. Every `subagent()` call passes the mapped `agent:` name.
+13. **Deterministic compaction at stage boundaries.** `/senai-approve` compacts the parent context when usage is 50% or higher; the senai compaction hook supplies a zero-LLM run-state summary (run id, stage, artifact paths).
 
 ---
 

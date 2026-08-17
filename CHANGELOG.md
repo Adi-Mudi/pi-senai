@@ -7,7 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Generated sub-agents and architecture agents now declare `session-mode: lineage-only`, `auto-exit: true`, and `spawning: false`, and every artifact-writing role (scout-2/3/4, discussion, plan-overview, security-gate) carries the `write` tool so subagents can finish their deliverables without the parent session taking over. Generated agent bodies also carry a completion contract: the final message is at most 10 lines (outcome + artifact path), never pasted deliverable content.
+- Architecture reviewer agents (reviewer-correctness/security/tests) no longer carry the `edit` tool; reviewers report, they do not modify source.
+- Stage prompts and skills now enforce spawn discipline: always pass `agent:` with the mapped agent, pass artifact paths instead of pasted content, no polling while waiting, `subagent_resume` before cold respawn, and the parent never does a subagent's job. Removed the stale `isolation: "worktree"` guidance (no such parameter exists in the subagent tool). Plan-stage guidance now uses `lineage-only` for all agents instead of `fork` (which copied the parent's full conversation into each child).
+- Long missions (>1000 chars) are stored once as `mission.md` in the run directory; stage prompts carry only a preview plus the file path.
+
 ### Added
+
+- Deterministic compaction support: while a senai run is active, a `session_before_compact` hook supplies a zero-LLM summary of the run state (run id, stage, artifact paths) so compaction costs no summarization call and run state survives it. `/senai-approve` now auto-compacts the parent context at stage boundaries when usage is 50% or higher.
+- `/senai-doctor` now checks pi retry settings (warns when `retry.enabled` is false), warns when linter/full-test agents carry the `write` tool, and warns when scout-2/3/4 are mapped to planner-style agents.
+
+### Added (earlier)
 
 - Subagent model inheritance guard: every stage prompt's Agent Registry block now carries an explicit rule — never pass the `model` parameter to `subagent()` and never set a model override; subagents must inherit pi's configured default model (the parent session model). This prevents the LLM from freelancing a model (e.g., copying the subagent extension's doc examples) and spawning agents on an unconfigured provider, which left them stuck at the login prompt. `/senai-doctor` agent file integrity now also warns when a mapped agent pins a `model` in its frontmatter, naming the pinned model and explaining the default-model impact.
 

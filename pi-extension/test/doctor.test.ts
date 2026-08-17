@@ -11,6 +11,7 @@ import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest } from "../src/architect.js";
 import { getProjectSlug } from "../src/agent-generator.js";
 import { createEmptyDrivers, saveDrivers } from "../src/driver-extractor.js";
+import { getAgentDir } from "@mariozechner/pi-coding-agent";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -485,7 +486,7 @@ describe("doctor", () => {
     saveAgentConfig(tmpDir, {
       version: 1,
       agents: {
-        "security-gate": "write-heavy-gate",
+        linter: "write-heavy-gate",
       },
     });
     saveFilesConfig(tmpDir, {
@@ -1711,7 +1712,7 @@ describe("doctor architecture validation", () => {
     });
     saveAgentConfig(tmpDir, {
       version: 1,
-      agents: { "scout-2": "write-scout", "scout-4": "output-scout" },
+      agents: { linter: "write-scout", "scout-4": "output-scout" },
     });
 
     const report = runSenaiDiagnostic(tmpDir);
@@ -1864,9 +1865,9 @@ describe("doctor architecture validation", () => {
     try {
       const report = runSenaiDiagnostic(tmpDir);
       const section = findSection(report, "Runtime environment");
-      assert.strictEqual(section.items.length, 1);
-      assert.strictEqual(section.items[0].status, "ok");
-      assert.ok(section.items[0].message.includes("tmux"));
+      const tmuxItem = section.items.find((i) => i.message.includes("tmux"));
+      assert.ok(tmuxItem);
+      assert.strictEqual(tmuxItem.status, "ok");
     } finally {
       if (previous === undefined) {
         delete process.env.TMUX;
@@ -3157,9 +3158,9 @@ describe("coverage audit gaps", () => {
     try {
       const report = runSenaiDiagnostic(tmpDir);
       const section = findGapSection(report, "Runtime environment");
-      assert.strictEqual(section.items.length, 1);
-      assert.strictEqual(section.items[0].status, "ok");
-      assert.ok(section.items[0].message.includes("Zellij"));
+      const zellijItem = section.items.find((i) => i.message.includes("Zellij"));
+      assert.ok(zellijItem);
+      assert.strictEqual(zellijItem.status, "ok");
     } finally {
       if (previousZellij === undefined) {
         delete process.env.ZELLIJ;
@@ -3184,10 +3185,12 @@ describe("coverage audit gaps", () => {
     try {
       const report = runSenaiDiagnostic(tmpDir);
       const section = findGapSection(report, "Runtime environment");
-      assert.strictEqual(section.items.length, 1);
-      assert.strictEqual(section.items[0].status, "warning");
-      assert.ok(section.items[0].message.includes("Not running inside tmux or Zellij."));
-      assert.ok(section.items[0].details?.some((d) => d.includes("terminal multiplexer")));
+      const muxItem = section.items.find((i) =>
+        i.message.includes("Not running inside tmux or Zellij."),
+      );
+      assert.ok(muxItem);
+      assert.strictEqual(muxItem.status, "warning");
+      assert.ok(muxItem.details?.some((d) => d.includes("terminal multiplexer")));
     } finally {
       if (previousZellij === undefined) {
         delete process.env.ZELLIJ;
@@ -3359,6 +3362,125 @@ describe("coverage audit gaps", () => {
     assert.ok(brokenSkill);
     assert.ok(brokenSkill.details?.some((d) => d.includes("SKILL.md could not be parsed")));
 
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+
+describe("doctor optimization checks", () => {
+  function findOptSection(report: ReturnType<typeof runSenaiDiagnostic>, title: string) {
+    const section = report.sections.find((s) => s.title === title);
+    assert.ok(section, `section '${title}' should exist`);
+    return section;
+  }
+
+  it("scout-1 mapped to a planner-style agent gets no planner warning (excluded by design)", () => {
+    const tmpDir = makeTmpDir("doctor-scout1-planner-");
+    writeAgent(tmpDir, "acme-planner", {
+      name: "acme-planner",
+      description: "Planning agent",
+      tools: "read, write",
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-1": "acme-planner" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findOptSection(report, "Agent-role capability fit");
+    assert.ok(!section.items.some((i) => i.message.includes("looks like a planner")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("scout-3 mapped to a planner-style agent gets a planner warning", () => {
+    const tmpDir = makeTmpDir("doctor-scout3-planner-");
+    writeAgent(tmpDir, "acme-planner", {
+      name: "acme-planner",
+      description: "Planning agent",
+      tools: "read, write",
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-3": "acme-planner" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findOptSection(report, "Agent-role capability fit");
+    const warning = section.items.find((i) => i.message.includes("looks like a planner"));
+    assert.ok(warning, "scout-3 mapped to a planner agent should warn");
+    assert.strictEqual(warning.status, "warning");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("full-test mapped to an agent with write gets a read-only warning", () => {
+    const tmpDir = makeTmpDir("doctor-fulltest-write-");
+    writeAgent(tmpDir, "write-tester", {
+      name: "write-tester",
+      description: "Tester that can write",
+      tools: "read, write, bash",
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { "full-test": "write-tester" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findOptSection(report, "Agent-role capability fit");
+    const warning = section.items.find(
+      (i) => i.message.includes("write-tester") && i.message.includes("has write tool but role is read-only"),
+    );
+    assert.ok(warning, "full-test with write should warn");
+    assert.strictEqual(warning.status, "warning");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("scout-2 custom agent with only read gets a missing-tools error naming write", () => {
+    const tmpDir = makeTmpDir("doctor-scout2-read-");
+    writeAgent(tmpDir, "readonly-scout", {
+      name: "readonly-scout",
+      description: "Scout that can only read",
+      tools: "read",
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { "scout-2": "readonly-scout" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findOptSection(report, "Agent-role capability fit");
+    const error = section.items.find(
+      (i) => i.message.includes("readonly-scout") && i.message.includes("MISSING REQUIRED TOOLS"),
+    );
+    assert.ok(error, "scout-2 without write should error");
+    assert.strictEqual(error.status, "error");
+    assert.ok(error.details?.some((d) => d.includes("Missing: write")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("security-gate with read+write gets no missing-tools error (regression)", () => {
+    const tmpDir = makeTmpDir("doctor-gate-write-");
+    writeAgent(tmpDir, "writing-gate", {
+      name: "writing-gate",
+      description: "Gate that writes its report",
+      tools: "read, write",
+    });
+    saveAgentConfig(tmpDir, { version: 1, agents: { "security-gate": "writing-gate" } });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findOptSection(report, "Agent-role capability fit");
+    assert.ok(
+      !section.items.some(
+        (i) => i.message.includes("writing-gate") && i.message.includes("MISSING REQUIRED TOOLS"),
+      ),
+      "security-gate with write must not error (it writes security-report.md)",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("retry environment item matches the machine's settings.json", () => {
+    const tmpDir = makeTmpDir("doctor-env-retry-");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findOptSection(report, "Runtime environment");
+
+    const settingsPath = path.join(getAgentDir(), "settings.json");
+    const retryItem = section.items.find((i) => i.message.toLowerCase().includes("retry"));
+    if (fs.existsSync(settingsPath)) {
+      assert.ok(retryItem, "retry item expected when settings.json exists");
+      assert.ok(
+        retryItem.status === "ok" || retryItem.status === "warning",
+        `retry item should be ok or warning, got ${retryItem.status}`,
+      );
+    } else {
+      assert.ok(!retryItem, "no retry item expected without settings.json");
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

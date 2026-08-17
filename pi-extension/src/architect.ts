@@ -949,12 +949,25 @@ function buildAgentMarkdown(
     "reviewer-tests": "reviews test coverage for this architecture",
   };
 
+  // Reviewers report only — they keep `write` for their review artifact but
+  // lose `edit` so they cannot modify source files.
+  const roleTools: Record<string, string> = {
+    planner: "read, write, edit, bash",
+    implementer: "read, write, edit, bash",
+    "reviewer-correctness": "read, write, bash",
+    "reviewer-security": "read, write, bash",
+    "reviewer-tests": "read, write, bash",
+  };
+
   const lines = [
     "---",
     `name: ${agentName}`,
     `description: ${roleDescription[role] ?? role} for ${profile.projectName} using ${architecture.name}`,
-    "tools: read, write, edit, bash",
+    `tools: ${roleTools[role] ?? "read, write, edit, bash"}`,
     `skills: ${profile.projectSlug}-${archId}-${ARCHITECT_ROLE_STAGE[role] ?? "plan"}`,
+    "session-mode: lineage-only",
+    "auto-exit: true",
+    "spawning: false",
     "---",
     "",
     `# ${agentName}`,
@@ -1003,6 +1016,12 @@ function buildAgentMarkdown(
   for (const forbidden of architecture.notForDrivers) {
     lines.push(`- ${forbidden}`);
   }
+
+  lines.push("");
+  lines.push("## Completion contract");
+  lines.push("");
+  lines.push("- Write your deliverable to the artifact path given in your task. The file on disk is the deliverable.");
+  lines.push("- Your FINAL message must be at most 10 lines: outcome + artifact path(s). Never paste the deliverable content into the final message.");
 
   return lines.join("\n");
 }

@@ -84,14 +84,9 @@ const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
   "code-review": ["read", "write"],
 };
 
-const READONLY_ROLES: SenaiRole[] = [
-  "scout-2",
-  "scout-3",
-  "scout-4",
-  "discussion",
-  "plan-overview",
-  "security-gate",
-];
+// Roles that only report via their final message and never write artifact
+// files. All artifact-writing roles require (and may have) the write tool.
+const READONLY_ROLES: SenaiRole[] = ["linter", "full-test"];
 
 const CONFLICTING_READONLY_PATTERNS = [
   { pattern: /fix only/i, reason: "Agent mandate is 'fix only'" },
@@ -453,8 +448,9 @@ function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): Dia
 
     // Default mappings and built-ins are the documented pre-generation
     // fallback (Pi ships its planner/scout/reviewer agents read-only by
-    // design; the main session compensates writes). Capability checks apply
-    // to custom-mapped agents only.
+    // design; for those, the main session compensates writes). Custom-mapped
+    // and generated agents must carry the tools their role needs — artifact-
+    // writing roles include the write tool. Checks apply to custom agents only.
     const isDefaultMapping = agent.name === DEFAULT_AGENTS[role];
     if (agent.source === "not found" || agent.source === "builtin" || isDefaultMapping || !agent.frontmatter) continue;
 
@@ -516,6 +512,19 @@ function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): Dia
         });
         break;
       }
+    }
+
+    // scout-1 is excluded: it is architecture-factory-defined and may
+    // intentionally map to the architecture planner agent.
+    if (role !== "scout-1" && role.startsWith("scout-") && /planner|planning/i.test(description)) {
+      items.push({
+        status: "warning",
+        message: `${label} (${role}) → ${agent.name}: agent looks like a planner`,
+        details: [
+          "A scout role is mapped to an agent whose name/description indicates planning.",
+          "Scouts should search and report. Map a scout/search agent instead.",
+        ],
+      });
     }
 
     if (agent.frontmatter.output) {
@@ -787,6 +796,32 @@ function checkEnvironment(): DiagnosticSection {
         "pi-interactive-subagents needs a terminal multiplexer to spawn subagent panes.",
         "Start Pi inside tmux or Zellij before running Senai stages.",
       ],
+    });
+  }
+
+  try {
+    const settingsPath = path.join(getAgentDir(), "settings.json");
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
+        retry?: { enabled?: boolean };
+      };
+      if (settings.retry?.enabled === false) {
+        items.push({
+          status: "warning",
+          message: "pi retry is disabled (retry.enabled = false).",
+          details: [
+            "Subagents that hit provider overload or rate limits fail immediately instead of retrying.",
+            "Re-enable retries in settings.json for reliable orchestration.",
+          ],
+        });
+      } else {
+        items.push({ status: "ok", message: "pi retry settings are enabled." });
+      }
+    }
+  } catch {
+    items.push({
+      status: "info",
+      message: "Could not read pi settings.json to verify retry settings.",
     });
   }
 

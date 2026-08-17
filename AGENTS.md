@@ -61,7 +61,8 @@ npm test
 │   ├── agent-registry.ts         # build agent registry prompt block
 │   ├── agent-generator.ts        # deterministic sub-agent generator (/senai-generate-sub-agents)
 │   ├── files-config.ts           # load/save/validate .pi/senai/files.json
-│   └── agents-files-config.ts    # load/save/validate .pi/senai/agents_files.json
+│   ├── agents-files-config.ts    # load/save/validate .pi/senai/agents_files.json
+│   └── compaction.ts             # deterministic compaction summary for active runs
 ├── pi-extension/test/   # unit tests
 ├── skills/              # stage skill markdown files
 │   ├── senai-plan.md
@@ -79,7 +80,7 @@ npm test
 1. **No duplicate subagent engine.** Do not add subagent spawning logic here. The extension injects prompts; the LLM calls the `subagent` tool provided by `pi-interactive-subagents`.
 2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/senai/`. Architecture factory state lives under `.pi/architect/`.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
-4. **Approve auto-runs the next stage.** `/senai-approve` advances the state and immediately sends the next stage prompt. Manual `/senai-XXX` commands remain available as overrides.
+4. **Approve auto-runs the next stage.** `/senai-approve` advances the state and immediately sends the next stage prompt. Manual `/senai-XXX` commands remain available as overrides. When parent context usage is 50% or higher, approve also compacts the session first; a `session_before_compact` hook supplies a deterministic run-state summary (run id, stage, artifact paths), so compaction costs no LLM call and no run state is lost.
 5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.
 
 ## Document scope configuration
@@ -129,11 +130,11 @@ The `/senai-generate-architect` command produces a one-time architecture for the
 The factory uses two deterministic tools to avoid LLM drift:
 
 - `senai_merge_architect_drivers` — merges map outputs for the currently configured documents only, deletes stale map files from removed or renamed documents, and cleans stale root files.
-- `senai_finalize_architecture` — generates docs, agents, and skills with exact names. Removes agents and skills left over from previous architecture runs and regenerates the ADR set to match the report. Also auto-maps the seven architecture-bound roles in `agents.json` (creating the file if missing) via `autoMapArchitectureAgents`: roles on built-in defaults or pointing at stale generated agents for the same project are remapped; other custom mappings are never touched. The role→agent mapping lives in the shared `ARCHITECTURE_AGENT_MAPPING` constant in `architect.ts`, which doctor also uses.
+- `senai_finalize_architecture` — generates docs, agents, and skills with exact names. Removes agents and skills left over from previous architecture runs and regenerates the ADR set to match the report. Generated architecture agents declare `session-mode: lineage-only`, `auto-exit: true`, and `spawning: false`; reviewer agents keep `write` for their review artifact but do not get the `edit` tool. Also auto-maps the seven architecture-bound roles in `agents.json` (creating the file if missing) via `autoMapArchitectureAgents`: roles on built-in defaults or pointing at stale generated agents for the same project are remapped; other custom mappings are never touched. The role→agent mapping lives in the shared `ARCHITECTURE_AGENT_MAPPING` constant in `architect.ts`, which doctor also uses.
 
 ## Sub-agent generation
 
-`/senai-generate-sub-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context.
+`/senai-generate-sub-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context. Generated agents declare `session-mode: lineage-only`, `auto-exit: true`, and `spawning: false`; artifact-writing roles (scout-2/3/4, discussion, plan-overview, security-gate) carry the `write` tool; and every generated body ends with a completion contract (final message ≤ 10 lines: outcome + artifact path, never pasted content).
 
 - Technology resources live in `resources/technologies/` (bundled) and `.pi/technologies/` (project overrides). Adding a technology means adding one markdown file with `id`, `name`, `keywords` frontmatter — no code change. When nothing matches, the user chooses: fetch the resource from official documentation (distilled into `.pi/technologies/<tech>.md`), use `generic`, or cancel — generic is never a silent default.
 - Every resource must be sourced from official documentation with cited URLs and carry the template sections (core rules, testing patterns, tooling/limits, common mistakes). Doctor validates all of this in the "Technology resources" section, plus keyword matchability.
