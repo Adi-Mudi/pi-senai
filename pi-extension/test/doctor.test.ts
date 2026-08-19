@@ -1278,6 +1278,32 @@ describe("doctor architecture validation", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("resource check reports bundled resources when the project tech dir is missing", () => {
+    // Exercises the `if (!fs.existsSync(dir)) continue;` branch: no
+    // .pi/technologies/ directory is created at all.
+    const tmpDir = makeTmpDir("doctor-res-nodir-");
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "technologies")));
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    assert.strictEqual(
+      section.items.filter((i) => i.status === "error").length,
+      0,
+      "a missing project tech dir is not an error",
+    );
+    assert.ok(section.items.some((i) => i.status === "ok"), "bundled resources are still checked");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("resource check accepts a present-but-empty project tech dir", () => {
+    const tmpDir = makeTmpDir("doctor-res-emptydir-");
+    fs.mkdirSync(path.join(tmpDir, ".pi", "technologies"), { recursive: true });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Technology resources");
+    assert.strictEqual(section.items.filter((i) => i.status === "error").length, 0);
+    assert.ok(section.items.some((i) => i.status === "ok"), "bundled resources are still checked");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("resource check warns on missing template sections", () => {
     const tmpDir = makeTmpDir("doctor-res-sections-");
     writeFile(

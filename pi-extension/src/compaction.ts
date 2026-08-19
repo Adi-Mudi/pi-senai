@@ -6,7 +6,15 @@ import { loadState } from "./state.js";
 // status, so a compacted parent session can continue without re-reading.
 // Returns null when no senai run is active (pi's default compaction then applies).
 export function buildSenaiCompactionSummary(cwd: string): string | null {
-  const state = loadState(cwd);
+  let state;
+  try {
+    state = loadState(cwd);
+  } catch {
+    // A corrupted state.json must never break pi's compaction pipeline:
+    // no summary, pi's default compaction applies. The corruption error
+    // still surfaces on the next explicit /senai-* command.
+    return null;
+  }
   if (state.currentStage === "none") return null;
 
   const lines = [

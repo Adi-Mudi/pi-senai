@@ -557,6 +557,145 @@ describe("architect", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  it("buildArchitectPrompt requires every report field and the low-confidence guard", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-prompt-fields-"));
+    const profile: ArchitectProfile = {
+      projectName: "Inventory App",
+      projectSlug: "inventory-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const prompt = buildArchitectPrompt(tmpDir, profile);
+    const requiredFields = [
+      "selectedArchitecture", "confidence", "missingResources", "reasoning",
+      "skillProfile.recommendedAgents", "skillProfile.forbiddenPatterns",
+      "developmentOrder", "feasibility", "feasibilityReasoning", "techStack",
+      "atomicFunctions", "systemOverview", "components", "interfaces",
+      "dataFlow", "dataModel", "deployment", "qualityAttributeMapping",
+      "adrs", "constraints",
+    ];
+    for (const field of requiredFields) {
+      assert.ok(prompt.includes(field), `prompt must require report field: ${field}`);
+    }
+    assert.ok(prompt.includes("confidence is low and missingResources is not empty"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("buildArchitectPrompt embeds project-specific profile, report, and output paths", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-prompt-paths-"));
+    const profile: ArchitectProfile = {
+      projectName: "Inventory App",
+      projectSlug: "inventory-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const prompt = buildArchitectPrompt(tmpDir, profile);
+    assert.ok(prompt.includes(getArchitectProfilePath(tmpDir)));
+    assert.ok(prompt.includes(getArchitectReportPath(tmpDir)));
+    assert.ok(prompt.includes(path.join(tmpDir, ".pi", "architect", "architecture.md")));
+    assert.ok(prompt.includes(path.join(tmpDir, ".pi", "architect", "adrs")));
+    assert.ok(prompt.includes(".pi/skills/<project>-<architecture-id>-<stage>/SKILL.md"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateSkillFiles writes SKILL.md for all four stages with architecture references", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-skills-content-"));
+    const profile: ArchitectProfile = {
+      projectName: "Inventory App",
+      projectSlug: "inventory-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
+      name: "modular-monolith",
+      filePath: "",
+      domain: ["web"],
+      teamSize: "small",
+      complexity: "low",
+      bestForDrivers: ["small team"],
+      notForDrivers: [],
+      content: "",
+    };
+    const created = generateSkillFiles(tmpDir, profile, entry);
+    assert.strictEqual(created.length, 4);
+    for (const stage of ["plan", "implement", "document", "deliver"]) {
+      const skillFile = path.join(
+        tmpDir, ".pi", "skills", `inventory-app-modular-monolith-${stage}`, "SKILL.md",
+      );
+      assert.ok(fs.existsSync(skillFile), `missing SKILL.md for stage ${stage}`);
+      const content = fs.readFileSync(skillFile, "utf8");
+      assert.ok(content.includes(`name: inventory-app-modular-monolith-${stage}`));
+      assert.ok(content.includes("Architecture: modular-monolith"));
+      assert.ok(content.includes(".pi/architect/architecture.md"));
+      assert.ok(content.includes(".pi/architect/adrs/"));
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateSkillFiles overwrites stale content on regeneration", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-skills-regen-"));
+    const profile: ArchitectProfile = {
+      projectName: "Inventory App",
+      projectSlug: "inventory-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const entry: ArchitectureLibraryEntry = {
+      id: "modular-monolith",
+      name: "modular-monolith",
+      filePath: "",
+      domain: ["web"],
+      teamSize: "small",
+      complexity: "low",
+      bestForDrivers: [],
+      notForDrivers: [],
+      content: "",
+    };
+    generateSkillFiles(tmpDir, profile, entry);
+    const skillFile = path.join(
+      tmpDir, ".pi", "skills", "inventory-app-modular-monolith-plan", "SKILL.md",
+    );
+    fs.writeFileSync(skillFile, "STALE", "utf8");
+
+    generateSkillFiles(tmpDir, profile, entry);
+    const content = fs.readFileSync(skillFile, "utf8");
+    assert.ok(content.includes("Architecture: modular-monolith"), "regeneration must restore generated content");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("writeGeneratedManifest writes sha256 entries keyed by project-relative path", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-manifest-"));
+    const docsDir = path.join(tmpDir, ".pi", "architect");
+    fs.mkdirSync(docsDir, { recursive: true });
+    const fileA = path.join(docsDir, "architecture.md");
+    const fileB = path.join(tmpDir, ".pi", "agents", "x.md");
+    fs.mkdirSync(path.dirname(fileB), { recursive: true });
+    fs.writeFileSync(fileA, "aaa", "utf8");
+    fs.writeFileSync(fileB, "bbb", "utf8");
+
+    const manifest = writeGeneratedManifest(tmpDir, [fileA, fileB]);
+    assert.strictEqual(manifest.version, 1);
+    assert.ok(!Number.isNaN(Date.parse(manifest.generatedAt)), "generatedAt must be ISO");
+    const keys = Object.keys(manifest.files);
+    assert.deepStrictEqual(
+      keys.sort(),
+      [path.join(".pi", "agents", "x.md"), path.join(".pi", "architect", "architecture.md")].sort(),
+      "keys must be project-relative paths",
+    );
+    for (const hash of Object.values(manifest.files)) {
+      assert.match(hash, /^[0-9a-f]{64}$/, "values must be sha256 hex");
+    }
+
+    const loaded = loadGeneratedManifest(tmpDir);
+    assert.deepStrictEqual(loaded?.files, manifest.files, "must round-trip through loadGeneratedManifest");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("generateArchitectureDocs creates architecture.md and ADRs", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-docs-"));
     const profile: ArchitectProfile = {

@@ -78,15 +78,15 @@ describe("compaction", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("throws on a corrupted state.json (pinned behavior)", () => {
-    // NOTE: possible bug — see Doc/test-plan.md known issues. A corrupted
-    // state.json makes loadState throw, which would propagate into pi's
-    // compaction pipeline via the session_before_compact hook.
+  it("returns null on a corrupted state.json instead of throwing", () => {
+    // Fixed 2026-08-20: a corrupted state.json must never break pi's
+    // compaction pipeline — the hook returns null so pi's default compaction
+    // applies. The corruption error still surfaces on explicit /senai-* commands.
     const tmpDir = makeTmpDir("pi-senai-compaction-corrupt-");
     fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "senai"), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "senai", "state.json"), "{ not valid json");
 
-    assert.throws(() => buildSenaiCompactionSummary(tmpDir));
+    assert.strictEqual(buildSenaiCompactionSummary(tmpDir), null);
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

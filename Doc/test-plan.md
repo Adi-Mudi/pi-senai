@@ -354,13 +354,15 @@ tests covering all of them.
 
 Suite total after this round: **978 tests, 0 fail**.
 
-### Known issue pinned (not fixed)
+### Known issue — FIXED (2026-08-20)
 
-- A corrupted `.IDE_Plans/senai/state.json` makes `loadState` throw, and the
+- ~~A corrupted `.IDE_Plans/senai/state.json` makes `loadState` throw, and the
   throw propagates through `buildSenaiCompactionSummary` into pi's compaction
-  pipeline. Pinned with a NOTE comment in `compaction.test.ts`
-  ("throws on a corrupted state.json"). Fix needs a source change (catch and
-  return null) — deferred, per pin-don't-fix strategy.
+  pipeline.~~ Fixed: `buildSenaiCompactionSummary` now catches the throw and
+  returns null, so pi's default compaction applies and the pipeline never
+  breaks. The corruption error still surfaces on explicit `/senai-*` commands.
+  The test now pins the fixed behavior ("returns null on a corrupted
+  state.json instead of throwing").
 
 ### Still untestable without source changes
 
@@ -372,9 +374,15 @@ Suite total after this round: **978 tests, 0 fail**.
 - `getUserAgentsDir` (needs `getAgentDir()` dependency injection) and
   `getBundledTechnologiesDir` (coupled to the installed dist layout).
 
-### Remaining small gaps (deferred, low value)
+### Remaining small gaps — CLOSED (2026-08-20)
 
-- `buildArchitectPrompt` breadth (only one shape exercised).
-- `generateSkillFiles` / `writeGeneratedManifest` direct unit tests (covered
-  indirectly through the finalize flow).
-- Tech-dir existence checks in doctor.
+- `buildArchitectPrompt` breadth — done (required report fields, guard rule,
+  embedded paths). Note: the function takes the profile only; the planned
+  document/library input cases did not apply to its actual signature.
+- `generateSkillFiles` / `writeGeneratedManifest` direct unit tests — done
+  (all four stages + content references, regeneration overwrite, sha256
+  manifest shape and round-trip).
+- Tech-dir existence checks in doctor — done (missing dir and empty dir
+  branches).
+
+Suite total after closing: **999 tests, 0 fail**.
