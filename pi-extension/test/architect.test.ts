@@ -24,6 +24,7 @@ import {
   saveArchitectReport,
   selectArchitecture,
   slugify,
+  writeGeneratedManifest,
 } from "../src/architect.js";
 import { saveAgentConfig } from "../src/agent-config.js";
 import type { ArchitectProfile, ArchitectReport, ArchitectureLibraryEntry } from "../src/architect.js";
@@ -792,9 +793,17 @@ describe("architect", () => {
     fs.mkdirSync(currentSkillDir, { recursive: true });
     fs.writeFileSync(path.join(currentSkillDir, "SKILL.md"), "current", "utf8");
 
-    const removed = removeStaleArchitectureArtifacts(tmpDir, profile);
+    // The hash guard only deletes files the manifest proves we generated and
+    // the user never edited — record the stale artifacts as generated first.
+    writeGeneratedManifest(tmpDir, [
+      path.join(agentsDir, "test-project-monolith-planner.md"),
+      path.join(agentsDir, "test-project-monolith-implementer.md"),
+      path.join(oldSkillDir, "SKILL.md"),
+    ]);
+    const result = removeStaleArchitectureArtifacts(tmpDir, profile);
 
-    assert.strictEqual(removed.length, 3);
+    assert.strictEqual(result.removed.length, 3);
+    assert.strictEqual(result.kept.length, 0);
     assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-planner.md")));
     assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-implementer.md")));
     assert.ok(!fs.existsSync(oldSkillDir));
@@ -892,12 +901,49 @@ describe("architect", () => {
     fs.writeFileSync(path.join(agentsDir, "test-project-layered-architecture-implementer.md"), "old", "utf8");
     fs.writeFileSync(path.join(agentsDir, "test-project-hexagonal-planner-backup.md"), "lookalike", "utf8");
 
-    const removed = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
+    writeGeneratedManifest(tmpDir, [
+      path.join(agentsDir, "test-project-monolith-planner.md"),
+      path.join(agentsDir, "test-project-layered-architecture-implementer.md"),
+    ]);
+    const result = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
 
-    assert.strictEqual(removed.length, 2);
+    assert.strictEqual(result.removed.length, 2);
     assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-monolith-planner.md")));
     assert.ok(!fs.existsSync(path.join(agentsDir, "test-project-layered-architecture-implementer.md")));
     assert.ok(fs.existsSync(path.join(agentsDir, "test-project-hexagonal-planner-backup.md")));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts keeps a user-edited stale file (hash mismatch)", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-drift-"));
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    const staleFile = path.join(agentsDir, "test-project-monolith-planner.md");
+    fs.writeFileSync(staleFile, "old", "utf8");
+    writeGeneratedManifest(tmpDir, [staleFile]);
+
+    // User edits the file after generation — the hash no longer matches.
+    fs.writeFileSync(staleFile, "old + user edit", "utf8");
+
+    const result = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
+    assert.strictEqual(result.removed.length, 0);
+    assert.deepStrictEqual(result.kept, [path.relative(tmpDir, staleFile)]);
+    assert.strictEqual(fs.readFileSync(staleFile, "utf8"), "old + user edit");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("removeStaleArchitectureArtifacts keeps a pattern-matching file that is not in the manifest", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-nomanifest-"));
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    // Hand-made file with an unlucky matching name, no manifest entry.
+    const handMade = path.join(agentsDir, "test-project-monolith-planner.md");
+    fs.writeFileSync(handMade, "hand-made", "utf8");
+
+    const result = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
+    assert.strictEqual(result.removed.length, 0);
+    assert.deepStrictEqual(result.kept, [path.relative(tmpDir, handMade)]);
+    assert.ok(fs.existsSync(handMade));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -909,14 +955,14 @@ describe("architect", () => {
 
     const removed = removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile());
 
-    assert.deepStrictEqual(removed, []);
+    assert.deepStrictEqual(removed, { removed: [], kept: [] });
     assert.ok(fs.existsSync(path.join(skillsDir, "test-project-monolith-plan")));
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
   it("removeStaleArchitectureArtifacts handles missing agents and skills directories", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-cleanup-empty-"));
-    assert.deepStrictEqual(removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile()), []);
+    assert.deepStrictEqual(removeStaleArchitectureArtifacts(tmpDir, makeCleanupProfile()), { removed: [], kept: [] });
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 

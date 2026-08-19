@@ -52,7 +52,7 @@ Configuration commands:
 - `/senai-configure-architect-inputs` — select the documents and constraints the architect agent reads (`.pi/senai/architect-inputs.json`).
 - `/senai-generate-architect` — generate the project architecture, five architecture agents, and four architecture skills; creates or updates `.pi/senai/agents.json` and auto-maps the seven architecture-bound roles.
 - `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, runtime environment, and the architecture factory output (agent mapping, generated agent content, drift).
-- `/senai-generate-sub-agents` — generate project-specific sub-agents for the 14 non-architecture roles from bundled technology resources (basic mode: 3–4 questions). Only roles on built-in defaults are generated; one confirmation before writing and mapping.
+- `/senai-generate-sub-agents` — generate project-specific sub-agents for the 14 non-architecture roles from bundled technology resources (basic mode: 3–4 questions). Covers fresh roles (built-in defaults) and regeneration of previously generated agents: only manifest-proven untouched files are overwritten, user-edited files are kept, and a deleted file with a surviving mapping is recreated. One confirmation previews the exact write set before anything is written.
 
 Other commands:
 

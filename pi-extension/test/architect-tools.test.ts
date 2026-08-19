@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { registerArchitectTools } from "../src/architect-tools.js";
-import { saveArchitectProfile, saveArchitectReport } from "../src/architect.js";
+import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest, addToGeneratedManifest, loadGeneratedManifest } from "../src/architect.js";
 import { saveArchitectInputsConfig } from "../src/architect-inputs-config.js";
 import { createEmptyDrivers } from "../src/driver-extractor.js";
 import { getArchitectMapDir } from "../src/constants.js";
@@ -421,6 +421,13 @@ describe("architect-tools", () => {
     fs.mkdirSync(oldSkillDir, { recursive: true });
     fs.writeFileSync(path.join(oldSkillDir, "SKILL.md"), "old", "utf8");
 
+    // The hash guard only removes stale artifacts the manifest proves we
+    // generated and the user never edited — record them as generated first.
+    writeGeneratedManifest(tmpDir, [
+      path.join(agentsDir, "test-project-monolith-planner.md"),
+      path.join(oldSkillDir, "SKILL.md"),
+    ]);
+
     const { pi, tools } = makeMockPi();
     registerArchitectTools(pi);
     const result = await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
@@ -430,6 +437,81 @@ describe("architect-tools", () => {
     assert.ok(!fs.existsSync(oldSkillDir));
     assert.ok(fs.existsSync(path.join(agentsDir, "my-helper.md")));
     assert.strictEqual(result.details.removedStaleArtifacts.length, 2);
+    assert.strictEqual(result.details.keptStaleArtifacts.length, 0);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("finalize tool preserves sub-agent manifest entries and drops deleted files", async () => {
+    const tmpDir = makeTmpDir("arch-tools-merge-");
+    const libDir = path.join(tmpDir, ".pi", "architecture-library");
+    fs.mkdirSync(libDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(libDir, "hexagonal.md"),
+      "---\nname: hexagonal\ncomplexity: low\nbest-for-drivers:\n  - small team\n---\n# Hexagonal\n",
+      "utf8",
+    );
+
+    saveArchitectProfile(tmpDir, {
+      projectName: "Test Project",
+      projectSlug: "test-project",
+      selectedArchitecture: "hexagonal",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    });
+    saveArchitectReport(tmpDir, {
+      selectedArchitecture: "hexagonal",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Small team.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "Clear.",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    });
+
+    // A generated sub-agent team file tracked in the manifest, plus a ghost
+    // entry whose file was already deleted from disk.
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    fs.mkdirSync(agentsDir, { recursive: true });
+    const teamAgent = path.join(agentsDir, "test-project-scout-2.md");
+    fs.writeFileSync(teamAgent, "team agent content", "utf8");
+    const ghost = path.join(agentsDir, "test-project-ghost.md");
+    fs.writeFileSync(ghost, "ghost", "utf8");
+    addToGeneratedManifest(tmpDir, [teamAgent, ghost]);
+    fs.rmSync(ghost);
+    const teamHashBefore = loadGeneratedManifest(tmpDir)?.files[path.relative(tmpDir, teamAgent)];
+    assert.ok(teamHashBefore);
+
+    const { pi, tools } = makeMockPi();
+    registerArchitectTools(pi);
+    await tools.get("senai_finalize_architecture").execute("1", {}, undefined, () => {}, makeCtx(tmpDir));
+
+    const manifest = loadGeneratedManifest(tmpDir);
+    assert.ok(manifest);
+    const teamRel = path.relative(tmpDir, teamAgent);
+    assert.strictEqual(
+      manifest.files[teamRel],
+      teamHashBefore,
+      "sub-agent entry must survive an architect re-run with its original drift baseline hash",
+    );
+    assert.ok(!(path.relative(tmpDir, ghost) in manifest.files), "deleted files must be dropped");
+    assert.ok(
+      Object.keys(manifest.files).some((rel) => rel.includes("hexagonal-planner")),
+      "new architecture files are tracked",
+    );
+    assert.ok(fs.existsSync(teamAgent), "team agent file itself is untouched");
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
