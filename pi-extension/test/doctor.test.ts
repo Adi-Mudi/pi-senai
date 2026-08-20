@@ -3727,4 +3727,124 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     );
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("reports corrupted state.json as skipped without crashing", () => {
+    const tmpDir = makeTmpDir("doctor-audit-corrupt-");
+    writeFile(tmpDir, ".IDE_Plans/senai/state.json", "{not valid json");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    assert.ok(
+      section?.items.some((i) => i.status === "info" && i.message.includes("unreadable")),
+      "corrupted state reported as skipped",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports clean when runId is set but the stage is none", () => {
+    const tmpDir = makeTmpDir("doctor-audit-none-stage-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "none", runId: "r1" });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    assert.ok(section, "section exists");
+    assert.ok(
+      !section.items.some((i) => i.status === "warning"),
+      "no warnings when the run never started a stage",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports two ok items for a fully delivered run", () => {
+    const tmpDir = makeTmpDir("doctor-audit-full-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "delivered", runId: "r1" });
+    writeAllPlanArtifacts(tmpDir, "r1");
+    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/security-report.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/deliver-summary.md", "content");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    const oks = section?.items.filter((i) => i.status === "ok") ?? [];
+    assert.strictEqual(oks.length, 2, "plan ok + deliver ok");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports no stuck info when a planning-stage run already has all artifacts", () => {
+    const tmpDir = makeTmpDir("doctor-audit-planning-full-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "planning", runId: "r1" });
+    writeAllPlanArtifacts(tmpDir, "r1");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    assert.ok(
+      !section?.items.some((i) => i.message.includes("still missing")),
+      "no stuck info when everything is written",
+    );
+    assert.ok(
+      section?.items.some((i) => i.status === "ok" && i.message.includes("audit clean")),
+      "audit clean reported",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("counts every remapped role in the collision warning", () => {
+    const tmpDir = makeTmpDir("doctor-collision-3-");
+    for (const name of ["proj-planner", "proj-scout", "proj-worker"]) {
+      writeAgent(tmpDir, name, { name, description: name });
+    }
+    saveAgentConfig(tmpDir, {
+      version: 1,
+      agents: { planner: "proj-planner", "scout-1": "proj-scout", implementer: "proj-worker" },
+    });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Agent mapping sources");
+    const warning = section?.items.find(
+      (i) => i.status === "warning" && i.message.includes("remap a built-in default name"),
+    );
+    assert.ok(warning, "collision warning present");
+    assert.ok(warning.message.startsWith("3 role(s)"), `counts 3 roles, got: ${warning.message}`);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("does not warn when a project agent shadows a built-in under the same name", () => {
+    const tmpDir = makeTmpDir("doctor-shadow-");
+    writeAgent(tmpDir, "planner", { name: "planner", description: "project planner override" });
+    saveAgentConfig(tmpDir, { version: 1, agents: { planner: "planner" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Agent mapping sources");
+    const warning = section?.items.find(
+      (i) => i.status === "warning" && i.message.includes("remap a built-in default name"),
+    );
+    assert.ok(!warning, "same-name override is not a collision");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("survives a garbage stage string in state.json", () => {
+    const tmpDir = makeTmpDir("doctor-audit-garbage-");
+    writeFile(
+      tmpDir,
+      ".IDE_Plans/senai/state.json",
+      JSON.stringify({ version: 1, mission: "m", runId: "r1", currentStage: "bogus", startedAt: "", updatedAt: "", stageResults: {} }),
+    );
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    assert.ok(section, "section exists");
+    assert.ok(
+      !section.items.some((i) => i.status === "warning"),
+      "garbage stage resets to none — no warnings",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("lists all 10 plan artifacts when the run directory does not exist at all", () => {
+    const tmpDir = makeTmpDir("doctor-audit-nodir-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "implementing", runId: "ghost-run" });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    const warning = section?.items.find(
+      (i) => i.status === "warning" && i.message.includes("10 artifact(s)"),
+    );
+    assert.ok(warning, "all-missing warning present");
+    assert.ok(
+      warning.details?.some((d) => d.includes("plan/plan.md")),
+      "details list the missing files",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

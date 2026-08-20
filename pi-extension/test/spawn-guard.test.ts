@@ -128,3 +128,103 @@ describe("guardSpawnCall", () => {
     assert.strictEqual(guardSpawnCall("subagent", {}, cwd), undefined);
   });
 });
+
+describe("guardSpawnCall edge cases", () => {
+  it("trims surrounding whitespace on the agent name", () => {
+    const cwd = makeTmp();
+    setupActiveRun(cwd);
+    assert.strictEqual(
+      guardSpawnCall("subagent", { agent: "  proj-arch-planner  " }, cwd),
+      undefined,
+    );
+  });
+
+  it("handles non-string agent values without throwing", () => {
+    const cwd = makeTmp();
+    setupActiveRun(cwd);
+    assert.strictEqual(guardSpawnCall("subagent", { agent: 42 }, cwd), undefined, "number passes as unknown name");
+    assert.strictEqual(guardSpawnCall("subagent", { agent: {} }, cwd), undefined, "object passes as unknown name");
+    assert.ok(guardSpawnCall("subagent", { agent: null }, cwd)?.block, "null treated as missing");
+  });
+
+  it("is case-sensitive: 'Planner' is an unknown name and passes through", () => {
+    const cwd = makeTmp();
+    setupActiveRun(cwd);
+    assert.strictEqual(guardSpawnCall("subagent", { agent: "Planner" }, cwd), undefined);
+  });
+
+  it("lists every remapped role when several share the blocked bare name", () => {
+    const cwd = makeTmp();
+    saveState(cwd, { ...defaultState(), currentStage: "planning", runId: "r1" });
+    saveAgentConfig(cwd, {
+      version: 1,
+      agents: {
+        planner: "proj-planner",
+        discussion: "proj-discussion",
+        "plan-overview": "proj-plan-overview",
+      },
+    });
+    const result = guardSpawnCall("subagent", { agent: "planner" }, cwd);
+    assert.ok(result?.block);
+    for (const name of ["proj-planner", "proj-discussion", "proj-plan-overview"]) {
+      assert.ok(result.reason.includes(name), `reason lists ${name}`);
+    }
+  });
+
+  it("blocks subagent_resume with a missing agent", () => {
+    const cwd = makeTmp();
+    setupActiveRun(cwd);
+    assert.ok(guardSpawnCall("subagent_resume", {}, cwd)?.block);
+  });
+
+  it("stays active in every mid-run stage", () => {
+    const stages = [
+      "planning",
+      "planned",
+      "implementing",
+      "implemented",
+      "documenting",
+      "documented",
+      "delivering",
+    ] as const;
+    for (const stage of stages) {
+      const cwd = makeTmp();
+      saveState(cwd, { ...defaultState(), currentStage: stage, runId: "r1" });
+      saveAgentConfig(cwd, { version: 1, agents: { planner: "proj-arch-planner" } });
+      assert.ok(
+        guardSpawnCall("subagent", { agent: "planner" }, cwd)?.block,
+        `bare name blocked in stage ${stage}`,
+      );
+    }
+  });
+
+  it("treats undefined input as a missing agent", () => {
+    const cwd = makeTmp();
+    setupActiveRun(cwd);
+    assert.ok(guardSpawnCall("subagent", undefined, cwd)?.block);
+  });
+
+  it("steps aside when agents.json contains invalid JSON", () => {
+    const cwd = makeTmp();
+    saveState(cwd, { ...defaultState(), currentStage: "planning", runId: "r1" });
+    fs.mkdirSync(path.join(cwd, ".pi", "senai"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".pi", "senai", "agents.json"), "{bad json", "utf8");
+    assert.strictEqual(guardSpawnCall("subagent", { agent: "planner" }, cwd), undefined);
+  });
+
+  it("allows the bare name when the role is explicitly mapped to its own default", () => {
+    const cwd = makeTmp();
+    saveState(cwd, { ...defaultState(), currentStage: "planning", runId: "r1" });
+    saveAgentConfig(cwd, { version: 1, agents: { planner: "planner" } });
+    assert.strictEqual(guardSpawnCall("subagent", { agent: "planner" }, cwd), undefined);
+  });
+
+  it("allows a mapped name that equals another role's built-in default", () => {
+    const cwd = makeTmp();
+    saveState(cwd, { ...defaultState(), currentStage: "planning", runId: "r1" });
+    // scout-2 is custom-mapped to 'reviewer'; spawning 'reviewer' is then the
+    // CORRECT mapped name for scout-2, so it must be allowed.
+    saveAgentConfig(cwd, { version: 1, agents: { "scout-2": "reviewer" } });
+    assert.strictEqual(guardSpawnCall("subagent", { agent: "reviewer" }, cwd), undefined);
+  });
+});
