@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Spawn guard: during an active senai run, a `tool_call` hook now blocks `subagent`/`subagent_resume` calls that omit the `agent` parameter or pass a bare role/built-in name (e.g. `planner`) while that role is mapped to a custom or generated agent. The built-in agent is read-only and can never write the role's artifact, which stalled real runs; the block message names the correct mapped agent so the spawn is retried correctly. The guard steps aside when no run is active, when configs are missing/corrupt, and for non-colliding custom names.
+- `/senai-doctor` is stricter: it now warns when roles remap a built-in default name (spawns must use the exact mapped name — the bare name silently loads the read-only built-in), audits the recorded run's artifacts (plan and deliver files must exist and be non-empty once their stage is complete, catching "subagent reported completed but wrote nothing"), and flags runs parked in an active stage with missing artifacts as possibly stuck.
+
+### Changed
+
+- Stage prompts and the plan skill now carry one unified stall playbook: interrupt a stalled subagent once, wait, ask the user to close its pane if it stays alive (no kill tool exists yet in pi-interactive-subagents), then respawn with a unique name — never leave two agents of the same role running. Writer completions must be verified by checking the artifact file exists before spawning the next agent.
+
 ### Fixed
 
 - Fixed a Pi TUI crash (`Rendered line ... exceeds terminal width`) when confirm dialogs rendered text wider than the terminal — most visible on first-time `/senai-generate-sub-agents`, whose write-set preview is long. All custom picker/editor components (`simple-picker`, `role-picker`, `list-editor`) now truncate every rendered line to the terminal width via pi-tui's `truncateToWidth`, and multi-line confirm messages are split into separate rendered lines, matching Pi's documented custom-component pattern.

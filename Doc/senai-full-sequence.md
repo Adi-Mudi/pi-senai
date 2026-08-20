@@ -392,6 +392,7 @@ Run IDs have the form `YYYY-MM-DD-HH-MM-<mission-slug>`.
 6. **Escalate, don't guess.** If a subagent needs an unapproved decision, it asks via the main agent.
 7. **Read-only plan stage.** No plan-stage agent edits project source files.
 8. **No direct subagent calls from the extension.** The extension injects prompts; the LLM invokes the `subagent` tool.
+9. **Mapped names enforced.** During an active run, a `tool_call` guard blocks `subagent` spawns that omit the `agent` parameter or use a bare role/built-in name while the role is mapped to a custom or generated agent (the built-in is read-only and stalls the run).
 9. **Approve auto-runs the next stage.** `/senai-approve` is the single command to move forward; manual stage commands are still available as overrides.
 10. **Fresh scouts every run.** The main agent must spawn new scouts for each run and must not reuse scout reports from previous runs.
 11. **Configure first.** Valid `.pi/senai/agents.json`, `.pi/senai/files.json`, and `.pi/senai/agents_files.json` are required before any stage command will run.

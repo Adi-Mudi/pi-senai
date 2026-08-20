@@ -49,9 +49,12 @@ Use the `subagent` tool (provided by `pi-interactive-subagents`) with pi.dev bes
 2. **Wait for all completion notifications before proceeding.** After launching parallel agents, do not continue until each one has reported back. Do not assume an agent failed just because its output file is not yet present. Do not create polling tasks or repeated TaskUpdate/status checks while waiting — notifications wake you automatically.
 3. **If an expected file is missing, check the live widget first.**
    - If the agent is still shown as `starting`/`active`/`waiting`, wait.
-   - If the agent is `stalled`, or you received a failure / `caller_ping`, interrupt it with `subagent_interrupt({ name: "<name>" })` and then respawn it.
+   - If the agent is `stalled`, or you received a failure / `caller_ping`, interrupt it with `subagent_interrupt({ name: "<name>" })` and wait once.
+   - `subagent_interrupt` is soft (turn-level) — if the agent stays alive after the interrupt, tell the user to close its pane manually, then respawn with a unique name (e.g. `-retry` suffix). Never leave two agents of the same role running at once.
    - Only respawn after confirming the original run is no longer healthy.
-4. **Strict checkpoints:**
+4. **Verify every artifact.** After any writer subagent reports completion, confirm its artifact file exists before spawning the next agent. If it is missing, respawn the agent with the failure as feedback.
+5. **Never write a subagent's artifact yourself.** If it cannot finish, fix the spawn (agent, tools, task) and relaunch.
+6. **Strict checkpoints:**
    - Do not start the discussion agent until **all four** `scout-angle_*.md` files exist.
    - Do not start the planner until `<discussionNotes>` includes the user’s answers and all four scout files exist.
    - Do not start the reviewers until `<plan>` and `<planOverview>` exist.

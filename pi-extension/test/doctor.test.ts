@@ -12,6 +12,7 @@ import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest } fro
 import { getProjectSlug } from "../src/agent-generator.js";
 import { createEmptyDrivers, saveDrivers } from "../src/driver-extractor.js";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
+import { defaultState, saveState } from "../src/state.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -3579,6 +3580,151 @@ describe("doctor optimization checks", () => {
     } else {
       assert.ok(!retryItem, "no retry item expected without settings.json");
     }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("doctor strictness — collision warning and run artifact audit", () => {
+  const PLAN_ARTIFACTS = [
+    "plan/plan.md",
+    "plan/plan-overview.md",
+    "plan/discussion-notes.md",
+    "plan/scouts/scout-angle_1.md",
+    "plan/scouts/scout-angle_2.md",
+    "plan/scouts/scout-angle_3.md",
+    "plan/scouts/scout-angle_4.md",
+    "plan/reviews/review-correctness.md",
+    "plan/reviews/review-security.md",
+    "plan/reviews/review-tests.md",
+  ];
+
+  function writeAllPlanArtifacts(tmpDir: string, runId: string, except?: string): void {
+    for (const rel of PLAN_ARTIFACTS) {
+      if (rel === except) continue;
+      writeFile(tmpDir, `.IDE_Plans/senai/runs/${runId}/${rel}`, "content");
+    }
+  }
+
+  it("warns when a role remaps a built-in default name (bare name loads the read-only built-in)", () => {
+    const tmpDir = makeTmpDir("doctor-collision-");
+    writeAgent(tmpDir, "proj-arch-planner", { name: "proj-arch-planner", description: "planner" });
+    saveAgentConfig(tmpDir, { version: 1, agents: { planner: "proj-arch-planner" } });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Agent mapping sources");
+    const warning = section?.items.find(
+      (i) => i.status === "warning" && i.message.includes("remap a built-in default name"),
+    );
+    assert.ok(warning, "collision warning present");
+    assert.ok(
+      warning.details?.some((d) => d.includes("proj-arch-planner") && d.includes('"planner"')),
+      "warning names both the mapped and the bare name",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("emits no collision warning when roles stay on built-in defaults", () => {
+    const tmpDir = makeTmpDir("doctor-no-collision-");
+    saveAgentConfig(tmpDir, { version: 1, agents: {} });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Agent mapping sources");
+    const warning = section?.items.find(
+      (i) => i.status === "warning" && i.message.includes("remap a built-in default name"),
+    );
+    assert.ok(!warning, "no collision warning on defaults");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("run artifact audit is clean when all plan artifacts exist", () => {
+    const tmpDir = makeTmpDir("doctor-audit-clean-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "implementing", runId: "r1" });
+    writeAllPlanArtifacts(tmpDir, "r1");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    assert.ok(
+      section?.items.some(
+        (i) => i.status === "ok" && i.message.includes("All 10 plan-stage artifacts"),
+      ),
+      "clean audit reported",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("warns when a completed plan stage has a missing artifact", () => {
+    const tmpDir = makeTmpDir("doctor-audit-missing-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "implementing", runId: "r1" });
+    writeAllPlanArtifacts(tmpDir, "r1", "plan/reviews/review-tests.md");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    const warning = section?.items.find(
+      (i) => i.status === "warning" && i.message.includes("missing or empty"),
+    );
+    assert.ok(warning, "missing artifact warning present");
+    assert.ok(
+      warning.details?.some((d) => d.includes("review-tests.md")),
+      "warning names the missing file",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reports a planning-stage run with missing artifacts as possibly stuck", () => {
+    const tmpDir = makeTmpDir("doctor-audit-stuck-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "planning", runId: "r1" });
+    writeAllPlanArtifacts(tmpDir, "r1", "plan/scouts/scout-angle_3.md");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    assert.ok(
+      section?.items.some(
+        (i) => i.status === "info" && i.message.includes("artifacts still missing"),
+      ),
+      "stuck-run info present",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("treats a 0-byte artifact as missing", () => {
+    const tmpDir = makeTmpDir("doctor-audit-empty-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "implementing", runId: "r1" });
+    writeAllPlanArtifacts(tmpDir, "r1");
+    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/plan/plan-overview.md", "");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    const warning = section?.items.find((i) => i.status === "warning");
+    assert.ok(warning, "empty artifact flagged");
+    assert.ok(
+      warning.details?.some((d) => d.includes("plan-overview.md")),
+      "warning names the empty file",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("skips the audit cleanly when no run exists", () => {
+    const tmpDir = makeTmpDir("doctor-audit-none-");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    assert.ok(
+      section?.items.some(
+        (i) => i.status === "info" && i.message.includes("No senai run recorded"),
+      ),
+      "no-run info present",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("warns when a delivered run is missing deliver artifacts", () => {
+    const tmpDir = makeTmpDir("doctor-audit-deliver-");
+    saveState(tmpDir, { ...defaultState(), currentStage: "delivered", runId: "r1" });
+    writeAllPlanArtifacts(tmpDir, "r1");
+    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/security-report.md", "content");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = report.sections.find((s) => s.title === "Run artifacts");
+    const warning = section?.items.find(
+      (i) => i.status === "warning" && i.message.includes("deliver artifact"),
+    );
+    assert.ok(warning, "deliver artifact warning present");
+    assert.ok(
+      warning.details?.some((d) => d.includes("deliver-summary.md")),
+      "warning names the missing deliver file",
+    );
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

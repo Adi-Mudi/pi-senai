@@ -33,7 +33,8 @@ import {
   type ArchitectReport,
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
-import { getArchitectStateDir } from "./constants.js";
+import { getArchitectStateDir, getArtifactPaths } from "./constants.js";
+import { loadState, type SenaiState } from "./state.js";
 import {
   GENERATED_ROLES,
   GENERATOR_VERSION,
@@ -131,6 +132,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
   sections.push(checkAgentMappings(resolvedAgents));
   sections.push(checkAgentCapabilities(resolvedAgents));
+  sections.push(checkRunArtifacts(cwd));
 
   if (filesConfig) {
     sections.push(checkFileScope(cwd, filesConfig));
@@ -437,7 +439,144 @@ function checkAgentMappings(resolved: Record<SenaiRole, ResolvedAgent>): Diagnos
     });
   }
 
+  // Strict collision warning: roles remapped off their built-in default mean
+  // the bare default name (e.g. "planner") silently loads the built-in
+  // read-only agent. A spawn with the bare name can never write artifacts.
+  const collisions: string[] = [];
+  for (const role of SENAI_ROLES) {
+    const agent = resolved[role];
+    if (agent.source === "not found") continue;
+    const bare = DEFAULT_AGENTS[role];
+    if (agent.name !== bare) {
+      collisions.push(`${role}: spawn with "${agent.name}" — the bare name "${bare}" loads the built-in read-only agent`);
+    }
+  }
+  if (collisions.length > 0) {
+    items.push({
+      status: "warning",
+      message: `${collisions.length} role(s) remap a built-in default name — spawns MUST use the exact mapped name`,
+      details: [
+        ...collisions,
+        "During an active run the spawn guard blocks bare names, but outside a run (or in other tools) the wrong agent still loads silently.",
+      ],
+    });
+  }
+
   return { title: "Agent mapping sources", items };
+}
+
+/** Stage ranking for the run artifact audit: which stages imply the plan
+ *  artifacts must already exist. */
+const STAGE_RANK: Record<string, number> = {
+  none: 0,
+  planning: 1,
+  planned: 2,
+  implementing: 3,
+  implemented: 4,
+  documenting: 5,
+  documented: 6,
+  delivering: 7,
+  delivered: 8,
+};
+
+function artifactMissing(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).size === 0;
+  } catch {
+    return true;
+  }
+}
+
+/** Post-hoc audit of the recorded run: verifies that every artifact a stage
+ *  was supposed to produce actually exists and is non-empty. Catches the
+ *  "subagent reported completed but wrote nothing" failure seen in real
+ *  sessions, which the parent only noticed after user prodding. */
+function checkRunArtifacts(cwd: string): DiagnosticSection {
+  const title = "Run artifacts";
+  let state: SenaiState;
+  try {
+    state = loadState(cwd);
+  } catch {
+    return {
+      title,
+      items: [{ status: "info", message: "state.json unreadable — run artifact audit skipped." }],
+    };
+  }
+  if (!state.runId) {
+    return { title, items: [{ status: "info", message: "No senai run recorded yet." }] };
+  }
+
+  const artifacts = getArtifactPaths(cwd, state.runId);
+  const planArtifacts: Array<[string, string]> = [
+    ["plan/plan.md", artifacts.plan],
+    ["plan/plan-overview.md", artifacts.planOverview],
+    ["plan/discussion-notes.md", artifacts.discussionNotes],
+    ["plan/scouts/scout-angle_1.md", artifacts.scoutAngle1],
+    ["plan/scouts/scout-angle_2.md", artifacts.scoutAngle2],
+    ["plan/scouts/scout-angle_3.md", artifacts.scoutAngle3],
+    ["plan/scouts/scout-angle_4.md", artifacts.scoutAngle4],
+    ["plan/reviews/review-correctness.md", artifacts.reviewCorrectness],
+    ["plan/reviews/review-security.md", artifacts.reviewSecurity],
+    ["plan/reviews/review-tests.md", artifacts.reviewTests],
+  ];
+  const deliverArtifacts: Array<[string, string]> = [
+    ["deliver/security-report.md", artifacts.securityReport],
+    ["deliver/deliver-summary.md", artifacts.deliverSummary],
+  ];
+  const missingLabels = (list: Array<[string, string]>) =>
+    list.filter(([, p]) => artifactMissing(p)).map(([label]) => label);
+
+  const items: DiagnosticItem[] = [];
+  const rank = STAGE_RANK[state.currentStage] ?? 0;
+
+  if (rank >= STAGE_RANK.planned) {
+    const missing = missingLabels(planArtifacts);
+    if (missing.length > 0) {
+      items.push({
+        status: "warning",
+        message: `Plan stage is marked complete but ${missing.length} artifact(s) are missing or empty`,
+        details: [
+          ...missing,
+          "A writer subagent reported completion without writing its file. Do not trust 'completed' — verify artifacts.",
+        ],
+      });
+    } else {
+      items.push({ status: "ok", message: "All 10 plan-stage artifacts exist and are non-empty." });
+    }
+  } else if (state.currentStage === "planning") {
+    const missing = missingLabels(planArtifacts);
+    if (missing.length > 0) {
+      items.push({
+        status: "info",
+        message: `Run '${state.runId}' is in 'planning' with ${missing.length}/10 plan artifacts still missing`,
+        details: [
+          ...missing,
+          "If no subagent is actively working on these, the run may be stuck — check the live subagent widget.",
+        ],
+      });
+    }
+  }
+
+  if (state.currentStage === "delivered") {
+    const missing = missingLabels(deliverArtifacts);
+    if (missing.length > 0) {
+      items.push({
+        status: "warning",
+        message: `Run is delivered but ${missing.length} deliver artifact(s) are missing or empty`,
+        details: missing,
+      });
+    } else {
+      items.push({ status: "ok", message: "Both deliver-stage artifacts exist and are non-empty." });
+    }
+  }
+
+  if (items.length === 0) {
+    items.push({
+      status: "ok",
+      message: `Run '${state.runId}' (${state.currentStage}): artifact audit clean.`,
+    });
+  }
+  return { title, items };
 }
 
 function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): DiagnosticSection {

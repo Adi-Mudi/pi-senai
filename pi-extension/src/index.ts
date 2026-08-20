@@ -12,6 +12,7 @@ import {
 } from "./commands.js";
 import { loadState } from "./state.js";
 import { buildSenaiCompactionSummary } from "./compaction.js";
+import { guardSpawnCall } from "./spawn-guard.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
 import { migrateLegacyOrchestraDirs } from "./migrate.js";
@@ -56,6 +57,17 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
         tokensBefore: event.preparation.tokensBefore,
       },
     };
+  });
+
+  // Block subagent spawns that use a bare role/built-in name while a custom
+  // agent is mapped for that role — the built-in is read-only and stalls the
+  // run. Only active during a senai run; everything else passes through.
+  pi.on("tool_call", (event, ctx) => {
+    return guardSpawnCall(
+      event.toolName,
+      event.input as Record<string, unknown> | undefined,
+      ctx.cwd,
+    );
   });
 
   // Inject senai status into the system prompt when a run is active.

@@ -73,7 +73,9 @@ describe("agent-registry", () => {
     const block = buildAgentRegistryBlock(null);
     assert.ok(block.includes("ALWAYS pass the `agent` parameter"));
     assert.ok(block.includes("do NOT poll"));
-    assert.ok(block.includes("`subagent_resume`"));
+    assert.ok(block.includes("verify its artifact file exists"));
+    assert.ok(block.includes("`subagent_interrupt`"));
+    assert.ok(block.includes("Never leave two agents of the same role running"));
     assert.ok(block.includes("NEVER do a subagent's job yourself"));
   });
 
