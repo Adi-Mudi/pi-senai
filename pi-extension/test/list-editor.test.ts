@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { ExtensionContext, ExtensionUIContext } from "@mariozechner/pi-coding-agent";
+import { visibleWidth } from "@mariozechner/pi-tui";
 import { runListEditor, truncateMiddle, type ListEditorAction } from "../src/ui/list-editor.js";
 
 const ENTER = "\r";
@@ -805,5 +806,142 @@ describe("coverage audit gaps", () => {
     const result = truncateMiddle("dir/abcdef.md", 10);
     assert.strictEqual(result, "…abcdef.md");
     assert.strictEqual(result.length, 10);
+  });
+});
+
+describe("width clamping (TUI crash guard)", () => {
+  it("never renders a line wider than the given width, even with a long title and many actions", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "T".repeat(300),
+      items: [
+        ...Array.from({ length: 8 }, (_, i) => ({
+          id: `a${i}`,
+          kind: "action" as const,
+          label: `Action ${i} with a very long label`,
+          value: "",
+        })),
+        {
+          id: "s1",
+          kind: "suggestion" as const,
+          label: "s",
+          value: `${"dir/".repeat(30)}file.md`,
+        },
+      ],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const width of [213, 80, 40, 20]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}: "${line}"`);
+      }
+    }
+    comp.handleInput("\x1b");
+    const result = await promise;
+    assert.strictEqual(result.kind, "back");
+  });
+});
+
+describe("width clamping edge cases", () => {
+  it("keeps lines within width with real ANSI codes on a loaded editor", async () => {
+    const ansiTheme = {
+      fg: (_color: string, text: string) => `\x1b[31m${text}\x1b[0m`,
+      bg: (_color: string, text: string) => text,
+      bold: (text: string) => `\x1b[1m${text}\x1b[22m`,
+      dim: (text: string) => `\x1b[2m${text}\x1b[22m`,
+    } as unknown as import("@mariozechner/pi-coding-agent").Theme;
+    let component: { render: (width: number) => string[] } | undefined;
+    let doneFn: (result: unknown) => void = () => {};
+    const custom = async (factory: any): Promise<any> =>
+      new Promise((resolve) => {
+        doneFn = resolve;
+        component = factory({ requestRender: () => {} }, ansiTheme, {}, resolve);
+      });
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: { input: async () => "", custom },
+    } as unknown as ExtensionContext;
+    const promise = runListEditor(ctx, {
+      title: "T".repeat(300),
+      items: [
+        ...Array.from({ length: 8 }, (_, i) => ({
+          id: `a${i}`,
+          kind: "action" as const,
+          label: `Action ${i} ${"x".repeat(100)}`,
+          value: "",
+        })),
+        { id: "s1", kind: "suggestion" as const, label: "s", value: `${"dir/".repeat(50)}file.md` },
+      ],
+    });
+    for (const width of [80, 40, 20, 2]) {
+      for (const line of component!.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    doneFn({ kind: "back" });
+    await promise;
+  });
+
+  it("handles emoji and CJK in selected and suggestion paths", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "t",
+      items: [
+        { id: "r1", kind: "selected", label: "r", value: `${"漢字🚀/".repeat(20)}file.md` },
+        { id: "s1", kind: "suggestion", label: "s", value: `${"dir✅/".repeat(20)}file.md` },
+      ],
+    });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    for (const width of [40, 20]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("clamps the content-focus detail line for a long emoji path", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "t",
+      items: [
+        { id: "a1", kind: "action", label: "Done", value: "" },
+        { id: "s1", kind: "suggestion", label: "s", value: `${"dir🚀/".repeat(30)}file.md` },
+      ],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    comp.handleInput(UP); // actions -> content area, last row
+    for (const width of [40, 20]) {
+      const lines = comp.render(width);
+      for (const line of lines) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+      assert.ok(lines.some((l) => l.includes("📄")), "detail line shown");
+    }
+    comp.handleInput("\x1b");
+    await promise;
+  });
+
+  it("renders within width at tiny widths 2 and 3", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runListEditor(ctx, {
+      title: "t",
+      items: [{ id: "s1", kind: "suggestion", label: "s", value: "a/b.md" }],
+    });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    for (const width of [2, 3]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    getDone()({ kind: "back" });
+    await promise;
   });
 });

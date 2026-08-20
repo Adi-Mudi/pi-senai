@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- Fixed a Pi TUI crash (`Rendered line ... exceeds terminal width`) when confirm dialogs rendered text wider than the terminal — most visible on first-time `/senai-generate-sub-agents`, whose write-set preview is long. All custom picker/editor components (`simple-picker`, `role-picker`, `list-editor`) now truncate every rendered line to the terminal width via pi-tui's `truncateToWidth`, and multi-line confirm messages are split into separate rendered lines, matching Pi's documented custom-component pattern.
+
 ### Changed
 
 - `/senai-generate-sub-agents` now regenerates in place: roles already mapped to their generated agent are regenerate candidates alongside roles on built-in defaults. Overwriting happens only for files the generation manifest proves pi-senai wrote and the user never edited (sha256 match in `.pi/architect/generated-manifest.json`); user-edited files are kept and reported, and a deleted generated file with a surviving mapping is recreated automatically. The confirmation dialog previews the exact write set (create / regenerate / recreate / kept / skipped) before anything is written. Generated agent footers now carry the generator version (`generator v2`).

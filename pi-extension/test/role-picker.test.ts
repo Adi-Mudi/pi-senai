@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { ExtensionContext, ExtensionUIContext } from "@mariozechner/pi-coding-agent";
+import { visibleWidth } from "@mariozechner/pi-tui";
 import { runRolePicker, type RolePickerItem } from "../src/ui/role-picker.js";
 
 const ENTER = "\r";
@@ -575,7 +576,7 @@ describe("role picker needs labels", () => {
       { id: "reviewer-correctness", label: "Reviewer — Correctness", agent: "rev", summary: "not set", assigned: false, guidance: "recommended", needs: "RTM / traceability document" },
     ];
     const promise = runRolePicker(ctx, { title: "t", items });
-    const lines = component!.render(80);
+    const lines = component!.render(200);
     const row = lines.find((l) => l.includes("Reviewer — Correctness"));
     assert.ok(row, "reviewer row exists");
     assert.ok(row.includes("(needs: RTM / traceability document)"), "needs text present");
@@ -590,7 +591,7 @@ describe("coverage audit gaps", () => {
     const { ctx, getComponent, getDone } = makeTuiCtx();
     const promise = runRolePicker(ctx, { title: "Test", items: ITEMS });
     const comp = getComponent() as { render: (width: number) => string[] };
-    const lines = comp.render(80);
+    const lines = comp.render(200);
     assert.ok(
       lines.some((line) =>
         line.includes("Only roles that read project documents are shown; other roles use stage artifacts."),
@@ -699,5 +700,135 @@ describe("role-picker showBack", () => {
     component.handleInput(ENTER);
     const result = await promise;
     assert.deepStrictEqual(result, { kind: "back" });
+  });
+});
+
+describe("width clamping (TUI crash guard)", () => {
+  it("never renders a line wider than the given width, even with long summaries and agent names", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      {
+        id: "scout-1",
+        label: "Scout 1 — Architecture / big-picture ".repeat(10),
+        agent: "nifty-trend-google-sheets-apps-script-scout-1 ".repeat(5),
+        summary: "reads: very/long/truth/document/path.md ".repeat(10),
+        assigned: true,
+        needs: "truth document missing ".repeat(5),
+      },
+      {
+        id: "planner",
+        label: "Planner",
+        agent: "planner",
+        summary: "reads=1",
+        assigned: true,
+      },
+    ];
+    const promise = runRolePicker(ctx, {
+      title: "T".repeat(300),
+      subtitle: "S".repeat(300),
+      items,
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const width of [213, 80, 40, 10]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}: "${line}"`);
+      }
+    }
+    comp.handleInput("\x1b");
+    const result = await promise;
+    assert.deepStrictEqual(result, { kind: "back" });
+  });
+});
+
+describe("width clamping edge cases", () => {
+  it("keeps lines within width with real ANSI codes on a fully-loaded row", async () => {
+    const ansiTheme = {
+      fg: (_color: string, text: string) => `\x1b[31m${text}\x1b[0m`,
+      bg: (_color: string, text: string) => text,
+      bold: (text: string) => `\x1b[1m${text}\x1b[22m`,
+      dim: (text: string) => `\x1b[2m${text}\x1b[22m`,
+    } as unknown as import("@mariozechner/pi-coding-agent").Theme;
+    let component: { render: (width: number) => string[] } | undefined;
+    let doneFn: (result: unknown) => void = () => {};
+    const custom = async (factory: any): Promise<any> =>
+      new Promise((resolve) => {
+        doneFn = resolve;
+        component = factory({ requestRender: () => {} }, ansiTheme, {}, resolve);
+      });
+    const ctx = {
+      cwd: "/tmp",
+      mode: "tui",
+      ui: { select: async () => "", custom },
+    } as unknown as ExtensionContext;
+    const items: RolePickerItem[] = [
+      {
+        id: "scout-1",
+        label: "L".repeat(300),
+        agent: "a".repeat(300),
+        summary: "s".repeat(300),
+        assigned: true,
+        guidance: "recommended",
+        needs: "n".repeat(300),
+      },
+    ];
+    const promise = runRolePicker(ctx, { title: "T".repeat(300), subtitle: "S".repeat(300), items });
+    for (const width of [80, 40, 10, 2]) {
+      for (const line of component!.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    doneFn({ kind: "back" });
+    await promise;
+  });
+
+  it("handles emoji and CJK in labels and summaries", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      {
+        id: "scout-1",
+        label: "Scout ✅🚀漢字".repeat(20),
+        agent: "agent-🚀",
+        summary: "漢字✅".repeat(30),
+        assigned: false,
+      },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    for (const width of [40, 10, 2]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("renders within width at tiny widths 2 and 3", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const promise = runRolePicker(ctx, { title: "t", items: ITEMS });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    for (const width of [2, 3]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    getDone()({ kind: "back" });
+    await promise;
+  });
+
+  it("keeps the guidance tag when there is enough space", async () => {
+    const { ctx, getComponent, getDone } = makeTuiCtx();
+    const items: RolePickerItem[] = [
+      { id: "planner", label: "Planner", agent: "planner", summary: "reads=1", assigned: true, guidance: "recommended" },
+    ];
+    const promise = runRolePicker(ctx, { title: "t", items });
+    const comp = getComponent() as { render: (width: number) => string[] };
+    const row = comp.render(200).find((l) => l.includes("Planner"));
+    assert.ok(row?.includes("[recommended]"), "tag survives at wide width");
+    getDone()({ kind: "back" });
+    await promise;
   });
 });

@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Key, matchesKey } from "@mariozechner/pi-tui";
+import { Key, matchesKey, truncateToWidth } from "@mariozechner/pi-tui";
 
 export interface SimplePickerItem {
   id: string;
@@ -88,9 +88,16 @@ async function runCustomSimplePicker(
       const lines: string[] = [];
       const border = "─".repeat(Math.max(2, width));
       lines.push(theme.fg("accent", border));
-      lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
+      lines.push(
+        theme.fg(
+          "accent",
+          theme.bold(truncateToWidth(` ${options.title}`, Math.max(2, width))),
+        ),
+      );
       if (options.subtitle) {
-        lines.push(theme.fg("dim", options.subtitle));
+        for (const part of options.subtitle.split("\n")) {
+          lines.push(theme.fg("dim", truncateToWidth(part, Math.max(2, width))));
+        }
       }
       lines.push(theme.fg("accent", border));
 
@@ -101,7 +108,10 @@ async function runCustomSimplePicker(
         const focused = scrollOffset + i === selectedIndex;
         const prefix = focused ? "→ " : "  ";
         const hintPart = item.hint ? ` ${theme.fg("dim", item.hint)}` : "";
-        const base = `${item.label}${hintPart}`;
+        const base = truncateToWidth(
+          `${item.label}${hintPart}`,
+          Math.max(1, width - 2),
+        );
         lines.push(
           focused
             ? `${prefix}${theme.fg("accent", theme.bold(base))}`
@@ -118,9 +128,17 @@ async function runCustomSimplePicker(
       }
 
       lines.push(theme.fg("accent", border));
-      lines.push(theme.fg("dim", "↑↓ navigate • enter select • esc cancel"));
+      lines.push(
+        theme.fg(
+          "dim",
+          truncateToWidth(
+            "↑↓ navigate • enter select • esc cancel",
+            Math.max(2, width),
+          ),
+        ),
+      );
       lines.push(theme.fg("accent", border));
-      return lines;
+      return lines.map((l) => truncateToWidth(l, Math.max(2, width)));
     }
 
     function move(delta: number) {
