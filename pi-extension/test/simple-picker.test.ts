@@ -1,6 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
 import type { ExtensionContext, ExtensionUIContext } from "@mariozechner/pi-coding-agent";
+import { visibleWidth } from "@mariozechner/pi-tui";
 import {
   runSimplePicker,
   runSimpleConfirm,
@@ -309,5 +310,168 @@ describe("coverage audit gaps", () => {
     comp.handleInput(ENTER);
     const result = await promise;
     assert.strictEqual(result, undefined, "enter on empty list resolves undefined");
+  });
+});
+
+describe("width clamping (TUI crash guard)", () => {
+  it("never renders a line wider than the given width, even with a long multi-line confirm message", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const message = [
+      `Technology resources: ${"Very Long Resource Name, ".repeat(20)}`,
+      "",
+      "New agents to create and map in agents.json (14):",
+      ...Array.from(
+        { length: 14 },
+        (_, i) => `  - role-${i} → project-arch-role-${i}-with-a-very-long-generated-agent-name`,
+      ),
+      "Existing custom agents and mappings are not touched. Proceed?",
+    ].join("\n");
+    const promise = runSimpleConfirm(ctx, "Generate sub-agents", message);
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const width of [213, 80, 40, 10]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}: "${line}"`);
+      }
+    }
+    comp.handleInput("\x1b");
+    assert.strictEqual(await promise, false, "escape cancels the confirm");
+  });
+
+  it("splits the confirm message on newlines into separate rendered lines", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runSimpleConfirm(ctx, "Confirm", "line one\nline two\nline three");
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    const lines = comp.render(80);
+    assert.ok(lines.some((l) => l.includes("line one")), "first line shown");
+    assert.ok(lines.some((l) => l.includes("line two")), "second line shown");
+    assert.ok(lines.some((l) => l.includes("line three")), "third line shown");
+    comp.handleInput("\x1b");
+    await promise;
+  });
+
+  it("truncates long titles and long item labels with hints", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runSimplePicker(ctx, {
+      title: "T".repeat(300),
+      items: [{ id: "a", label: "L".repeat(300), hint: "H".repeat(300) }],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const line of comp.render(40)) {
+      assert.ok(visibleWidth(line) <= 40, `line exceeds width 40: "${line}"`);
+    }
+    comp.handleInput("\x1b");
+    await promise;
+  });
+});
+
+describe("width clamping edge cases", () => {
+  it("keeps lines within width when the theme adds real ANSI escape codes", async () => {
+    const ansiTheme = {
+      fg: (_color: string, text: string) => `\x1b[31m${text}\x1b[0m`,
+      bg: (_color: string, text: string) => text,
+      bold: (text: string) => `\x1b[1m${text}\x1b[22m`,
+      dim: (text: string) => `\x1b[2m${text}\x1b[22m`,
+    } as unknown as import("@mariozechner/pi-coding-agent").Theme;
+    let component:
+      | { render: (width: number) => string[]; handleInput: (data: string) => void }
+      | undefined;
+    const custom = async (factory: any): Promise<any> =>
+      new Promise((resolve) => {
+        component = factory({ requestRender: () => {} }, ansiTheme, {}, resolve);
+      });
+    const ctx = { cwd: "/tmp", mode: "tui", ui: { custom } } as unknown as ExtensionContext;
+    const promise = runSimplePicker(ctx, {
+      title: "T".repeat(300),
+      subtitle: "S".repeat(300),
+      items: [{ id: "a", label: "L".repeat(300), hint: "H".repeat(300) }],
+    });
+    for (const width of [80, 40, 10, 2]) {
+      for (const line of component!.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    component!.handleInput("\x1b");
+    await promise;
+  });
+
+  it("handles emoji and CJK characters without exceeding width", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runSimplePicker(ctx, {
+      title: "✅ Pick 🚀 漢字テスト",
+      items: [{ id: "a", label: "Option ✅🚀漢字".repeat(20), hint: "漢字🚀".repeat(20) }],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const width of [40, 10, 2]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    comp.handleInput("\x1b");
+    await promise;
+  });
+
+  it("hard-cuts a single unbroken 500-character token", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const token = "x".repeat(500);
+    const promise = runSimplePicker(ctx, {
+      title: token,
+      subtitle: token,
+      items: [{ id: "a", label: token }],
+    });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const width of [40, 10, 2]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    comp.handleInput("\x1b");
+    await promise;
+  });
+
+  it("renders within width at tiny widths 2 and 3", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runSimplePicker(ctx, { title: "Pick", items: ITEMS });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const width of [2, 3]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    comp.handleInput("\x1b");
+    await promise;
+  });
+
+  it("renders a blank-only subtitle and empty items without crashing", async () => {
+    const { ctx, getComponent } = makeTuiCtx();
+    const promise = runSimplePicker(ctx, { title: "Pick", subtitle: "\n\n", items: [] });
+    const comp = getComponent() as {
+      handleInput: (data: string) => void;
+      render: (width: number) => string[];
+    };
+    for (const width of [80, 10]) {
+      for (const line of comp.render(width)) {
+        assert.ok(visibleWidth(line) <= width, `line exceeds width ${width}`);
+      }
+    }
+    comp.handleInput("\x1b");
+    await promise;
   });
 });

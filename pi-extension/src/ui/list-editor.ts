@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Key, matchesKey } from "@mariozechner/pi-tui";
+import { Key, matchesKey, truncateToWidth } from "@mariozechner/pi-tui";
 
 export type ListEditorItemKind = "suggestion" | "selected" | "action";
 
@@ -300,7 +300,12 @@ async function runCustomListEditor(
       const lines: string[] = [];
       const border = "─".repeat(Math.max(2, width));
       lines.push(theme.fg("accent", border));
-      lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
+      lines.push(
+        theme.fg(
+          "accent",
+          theme.bold(truncateToWidth(` ${options.title}`, Math.max(2, width))),
+        ),
+      );
 
       const actionLabels = actionItems.map((action, i) => {
         const focused = focusArea === "actions" && i === actionIndex;
@@ -310,10 +315,10 @@ async function runCustomListEditor(
           : theme.fg("text", action.label);
         return `${prefix}${label}`;
       });
-      lines.push(actionLabels.join("   "));
+      lines.push(truncateToWidth(actionLabels.join("   "), Math.max(2, width)));
       lines.push(theme.fg("borderMuted", border));
 
-      lines.push(theme.fg("success", ` ✅ Selected (${selCount})`));
+      lines.push(theme.fg("success", truncateToWidth(` ✅ Selected (${selCount})`, Math.max(2, width))));
       if (selCount === 0) {
         lines.push(theme.fg("dim", "  (none)"));
       }
@@ -322,19 +327,19 @@ async function runCustomListEditor(
       for (let i = 0; i < visible.length; i++) {
         const row = visible[i];
         if (row.kind === "suggestion" && emittedSuggestions === 0) {
-          lines.push(theme.fg("dim", "  ── enter adds/removes ──"));
-          lines.push(theme.fg("warning", ` 💡 Suggestions (${all.length - selCount})`));
+          lines.push(theme.fg("dim", truncateToWidth("  ── enter adds/removes ──", Math.max(2, width))));
+          lines.push(theme.fg("warning", truncateToWidth(` 💡 Suggestions (${all.length - selCount})`, Math.max(2, width))));
         }
         lines.push(renderRow(row, focusArea === "content" && scrollOffset + i === contentIndex, width));
         if (row.kind === "suggestion") emittedSuggestions++;
       }
       if (all.length - selCount === 0) {
-        lines.push(theme.fg("dim", "  ── enter adds/removes ──"));
-        lines.push(theme.fg("warning", " 💡 Suggestions (0)"));
+        lines.push(theme.fg("dim", truncateToWidth("  ── enter adds/removes ──", Math.max(2, width))));
+        lines.push(theme.fg("warning", truncateToWidth(" 💡 Suggestions (0)", Math.max(2, width))));
         lines.push(theme.fg("dim", "  (none)"));
       }
       if (all.length > pageSize) {
-        lines.push(theme.fg("dim", `  (${scrollOffset + 1}-${Math.min(scrollOffset + pageSize, all.length)}/${all.length})`));
+        lines.push(theme.fg("dim", truncateToWidth(`  (${scrollOffset + 1}-${Math.min(scrollOffset + pageSize, all.length)}/${all.length})`, Math.max(2, width))));
       }
 
       lines.push(...detailLines(width));
@@ -343,7 +348,7 @@ async function runCustomListEditor(
       const footerShort = "↑↓ move • enter toggle • esc";
       lines.push(theme.fg("dim", (footer.length <= width ? footer : footerShort).slice(0, Math.max(2, width))));
       lines.push(theme.fg("accent", border));
-      return lines;
+      return lines.map((l) => truncateToWidth(l, Math.max(2, width)));
     }
 
     async function handleAction(action: ListEditorItem) {

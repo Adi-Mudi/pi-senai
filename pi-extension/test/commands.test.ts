@@ -79,6 +79,8 @@ describe("commands", () => {
           return selectChoices[selectIndex++];
         },
       },
+      getContextUsage: () => undefined,
+      compact: () => {},
     } as unknown as ExtensionContext;
   }
 
@@ -325,6 +327,114 @@ describe("commands", () => {
     assert.ok(notifications[0].message.includes("Automatically running the next stage: /senai-implement"));
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Implement Stage"));
+  });
+
+  it("senai-approve compacts the parent context when usage is 50% or higher", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 130000, contextWindow: 200000, percent: 65 });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 1);
+  });
+
+  it("senai-approve skips compaction when usage is below 50%", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 40000, contextWindow: 200000, percent: 20 });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 0);
+  });
+
+  it("senai-approve compacts when usage is exactly 50%", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 100000, contextWindow: 200000, percent: 50 });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(compactCalls.length, 1);
+  });
+
+  it("senai-approve does not compact when percent is null (tokens unknown)", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    sentMessages.length = 0;
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: null, contextWindow: 200000, percent: null });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 0);
+    assert.ok(sentMessages.some((m) => m.includes("Implement Stage")));
+  });
+
+  it("senai-approve does not compact on the final approval (no next stage)", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivering");
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 190000, contextWindow: 200000, percent: 95 });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
+    assert.strictEqual(compactCalls.length, 0);
+  });
+
+  it("senai-approve invokes compact before the next stage prompt is sent", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    sentMessages.length = 0;
+
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 130000, contextWindow: 200000, percent: 65 });
+    let promptCountAtCompactTime = -1;
+    ctx.compact = () => {
+      promptCountAtCompactTime = sentMessages.length;
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(promptCountAtCompactTime, 0);
+    assert.strictEqual(sentMessages.length, 1);
   });
 
   it("senai-approve finishes run after deliver stage", async () => {
@@ -1489,19 +1599,81 @@ describe("commands", () => {
     assert.ok(saved.agents["scout-3"].endsWith("-scout-3"), "other roles are still generated");
   });
 
-  it("senai-generate-agents second run is a clean no-op", async () => {
+  it("senai-generate-agents second run regenerates proven-untouched agents in place", async () => {
     selectChoices = ["automation / scripts", "Use generic resource"];
     registerAgentGeneratorCommand(makeApi());
     await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
     const agentsDir = path.join(tmpDir, ".pi", "agents");
     const firstCount = fs.readdirSync(agentsDir).length;
     assert.ok(firstCount > 0);
+    const firstContent = fs.readFileSync(
+      path.join(agentsDir, fs.readdirSync(agentsDir)[0]),
+      "utf8",
+    );
 
     notifications = [];
+    // Re-arm the picker answers: the second run asks the same questions.
+    selectChoices = ["automation / scripts", "Use generic resource"];
+    selectIndex = 0;
     await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
 
-    assert.ok(notifications.some((n) => n.message.includes("Nothing to generate")));
+    // Second run is no longer a no-op: previously generated agents are
+    // regenerate candidates. Content is deterministic, so files stay
+    // byte-identical and the summary reports the in-place regeneration.
+    assert.ok(notifications.some((n) => n.message.includes("Regenerated")));
     assert.strictEqual(fs.readdirSync(agentsDir).length, firstCount);
+    const secondContent = fs.readFileSync(
+      path.join(agentsDir, fs.readdirSync(agentsDir)[0]),
+      "utf8",
+    );
+    assert.strictEqual(secondContent, firstContent);
+  });
+
+  it("senai-generate-agents recreates a deleted agent whose mapping still exists", async () => {
+    selectChoices = ["automation / scripts", "Use generic resource"];
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    // User deletes one generated file but agents.json still maps the role.
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    const deletedName = saved.agents["scout-2"];
+    fs.rmSync(path.join(agentsDir, `${deletedName}.md`));
+
+    notifications = [];
+    selectChoices = ["automation / scripts", "Use generic resource"];
+    selectIndex = 0;
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    // The stale mapping must not strand the role: the file is recreated.
+    assert.ok(fs.existsSync(path.join(agentsDir, `${deletedName}.md`)), "deleted agent must be recreated");
+    assert.ok(notifications.some((n) => n.message.includes("Generated 1 agent(s)")));
+    assert.ok(notifications.some((n) => n.message.includes("Regenerated")));
+    const after = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    assert.strictEqual(after.agents["scout-2"], deletedName, "mapping stays intact");
+  });
+
+  it("senai-generate-agents keeps user-edited agents and says so in the summary", async () => {
+    selectChoices = ["automation / scripts", "Use generic resource"];
+    registerAgentGeneratorCommand(makeApi());
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    const agentsDir = path.join(tmpDir, ".pi", "agents");
+    const saved = JSON.parse(fs.readFileSync(path.join(tmpDir, ".pi", "senai", "agents.json"), "utf8"));
+    const editedFile = path.join(agentsDir, `${saved.agents["scout-2"]}.md`);
+    const edited = `${fs.readFileSync(editedFile, "utf8")}\n\nUSER CUSTOM RULE`;
+    fs.writeFileSync(editedFile, edited, "utf8");
+
+    notifications = [];
+    selectChoices = ["automation / scripts", "Use generic resource"];
+    selectIndex = 0;
+    await commandHandlers["senai-generate-sub-agents"]("", makeCtx());
+
+    assert.strictEqual(fs.readFileSync(editedFile, "utf8"), edited, "user edits must survive regeneration");
+    assert.ok(
+      notifications.some((n) => n.message.includes("Kept 1 agent(s) you edited")),
+      "summary must report the kept drifted agent",
+    );
   });
 
   it("senai-generate-agents uses generic when the user picks it explicitly", async () => {
@@ -2175,6 +2347,8 @@ describe("coverage audit gaps", () => {
         editor: async (_title: string, _value: string) => "",
         select: async (_title: string, options: string[]) => options[0],
       },
+      getContextUsage: () => undefined,
+      compact: () => {},
     } as unknown as ExtensionContext;
   }
 

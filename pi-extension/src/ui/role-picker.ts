@@ -1,5 +1,5 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { Key, matchesKey } from "@mariozechner/pi-tui";
+import { Key, matchesKey, truncateToWidth } from "@mariozechner/pi-tui";
 import type { RoleGuidance } from "../agent-suggestions.js";
 
 export interface RolePickerItem {
@@ -133,14 +133,17 @@ async function runCustomRolePicker(
       }
     }
 
-    function renderRow(item: RolePickerItem, focused: boolean): string {
+    function renderRow(item: RolePickerItem, focused: boolean, width: number): string {
       const prefix = focused ? "→ " : "  ";
       const agentPart = item.agent ? ` (${item.agent})` : "";
       const needsPart = item.needs ? ` (needs: ${item.needs})` : "";
       const guidancePart = item.guidance
         ? ` ${theme.fg(GUIDANCE_COLORS[item.guidance], `[${item.guidance}]`)}`
         : "";
-      const base = `${item.label}${needsPart}${agentPart} — ${item.summary}${guidancePart}`;
+      const base = truncateToWidth(
+        `${item.label}${needsPart}${agentPart} — ${item.summary}${guidancePart}`,
+        Math.max(1, width - 2),
+      );
       if (item.id === FINISH_ID) {
         return `${prefix}${theme.fg("text", "Finish")}`;
       }
@@ -160,27 +163,35 @@ async function runCustomRolePicker(
       const lines: string[] = [];
       const border = "─".repeat(Math.max(2, width));
       lines.push(theme.fg("accent", border));
-      lines.push(theme.fg("accent", theme.bold(` ${options.title}`)));
+      lines.push(
+        theme.fg(
+          "accent",
+          theme.bold(truncateToWidth(` ${options.title}`, Math.max(2, width))),
+        ),
+      );
       const subtitle = options.subtitle ?? " Only roles that read project documents are shown; other roles use stage artifacts.";
-      lines.push(theme.fg("warning", subtitle));
+      lines.push(theme.fg("warning", truncateToWidth(subtitle, Math.max(2, width))));
       lines.push(theme.fg("accent", border));
 
       const visible = items.slice(scrollOffset, scrollOffset + pageSize);
       for (let i = 0; i < visible.length; i++) {
         const item = visible[i];
         const focused = scrollOffset + i === selectedIndex;
-        lines.push(renderRow(item, focused));
+        lines.push(renderRow(item, focused, width));
       }
 
       lines.push(theme.fg("accent", border));
       lines.push(
         theme.fg(
           "dim",
-          "↑↓ navigate • enter select • esc cancel",
+          truncateToWidth(
+            "↑↓ navigate • enter select • esc cancel",
+            Math.max(2, width),
+          ),
         ),
       );
       lines.push(theme.fg("accent", border));
-      return lines;
+      return lines.map((l) => truncateToWidth(l, Math.max(2, width)));
     }
 
     function move(delta: number) {

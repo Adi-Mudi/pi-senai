@@ -11,6 +11,8 @@ import {
   registerFilesCommands,
 } from "./commands.js";
 import { loadState } from "./state.js";
+import { buildSenaiCompactionSummary } from "./compaction.js";
+import { guardSpawnCall } from "./spawn-guard.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
 import { migrateLegacyOrchestraDirs } from "./migrate.js";
@@ -42,6 +44,31 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   registerArchitectCommand(pi);
   registerAgentGeneratorCommand(pi);
   registerArchitectTools(pi);
+
+  // Supply a deterministic compaction summary while a senai run is active,
+  // so compaction costs no extra LLM call and run/artifact paths survive.
+  pi.on("session_before_compact", async (event, ctx) => {
+    const summary = buildSenaiCompactionSummary(ctx.cwd);
+    if (!summary) return;
+    return {
+      compaction: {
+        summary,
+        firstKeptEntryId: event.preparation.firstKeptEntryId,
+        tokensBefore: event.preparation.tokensBefore,
+      },
+    };
+  });
+
+  // Block subagent spawns that use a bare role/built-in name while a custom
+  // agent is mapped for that role — the built-in is read-only and stalls the
+  // run. Only active during a senai run; everything else passes through.
+  pi.on("tool_call", (event, ctx) => {
+    return guardSpawnCall(
+      event.toolName,
+      event.input as Record<string, unknown> | undefined,
+      ctx.cwd,
+    );
+  });
 
   // Inject senai status into the system prompt when a run is active.
   pi.on("before_agent_start", async (_event, ctx) => {

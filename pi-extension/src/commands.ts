@@ -72,8 +72,10 @@ import {
 import {
   GENERATED_ROLES,
   discoverTechnologyResources,
+  getProjectSlug,
   matchTechnologies,
   planAgentGeneration,
+  previewRegeneration,
   writeGeneratedAgents,
 } from "./agent-generator.js";
 
@@ -331,6 +333,16 @@ export function registerCommands(pi: ExtensionAPI) {
           `Automatically running the next stage: ${nextCommand}`,
         "info",
       );
+
+      // Stage boundary: compact a large parent context before injecting the
+      // next stage prompt. The senai session_before_compact hook supplies a
+      // deterministic summary, so run state survives compaction.
+      const usage = ctx.getContextUsage();
+      if (usage?.percent != null && usage.percent >= 50) {
+        ctx.compact({
+          customInstructions: "Pi Senai stage boundary. Preserve the run state summary.",
+        });
+      }
 
       const { prompt } = buildStagePrompt(ctx.cwd, secondAdvance.state, STAGE_SKILL[nextWorkingStage]);
       pi.sendUserMessage(prompt);
@@ -1568,11 +1580,24 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
       // Roles without a mapping resolve to built-in defaults.
       const config = loadAgentConfig(ctx.cwd) ?? { version: 1, agents: {} };
 
-      // Target only roles still on built-in defaults. Custom agents and custom
-      // mappings are never touched.
-      const targets = GENERATED_ROLES.filter(
+      // Target roles still on built-in defaults (fresh generation). Custom
+      // agents and custom mappings are never touched.
+      const fresh = GENERATED_ROLES.filter(
         (def) => resolveAgentName(config, def.role as SenaiRole) === DEFAULT_AGENTS[def.role as SenaiRole],
       );
+
+      // Roles mapped to their expected generated name are previously
+      // generated team agents: regenerate candidates. A missing file means a
+      // stale mapping — the file is recreated, never stranded.
+      const slug = getProjectSlug(ctx.cwd);
+      const freshRoles = new Set(fresh.map((def) => def.role));
+      const regen = GENERATED_ROLES.filter(
+        (def) =>
+          !freshRoles.has(def.role) &&
+          resolveAgentName(config, def.role as SenaiRole) === `${slug}-${def.role}`,
+      );
+
+      const targets = [...fresh, ...regen];
 
       if (targets.length === 0) {
         ctx.ui.notify(
@@ -1684,22 +1709,66 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
 
       const plans = planAgentGeneration(ctx.cwd, targets, matched, report);
       const resourceList = matched.map((r) => r.name).join(", ");
-      const roleList = plans.map((p) => `  - ${p.role} → ${p.agentName}`).join("\n");
-      const proceed = await runSimpleConfirm(
-        ctx,
-        "Generate sub-agents",
-        `Technology resources: ${resourceList}\n\nAgents to generate and map in agents.json:\n${roleList}\n\nExisting custom agents and mappings are not touched. Proceed?`,
-      );
+
+      // Preview the exact write set before asking: fresh agents are created,
+      // previously generated agents are classified by manifest hash so the
+      // user sees what will be overwritten, kept, or skipped.
+      const regenNames = new Set(regen.map((def) => `${slug}-${def.role}`));
+      const freshPlans = plans.filter((p) => !regenNames.has(p.agentName));
+      const regenPlans = plans.filter((p) => regenNames.has(p.agentName));
+      const preview = previewRegeneration(ctx.cwd, regenPlans.map((p) => p.agentName));
+
+      const confirmLines = [`Technology resources: ${resourceList}`, ""];
+      if (freshPlans.length > 0) {
+        confirmLines.push(
+          `New agents to create and map in agents.json (${freshPlans.length}):`,
+          ...freshPlans.map((p) => `  - ${p.role} → ${p.agentName}`),
+          "",
+        );
+      }
+      if (preview.overwrite.length > 0) {
+        confirmLines.push(
+          `Regenerate in place — proven untouched since generation (${preview.overwrite.length}):`,
+          ...preview.overwrite.map((rel) => `  - ${rel}`),
+          "",
+        );
+      }
+      if (preview.recreate.length > 0) {
+        confirmLines.push(
+          `Recreate — file missing but mapping exists (${preview.recreate.length}):`,
+          ...preview.recreate.map((rel) => `  - ${rel}`),
+          "",
+        );
+      }
+      if (preview.keptDrifted.length > 0) {
+        confirmLines.push(
+          `Kept — you edited these after generation, they are NOT overwritten (${preview.keptDrifted.length}):`,
+          ...preview.keptDrifted.map((rel) => `  - ${rel}`),
+          "",
+        );
+      }
+      if (preview.unknown.length > 0) {
+        confirmLines.push(
+          `Skipped — existing file of unknown origin, never touched (${preview.unknown.length}):`,
+          ...preview.unknown.map((rel) => `  - ${rel}`),
+          "",
+        );
+      }
+      confirmLines.push("Existing custom agents and mappings are not touched. Proceed?");
+      const proceed = await runSimpleConfirm(ctx, "Generate sub-agents", confirmLines.join("\n"));
       if (!proceed) {
         ctx.ui.notify("Agent generation cancelled.", "info");
         return;
       }
 
-      const result = writeGeneratedAgents(ctx.cwd, plans);
+      const result = writeGeneratedAgents(ctx.cwd, plans, { regenerate: true });
 
-      // Auto-map only roles whose files were actually created.
-      const createdNames = new Set(result.created.map((rel) => path.basename(rel, ".md")));
-      const mapped = plans.filter((p) => createdNames.has(p.agentName));
+      // Auto-map roles whose files were actually written. Regenerated roles
+      // already carry the same mapping, so re-saving it is a harmless no-op.
+      const writtenNames = new Set(
+        [...result.created, ...result.regenerated].map((rel) => path.basename(rel, ".md")),
+      );
+      const mapped = plans.filter((p) => writtenNames.has(p.agentName));
       if (mapped.length > 0) {
         const agents = { ...config.agents } as Record<string, string>;
         for (const p of mapped) {
@@ -1709,8 +1778,18 @@ export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
       }
 
       const lines = [`Generated ${result.created.length} agent(s) using: ${resourceList}.`];
+      if (result.regenerated.length > 0) {
+        lines.push(`Regenerated ${result.regenerated.length} agent(s) in place (proven untouched).`);
+      }
+      if (result.keptDrifted.length > 0) {
+        lines.push(
+          `Kept ${result.keptDrifted.length} agent(s) you edited after generation: ${result.keptDrifted.join(", ")}`,
+        );
+      }
       if (result.skipped.length > 0) {
-        lines.push(`Skipped ${result.skipped.length} existing file(s): ${result.skipped.join(", ")}`);
+        lines.push(
+          `Skipped ${result.skipped.length} existing file(s) of unknown origin: ${result.skipped.join(", ")}`,
+        );
       }
       if (mapped.length > 0) {
         lines.push(`Mapped ${mapped.length} role(s) in agents.json.`);

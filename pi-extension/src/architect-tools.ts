@@ -10,12 +10,14 @@ import {
   generateSkillFiles,
   loadArchitectProfile,
   loadArchitectReport,
+  loadGeneratedManifest,
   removeStaleArchitectureArtifacts,
   slugify,
   writeGeneratedManifest,
+  GENERATED_MANIFEST_FILE,
   type ArchitectureLibraryEntry,
 } from "./architect.js";
-import { getArchitectMapDir } from "./constants.js";
+import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
 import { loadAgentConfig } from "./agent-config.js";
 import {
   DOCUMENT_MANIFEST_FILE,
@@ -183,14 +185,33 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
       loadAgentConfig(cwd);
 
       // Remove agents/skills left over from previous architecture runs before
-      // generating the current set, so orphans never survive a re-run.
-      const removedStaleArtifacts = removeStaleArchitectureArtifacts(cwd, profile);
+      // generating the current set, so orphans never survive a re-run. Only
+      // manifest-proven untouched files are removed; anything else is kept.
+      const staleResult = removeStaleArchitectureArtifacts(cwd, profile);
 
       const createdDocs = generateArchitectureDocs(cwd, profile, report);
       const createdAgents = generateAgentFiles(cwd, profile, architecture);
       const createdSkills = generateSkillFiles(cwd, profile, architecture);
 
+      // writeGeneratedManifest rewrites the manifest with only this run's
+      // artifacts, so merge previous entries from other generators (e.g.
+      // sub-agent team files) back in. Old hashes are kept — they are the
+      // drift baseline. Entries whose file no longer exists are dropped.
+      const previousManifest = loadGeneratedManifest(cwd);
       const manifest = writeGeneratedManifest(cwd, [...createdDocs, ...createdAgents, ...createdSkills]);
+      if (previousManifest) {
+        let preserved = 0;
+        for (const [rel, hash] of Object.entries(previousManifest.files)) {
+          if (rel in manifest.files) continue;
+          if (!fs.existsSync(path.resolve(cwd, rel))) continue;
+          manifest.files[rel] = hash;
+          preserved++;
+        }
+        if (preserved > 0) {
+          const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
+          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+        }
+      }
 
       const archId = architecture.id || slugify(architecture.name);
       const mappedRoles = autoMapArchitectureAgents(cwd, profile, archId);
@@ -199,7 +220,8 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
         docs: createdDocs.map((p) => path.relative(cwd, p)),
         agents: createdAgents.map((p) => path.relative(cwd, p)),
         skills: createdSkills.map((p) => path.relative(cwd, p)),
-        removedStaleArtifacts,
+        removedStaleArtifacts: staleResult.removed,
+        keptStaleArtifacts: staleResult.kept,
         manifestFiles: Object.keys(manifest.files).length,
         mappedRoles,
       };

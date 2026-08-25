@@ -16,6 +16,16 @@ Build and test the approved plan. Only one agent writes source files at a time.
 - The plan must exist at `plan.md`.
 - You should be in stage `planned` or `implementing`.
 
+## Subagent rules
+
+- Every `subagent()` call MUST include `agent:` with the mapped agent name from the Agent Registry block in your stage prompt — not the placeholder names in the examples below.
+- Use `session-mode: lineage-only` (registry agents already declare it). Never use `fork` — it copies the parent's full conversation into the child.
+- Pass artifact paths in the task; the subagent reads files itself. Do not paste file contents.
+- After spawning, do NOT poll. Completion and stall notifications arrive automatically.
+- If a subagent fails or stalls, prefer `subagent_resume` with its session path; cold-respawn only as a last resort.
+- NEVER do a subagent's job yourself. If it cannot finish, fix the spawn and relaunch.
+- The subagent tool has no `isolation` parameter; never pass one.
+
 ## Sequence
 
 ```
@@ -29,7 +39,7 @@ Spawn a test-skeleton agent that reads the plan and writes test stubs / scaffold
 ```typescript
 subagent({
   name: "test-skeleton",
-  agent: "worker",
+  agent: "<mapped test-skeleton agent>",
   task: `Read the plan at <plan>. Create test stubs and scaffolding for the implementation. Do not implement the feature yet.`,
 });
 ```
@@ -41,7 +51,7 @@ Spawn the implementer to build the feature according to the plan.
 ```typescript
 subagent({
   name: "implementer",
-  agent: "worker",
+  agent: "<mapped implementer agent>",
   task: `Implement the approved plan at <plan>. Follow existing project conventions. Run tests as you go.`,
 });
 ```
@@ -61,7 +71,7 @@ Spawn a reviewer agent to review the diff.
 ```typescript
 subagent({
   name: "code-review",
-  agent: "reviewer",
+  agent: "<mapped code-review agent>",
   task: `Review the recent changes against the plan at <plan>. Report findings. Do not edit source files.`,
 });
 ```

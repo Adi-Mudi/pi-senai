@@ -329,3 +329,60 @@ load strips, round-trip shape) + 4 command-level regeneration tests (file on
 disk without `_comment` → run the matching configure command → instruction
 regenerated as first key). Removed or edited instructions self-heal on the
 next save; no doctor check (help text, not a rule).
+
+## 14. Token-optimization coverage round (2026-08-12)
+
+A fresh coverage audit (read-only agent) checked every exported function
+against the suite after the token-optimization round. Verdict: coverage is
+uniformly strong; the only real gaps were the newly added optimization code
+paths (auto-compaction, mission slimming, spawn rules, orchestration
+frontmatter) plus a few long-standing small ones. This round added 44 new
+tests covering all of them.
+
+### Unit/edge tests added per module
+
+| Module (test file) | New tests | Branches / edge cases covered |
+|---|---|---|
+| `compaction.ts` (new file `compaction.test.ts`) | 9 | `buildSenaiCompactionSummary`: no active run → null; fresh run with no stage → null; summary lists run id, stage, artifact paths; mission truncation with ellipsis; empty mission line omitted; late stages (documented/delivered); 300-char boundary kept vs 301 truncated; all artifact paths stay inside the project; corrupted `state.json` throw pinned (see known issue below) |
+| `prompt.ts` | 6 | mission slimming into `mission.md` for long missions; short missions stay inline and write no file; 1000-char inline vs 1001 slimmed boundary; empty runId keeps mission inline; existing `mission.md` never overwritten; missions with newlines and quotes |
+| `agent-registry.ts` | 4 | spawn-rules block in registry prompt; spawn rules with fully custom configs; no default markers when every role is custom-mapped; model rule and spawn rules each appear exactly once |
+| `agent-generator.ts` | 6 | orchestration frontmatter on all 14 generated roles; artifact-writing roles get `write`, discussion stays interactive; non-discussion roles never interactive; write-tool roles have exactly read+write; completion contract appears exactly once before technology craft; stable frontmatter key order for drift detection |
+| `commands.ts` | 6 | `/senai-approve` compacts at ≥50% usage; skips below 50%; compacts at exactly 50%; skips when percent is null (tokens unknown); no compaction on final approval (no next stage); compaction runs before the next stage prompt is sent |
+| `architect.ts` | 3 | planner and implementer keep full tool set; reviewer agents lose `edit` but keep `write`; all architecture agents carry orchestration frontmatter + completion contract |
+| `doctor.ts` | 6 | scout-1 planner-style mapping excluded from planner warning by design; scout-3 planner-style mapping warned; full-test agent with `write` flagged read-only; scout-2 custom agent missing `write` → error naming write; security-gate read+write regression (no false error); retry environment item matches the machine's own `settings.json` |
+| `index.ts` | 4 | `session_before_compact` handler registered; returns undefined with no active run; supplies deterministic summary with active run; hook not registered inside subagent processes |
+
+Suite total after this round: **978 tests, 0 fail**.
+
+### Known issue — FIXED (2026-08-20)
+
+- ~~A corrupted `.IDE_Plans/senai/state.json` makes `loadState` throw, and the
+  throw propagates through `buildSenaiCompactionSummary` into pi's compaction
+  pipeline.~~ Fixed: `buildSenaiCompactionSummary` now catches the throw and
+  returns null, so pi's default compaction applies and the pipeline never
+  breaks. The corruption error still surfaces on explicit `/senai-*` commands.
+  The test now pins the fixed behavior ("returns null on a corrupted
+  state.json instead of throwing").
+
+### Still untestable without source changes
+
+- Unknown-role tool fallback in the architecture factory (`buildAgentMarkdown`
+  is not exported; only reachable via internal call).
+- Retry-check doctor branches for machines whose `settings.json` differs from
+  the test fixture path — the test reads the real `getAgentDir()/settings.json`
+  and branches, so it matches any machine but cannot force both arms.
+- `getUserAgentsDir` (needs `getAgentDir()` dependency injection) and
+  `getBundledTechnologiesDir` (coupled to the installed dist layout).
+
+### Remaining small gaps — CLOSED (2026-08-20)
+
+- `buildArchitectPrompt` breadth — done (required report fields, guard rule,
+  embedded paths). Note: the function takes the profile only; the planned
+  document/library input cases did not apply to its actual signature.
+- `generateSkillFiles` / `writeGeneratedManifest` direct unit tests — done
+  (all four stages + content references, regeneration overwrite, sha256
+  manifest shape and round-trip).
+- Tech-dir existence checks in doctor — done (missing dir and empty dir
+  branches).
+
+Suite total after closing: **999 tests, 0 fail**.

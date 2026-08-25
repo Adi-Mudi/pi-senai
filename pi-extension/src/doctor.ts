@@ -33,9 +33,11 @@ import {
   type ArchitectReport,
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
-import { getArchitectStateDir } from "./constants.js";
+import { getArchitectStateDir, getArtifactPaths } from "./constants.js";
+import { loadState, type SenaiState } from "./state.js";
 import {
   GENERATED_ROLES,
+  GENERATOR_VERSION,
   getBundledTechnologiesDir,
   getProjectSlug,
   getProjectTechnologiesDir,
@@ -84,14 +86,9 @@ const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
   "code-review": ["read", "write"],
 };
 
-const READONLY_ROLES: SenaiRole[] = [
-  "scout-2",
-  "scout-3",
-  "scout-4",
-  "discussion",
-  "plan-overview",
-  "security-gate",
-];
+// Roles that only report via their final message and never write artifact
+// files. All artifact-writing roles require (and may have) the write tool.
+const READONLY_ROLES: SenaiRole[] = ["linter", "full-test"];
 
 const CONFLICTING_READONLY_PATTERNS = [
   { pattern: /fix only/i, reason: "Agent mandate is 'fix only'" },
@@ -135,6 +132,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
   sections.push(checkAgentMappings(resolvedAgents));
   sections.push(checkAgentCapabilities(resolvedAgents));
+  sections.push(checkRunArtifacts(cwd));
 
   if (filesConfig) {
     sections.push(checkFileScope(cwd, filesConfig));
@@ -441,7 +439,144 @@ function checkAgentMappings(resolved: Record<SenaiRole, ResolvedAgent>): Diagnos
     });
   }
 
+  // Strict collision warning: roles remapped off their built-in default mean
+  // the bare default name (e.g. "planner") silently loads the built-in
+  // read-only agent. A spawn with the bare name can never write artifacts.
+  const collisions: string[] = [];
+  for (const role of SENAI_ROLES) {
+    const agent = resolved[role];
+    if (agent.source === "not found") continue;
+    const bare = DEFAULT_AGENTS[role];
+    if (agent.name !== bare) {
+      collisions.push(`${role}: spawn with "${agent.name}" — the bare name "${bare}" loads the built-in read-only agent`);
+    }
+  }
+  if (collisions.length > 0) {
+    items.push({
+      status: "warning",
+      message: `${collisions.length} role(s) remap a built-in default name — spawns MUST use the exact mapped name`,
+      details: [
+        ...collisions,
+        "During an active run the spawn guard blocks bare names, but outside a run (or in other tools) the wrong agent still loads silently.",
+      ],
+    });
+  }
+
   return { title: "Agent mapping sources", items };
+}
+
+/** Stage ranking for the run artifact audit: which stages imply the plan
+ *  artifacts must already exist. */
+const STAGE_RANK: Record<string, number> = {
+  none: 0,
+  planning: 1,
+  planned: 2,
+  implementing: 3,
+  implemented: 4,
+  documenting: 5,
+  documented: 6,
+  delivering: 7,
+  delivered: 8,
+};
+
+function artifactMissing(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).size === 0;
+  } catch {
+    return true;
+  }
+}
+
+/** Post-hoc audit of the recorded run: verifies that every artifact a stage
+ *  was supposed to produce actually exists and is non-empty. Catches the
+ *  "subagent reported completed but wrote nothing" failure seen in real
+ *  sessions, which the parent only noticed after user prodding. */
+function checkRunArtifacts(cwd: string): DiagnosticSection {
+  const title = "Run artifacts";
+  let state: SenaiState;
+  try {
+    state = loadState(cwd);
+  } catch {
+    return {
+      title,
+      items: [{ status: "info", message: "state.json unreadable — run artifact audit skipped." }],
+    };
+  }
+  if (!state.runId) {
+    return { title, items: [{ status: "info", message: "No senai run recorded yet." }] };
+  }
+
+  const artifacts = getArtifactPaths(cwd, state.runId);
+  const planArtifacts: Array<[string, string]> = [
+    ["plan/plan.md", artifacts.plan],
+    ["plan/plan-overview.md", artifacts.planOverview],
+    ["plan/discussion-notes.md", artifacts.discussionNotes],
+    ["plan/scouts/scout-angle_1.md", artifacts.scoutAngle1],
+    ["plan/scouts/scout-angle_2.md", artifacts.scoutAngle2],
+    ["plan/scouts/scout-angle_3.md", artifacts.scoutAngle3],
+    ["plan/scouts/scout-angle_4.md", artifacts.scoutAngle4],
+    ["plan/reviews/review-correctness.md", artifacts.reviewCorrectness],
+    ["plan/reviews/review-security.md", artifacts.reviewSecurity],
+    ["plan/reviews/review-tests.md", artifacts.reviewTests],
+  ];
+  const deliverArtifacts: Array<[string, string]> = [
+    ["deliver/security-report.md", artifacts.securityReport],
+    ["deliver/deliver-summary.md", artifacts.deliverSummary],
+  ];
+  const missingLabels = (list: Array<[string, string]>) =>
+    list.filter(([, p]) => artifactMissing(p)).map(([label]) => label);
+
+  const items: DiagnosticItem[] = [];
+  const rank = STAGE_RANK[state.currentStage] ?? 0;
+
+  if (rank >= STAGE_RANK.planned) {
+    const missing = missingLabels(planArtifacts);
+    if (missing.length > 0) {
+      items.push({
+        status: "warning",
+        message: `Plan stage is marked complete but ${missing.length} artifact(s) are missing or empty`,
+        details: [
+          ...missing,
+          "A writer subagent reported completion without writing its file. Do not trust 'completed' — verify artifacts.",
+        ],
+      });
+    } else {
+      items.push({ status: "ok", message: "All 10 plan-stage artifacts exist and are non-empty." });
+    }
+  } else if (state.currentStage === "planning") {
+    const missing = missingLabels(planArtifacts);
+    if (missing.length > 0) {
+      items.push({
+        status: "info",
+        message: `Run '${state.runId}' is in 'planning' with ${missing.length}/10 plan artifacts still missing`,
+        details: [
+          ...missing,
+          "If no subagent is actively working on these, the run may be stuck — check the live subagent widget.",
+        ],
+      });
+    }
+  }
+
+  if (state.currentStage === "delivered") {
+    const missing = missingLabels(deliverArtifacts);
+    if (missing.length > 0) {
+      items.push({
+        status: "warning",
+        message: `Run is delivered but ${missing.length} deliver artifact(s) are missing or empty`,
+        details: missing,
+      });
+    } else {
+      items.push({ status: "ok", message: "Both deliver-stage artifacts exist and are non-empty." });
+    }
+  }
+
+  if (items.length === 0) {
+    items.push({
+      status: "ok",
+      message: `Run '${state.runId}' (${state.currentStage}): artifact audit clean.`,
+    });
+  }
+  return { title, items };
 }
 
 function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): DiagnosticSection {
@@ -453,8 +588,9 @@ function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): Dia
 
     // Default mappings and built-ins are the documented pre-generation
     // fallback (Pi ships its planner/scout/reviewer agents read-only by
-    // design; the main session compensates writes). Capability checks apply
-    // to custom-mapped agents only.
+    // design; for those, the main session compensates writes). Custom-mapped
+    // and generated agents must carry the tools their role needs — artifact-
+    // writing roles include the write tool. Checks apply to custom agents only.
     const isDefaultMapping = agent.name === DEFAULT_AGENTS[role];
     if (agent.source === "not found" || agent.source === "builtin" || isDefaultMapping || !agent.frontmatter) continue;
 
@@ -516,6 +652,19 @@ function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): Dia
         });
         break;
       }
+    }
+
+    // scout-1 is excluded: it is architecture-factory-defined and may
+    // intentionally map to the architecture planner agent.
+    if (role !== "scout-1" && role.startsWith("scout-") && /planner|planning/i.test(description)) {
+      items.push({
+        status: "warning",
+        message: `${label} (${role}) → ${agent.name}: agent looks like a planner`,
+        details: [
+          "A scout role is mapped to an agent whose name/description indicates planning.",
+          "Scouts should search and report. Map a scout/search agent instead.",
+        ],
+      });
     }
 
     if (agent.frontmatter.output) {
@@ -787,6 +936,32 @@ function checkEnvironment(): DiagnosticSection {
         "pi-interactive-subagents needs a terminal multiplexer to spawn subagent panes.",
         "Start Pi inside tmux or Zellij before running Senai stages.",
       ],
+    });
+  }
+
+  try {
+    const settingsPath = path.join(getAgentDir(), "settings.json");
+    if (fs.existsSync(settingsPath)) {
+      const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
+        retry?: { enabled?: boolean };
+      };
+      if (settings.retry?.enabled === false) {
+        items.push({
+          status: "warning",
+          message: "pi retry is disabled (retry.enabled = false).",
+          details: [
+            "Subagents that hit provider overload or rate limits fail immediately instead of retrying.",
+            "Re-enable retries in settings.json for reliable orchestration.",
+          ],
+        });
+      } else {
+        items.push({ status: "ok", message: "pi retry settings are enabled." });
+      }
+    }
+  } catch {
+    items.push({
+      status: "info",
+      message: "Could not read pi settings.json to verify retry settings.",
     });
   }
 
@@ -1276,13 +1451,23 @@ function checkArchitectureDrift(cwd: string): DiagnosticSection {
   }
 
   const problems: DiagnosticItem[] = [];
+  const slug = getProjectSlug(cwd);
+  const teamAgentPaths = new Set(
+    GENERATED_ROLES.map((def) => path.join(".pi", "agents", `${slug}-${def.role}.md`)),
+  );
+  // Advice differs per file type: the architecture factory only regenerates
+  // architecture files; team agents are regenerated by the sub-agent command.
+  const fixAdvice = (relPath: string): string =>
+    teamAgentPaths.has(relPath)
+      ? "If this was not intentional, re-run /senai-generate-sub-agents."
+      : "If this was not intentional, re-run /senai-generate-architect.";
   for (const [relPath, expectedHash] of Object.entries(manifest.files)) {
     const filePath = path.resolve(cwd, relPath);
     if (!fs.existsSync(filePath)) {
       problems.push({
         status: "warning",
         message: `Generated file was deleted: ${relPath}`,
-        details: ["If this was not intentional, re-run /senai-generate-architect."],
+        details: [fixAdvice(relPath)],
       });
       continue;
     }
@@ -1291,7 +1476,7 @@ function checkArchitectureDrift(cwd: string): DiagnosticSection {
       problems.push({
         status: "warning",
         message: `${relPath} was modified after generation.`,
-        details: ["If this was not intentional, re-run /senai-generate-architect."],
+        details: [fixAdvice(relPath)],
       });
     }
   }
@@ -1338,12 +1523,53 @@ function checkGeneratedTeamContent(cwd: string, agentConfig: AgentConfig | null)
     }
 
     if (problems.length === 0) {
-      items.push({ status: "ok", message: `${expectedName}: content complete` });
+      if (!content.includes(`(generator v${GENERATOR_VERSION})`)) {
+        items.push({
+          status: "warning",
+          message: `${expectedName}: generated by an older pi-senai version`,
+          details: [
+            "Re-run /senai-generate-sub-agents to update it in place.",
+            "If you edited the file after generation, your edits are detected and kept.",
+          ],
+        });
+      } else {
+        items.push({ status: "ok", message: `${expectedName}: content complete` });
+      }
     } else {
       items.push({
         status: "error",
         message: `${expectedName}: content is incomplete`,
-        details: [...problems, "Fix: delete the file and re-run /senai-generate-sub-agents."],
+        details: [...problems, "Fix: re-run /senai-generate-sub-agents to regenerate it."],
+      });
+    }
+  }
+
+  // Orphaned generated agents: carry the "Generated by pi-senai" marker but
+  // no generated role maps to them (e.g. the role was remapped to a custom
+  // or built-in agent). Reported only — deletion stays a user decision.
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  if (fs.existsSync(agentsDir)) {
+    const mappedNames = new Set(
+      GENERATED_ROLES.map((def) => resolveAgentName(agentConfig, def.role as SenaiRole)),
+    );
+    for (const entry of fs.readdirSync(agentsDir)) {
+      if (!entry.endsWith(".md")) continue;
+      const name = entry.slice(0, -3);
+      if (mappedNames.has(name)) continue;
+      let orphanContent = "";
+      try {
+        orphanContent = fs.readFileSync(path.join(agentsDir, entry), "utf8");
+      } catch {
+        continue;
+      }
+      if (!orphanContent.includes("Generated by pi-senai")) continue;
+      items.push({
+        status: "info",
+        message: `Orphaned generated agent: ${name}`,
+        details: [
+          "No Senai role maps to this file.",
+          `If you do not need it, delete .pi/agents/${entry}.`,
+        ],
       });
     }
   }

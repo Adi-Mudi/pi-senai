@@ -68,4 +68,36 @@ describe("agent-registry", () => {
     const block = buildAgentRegistryBlock(config);
     assert.ok(block.includes("NEVER pass the `model` parameter to `subagent()`"));
   });
+
+  it("includes the spawn rules", () => {
+    const block = buildAgentRegistryBlock(null);
+    assert.ok(block.includes("ALWAYS pass the `agent` parameter"));
+    assert.ok(block.includes("do NOT poll"));
+    assert.ok(block.includes("verify its artifact file exists"));
+    assert.ok(block.includes("`subagent_interrupt`"));
+    assert.ok(block.includes("Never leave two agents of the same role running"));
+    assert.ok(block.includes("NEVER do a subagent's job yourself"));
+  });
+
+  it("spawn rules appear for custom configs too", () => {
+    const config: AgentConfig = { version: 1, agents: { planner: "gas-planner" } };
+    const block = buildAgentRegistryBlock(config);
+    assert.ok(block.includes("ALWAYS pass the `agent` parameter"));
+  });
+
+  it("shows no default markers when every role is custom-mapped", () => {
+    const config: AgentConfig = {
+      version: 1,
+      agents: Object.fromEntries(SENAI_ROLES.map((r) => [r, `custom-${r}`])),
+    };
+    const block = buildAgentRegistryBlock(config);
+    assert.ok(!block.includes("(default)"));
+    assert.ok(block.includes("Spawn rules"));
+  });
+
+  it("model rule and spawn rules each appear exactly once", () => {
+    const block = buildAgentRegistryBlock(null);
+    assert.strictEqual(block.split("Model rule").length - 1, 1);
+    assert.strictEqual(block.split("Spawn rules").length - 1, 1);
+  });
 });

@@ -589,12 +589,33 @@ export function generateArchitectureDocs(
 }
 
 // Removes generated agents and skills from PREVIOUS architecture runs of this
-// project (same project slug, different architecture id). Files that do not
-// match both the slug prefix and an architect role/stage suffix are untouched,
-// so user-created agents and skills stay safe.
-export function removeStaleArchitectureArtifacts(cwd: string, profile: ArchitectProfile): string[] {
+// project (same project slug, different architecture id). A file is deleted
+// only when BOTH guards pass: the name pattern matches (slug prefix +
+// architect role/stage suffix) AND the generation manifest proves we wrote it
+// and the user never edited it (hash still matches). Anything else is kept
+// and reported, so user-created or user-edited files stay safe.
+export function removeStaleArchitectureArtifacts(
+  cwd: string,
+  profile: ArchitectProfile,
+): { removed: string[]; kept: string[] } {
   const removed: string[] = [];
+  const kept: string[] = [];
   const prefix = `${profile.projectSlug}-`;
+  const manifest = loadGeneratedManifest(cwd);
+
+  // A path is deletable only when the manifest proves we generated it and its
+  // content was never modified since.
+  const isProvenUntouched = (absPath: string): boolean => {
+    const rel = path.relative(cwd, absPath);
+    const expectedHash = manifest?.files[rel];
+    if (expectedHash === undefined) return false;
+    try {
+      const actual = createHash("sha256").update(fs.readFileSync(absPath)).digest("hex");
+      return actual === expectedHash;
+    } catch {
+      return false;
+    }
+  };
 
   const expectedAgents = new Set(
     ARCHITECT_ROLES.map((role) => `${profile.projectSlug}-${profile.selectedArchitecture}-${role}`),
@@ -608,6 +629,10 @@ export function removeStaleArchitectureArtifacts(cwd: string, profile: Architect
       if (!ARCHITECT_ROLES.some((role) => name.endsWith(`-${role}`))) continue;
       if (expectedAgents.has(name)) continue;
       const filePath = path.join(agentsDir, entry);
+      if (!isProvenUntouched(filePath)) {
+        kept.push(path.relative(cwd, filePath));
+        continue;
+      }
       try {
         fs.unlinkSync(filePath);
         removed.push(path.relative(cwd, filePath));
@@ -629,6 +654,11 @@ export function removeStaleArchitectureArtifacts(cwd: string, profile: Architect
       if (!ARCHITECT_STAGES.some((stage) => name.endsWith(`-${stage}`))) continue;
       if (expectedSkills.has(name)) continue;
       const dirPath = path.join(skillsDir, name);
+      // A generated skill directory holds exactly one tracked file: SKILL.md.
+      if (!isProvenUntouched(path.join(dirPath, "SKILL.md"))) {
+        kept.push(path.relative(cwd, dirPath));
+        continue;
+      }
       try {
         fs.rmSync(dirPath, { recursive: true, force: true });
         removed.push(path.relative(cwd, dirPath));
@@ -638,7 +668,7 @@ export function removeStaleArchitectureArtifacts(cwd: string, profile: Architect
     }
   }
 
-  return removed;
+  return { removed, kept };
 }
 
 export function slugify(text: string): string {
@@ -949,12 +979,25 @@ function buildAgentMarkdown(
     "reviewer-tests": "reviews test coverage for this architecture",
   };
 
+  // Reviewers report only — they keep `write` for their review artifact but
+  // lose `edit` so they cannot modify source files.
+  const roleTools: Record<string, string> = {
+    planner: "read, write, edit, bash",
+    implementer: "read, write, edit, bash",
+    "reviewer-correctness": "read, write, bash",
+    "reviewer-security": "read, write, bash",
+    "reviewer-tests": "read, write, bash",
+  };
+
   const lines = [
     "---",
     `name: ${agentName}`,
     `description: ${roleDescription[role] ?? role} for ${profile.projectName} using ${architecture.name}`,
-    "tools: read, write, edit, bash",
+    `tools: ${roleTools[role] ?? "read, write, edit, bash"}`,
     `skills: ${profile.projectSlug}-${archId}-${ARCHITECT_ROLE_STAGE[role] ?? "plan"}`,
+    "session-mode: lineage-only",
+    "auto-exit: true",
+    "spawning: false",
     "---",
     "",
     `# ${agentName}`,
@@ -1003,6 +1046,12 @@ function buildAgentMarkdown(
   for (const forbidden of architecture.notForDrivers) {
     lines.push(`- ${forbidden}`);
   }
+
+  lines.push("");
+  lines.push("## Completion contract");
+  lines.push("");
+  lines.push("- Write your deliverable to the artifact path given in your task. The file on disk is the deliverable.");
+  lines.push("- Your FINAL message must be at most 10 lines: outcome + artifact path(s). Never paste the deliverable content into the final message.");
 
   return lines.join("\n");
 }

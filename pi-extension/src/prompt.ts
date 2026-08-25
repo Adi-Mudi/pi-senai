@@ -103,6 +103,26 @@ function getAllSelectedPaths(config: FilesConfig): string[] {
   return [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
 }
 
+const MISSION_INLINE_LIMIT = 1000;
+const MISSION_PREVIEW_CHARS = 200;
+
+// Long missions (pasted PRDs, phase trees) bloat every stage prompt. Persist
+// the full text once in the run directory and inject only a preview + path.
+function missionLine(state: SenaiState, artifacts: StageArtifactPaths): string {
+  const mission = state.mission || "";
+  if (!mission) return "Mission: (none)";
+  if (!state.runId || mission.length <= MISSION_INLINE_LIMIT) return `Mission: ${mission}`;
+  const missionPath = path.join(artifacts.runDir, "mission.md");
+  if (!fs.existsSync(missionPath)) {
+    fs.mkdirSync(artifacts.runDir, { recursive: true });
+    fs.writeFileSync(missionPath, mission, "utf8");
+  }
+  return (
+    `Mission (preview): ${mission.slice(0, MISSION_PREVIEW_CHARS)}…\n` +
+    `Full mission file (read when needed; pass this path to subagents instead of pasting the mission): ${missionPath}`
+  );
+}
+
 export function buildStagePrompt(
   cwd: string,
   state: SenaiState,
@@ -128,7 +148,7 @@ export function buildStagePrompt(
 
   const prompt = [
     `<pi-senai stage="${stage}">`,
-    `Mission: ${state.mission || "(none)"}`,
+    missionLine(state, artifacts),
     `Run ID: ${state.runId || "(none)"}`,
     ``,
     `Artifact paths for this run:`,
