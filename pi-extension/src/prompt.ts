@@ -11,6 +11,7 @@ import {
 } from "./agents-files-config.js";
 import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
+import { buildDocSelectionBlock } from "./doc-selection.js";
 import type { SenaiState } from "./state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -47,6 +48,33 @@ export function loadSkill(stage: string): string {
     }
     throw err;
   }
+}
+
+// Artifact-path placeholders used in the stage skill files. Substituted with
+// real run paths so the orchestrator and approval gates never render literal
+// `<...>` tokens. `<mission>` is handled by missionLine; `<mapped X agent>`
+// tokens are filled by the LLM from the Agent Registry block and stay as-is.
+const ARTIFACT_PLACEHOLDERS: Array<[string, keyof StageArtifactPaths]> = [
+  ["<planOverview>", "planOverview"],
+  ["<discussionNotes>", "discussionNotes"],
+  ["<scoutAngle1>", "scoutAngle1"],
+  ["<scoutAngle2>", "scoutAngle2"],
+  ["<scoutAngle3>", "scoutAngle3"],
+  ["<scoutAngle4>", "scoutAngle4"],
+  ["<reviewCorrectness>", "reviewCorrectness"],
+  ["<reviewSecurity>", "reviewSecurity"],
+  ["<reviewTests>", "reviewTests"],
+  ["<securityReport>", "securityReport"],
+  ["<deliverSummary>", "deliverSummary"],
+  ["<plan>", "plan"], // last: prefix of <planOverview>
+];
+
+export function substituteArtifactPaths(text: string, artifacts: StageArtifactPaths): string {
+  let out = text;
+  for (const [token, key] of ARTIFACT_PLACEHOLDERS) {
+    out = out.split(token).join(artifacts[key]);
+  }
+  return out;
 }
 
 function formatAgentDocuments(docs: AgentFilesDocuments | undefined): string {
@@ -139,7 +167,7 @@ export function buildStagePrompt(
     artifacts,
   };
 
-  const skill = loadSkill(stage);
+  const skill = substituteArtifactPaths(loadSkill(stage), artifacts);
   const agentConfig = loadAgentConfig(cwd);
   const filesConfig = loadFilesConfig(cwd);
   const agentsFilesConfig = loadAgentsFilesConfig(cwd);
@@ -176,6 +204,7 @@ export function buildStagePrompt(
     registryBlock,
     ``,
     documentScopeBlock,
+    ...(stage === "document" ? [``, buildDocSelectionBlock(cwd)] : []),
     ``,
     skill,
   ].join("\n");

@@ -10,6 +10,7 @@ import {
   registerFilesCommands,
   registerAgentsFilesCommands,
   registerDoctorCommand,
+  registerDocsStructureCommand,
   registerArchitectInputsCommands,
   registerArchitectCommand,
   registerAgentGeneratorCommand,
@@ -19,6 +20,7 @@ import {
   isPathConflict,
   isFolderLike,
   defaultArchitectSkill,
+  listMissingStageArtifacts,
 } from "../src/commands.js";
 import { loadState, startRun, advanceStage } from "../src/state.js";
 import type { SenaiState } from "../src/state.js";
@@ -396,6 +398,121 @@ describe("commands", () => {
     assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
     assert.strictEqual(compactCalls.length, 0);
     assert.ok(sentMessages.some((m) => m.includes("Implement Stage")));
+  });
+
+  it("senai-approve compacts on absolute tokens when percent is null", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    sentMessages.length = 0;
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    // percent null (e.g. right after a provider gap), but tokens known and
+    // above 40% of the window — the gate must still fire.
+    ctx.getContextUsage = () => ({ tokens: 90000, contextWindow: 200000, percent: null });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 1);
+  });
+
+  function writePlanArtifacts(cwd: string, runId: string): void {
+    const runDir = path.join(cwd, ".IDE_Plans", "senai", "runs", runId);
+    fs.writeFileSync(path.join(runDir, "plan", "plan.md"), "# plan\n", "utf8");
+    for (let i = 1; i <= 4; i++) {
+      fs.writeFileSync(path.join(runDir, "plan", "scouts", `scout-angle_${i}.md`), "scout\n", "utf8");
+    }
+  }
+
+  it("senai-approve warns about missing artifacts and does not advance when declined", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    // plan.md and the scout reports were never written.
+    const confirmTitles: string[] = [];
+    let confirmCount = 0;
+    const ctx = makeCtx();
+    ctx.ui.confirm = async (title: string) => {
+      confirmTitles.push(title);
+      confirmCount += 1;
+      return confirmCount === 1; // approve the stage, decline the missing-artifacts override
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.deepStrictEqual(confirmTitles, ["Approve stage", "Artifacts missing"]);
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+    assert.strictEqual(sentMessages.length, 1, "no next-stage prompt should be sent");
+  });
+
+  it("senai-approve advances with artifacts verified and records the stage result", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    const runId = loadState(tmpDir).runId;
+    writePlanArtifacts(tmpDir, runId);
+
+    const confirmTitles: string[] = [];
+    const ctx = makeCtx();
+    ctx.ui.confirm = async (title: string) => {
+      confirmTitles.push(title);
+      return true;
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.deepStrictEqual(confirmTitles, ["Approve stage"], "no missing-artifacts confirm");
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.currentStage, "implementing");
+    assert.match(state.stageResults.planning ?? "", /^approved .*; artifacts: verified$/);
+  });
+
+  it("senai-approve advances on confirmed missing artifacts and records the outcome", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const ctx = makeCtx(); // confirm always true: approve + advance anyway
+    await commandHandlers["senai-approve"]("", ctx);
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.currentStage, "implementing");
+    assert.match(state.stageResults.planning ?? "", /artifacts: missing 5 \(user confirmed\)$/);
+  });
+
+  it("listMissingStageArtifacts reports per-stage expectations", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    const runId = loadState(tmpDir).runId;
+    const runDir = path.join(tmpDir, ".IDE_Plans", "senai", "runs", runId);
+
+    // plan: plan.md + 4 scouts required.
+    assert.strictEqual(listMissingStageArtifacts(tmpDir, runId, "plan").length, 5);
+    writePlanArtifacts(tmpDir, runId);
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "plan"), []);
+
+    // implement/document: any file in the directory satisfies the check.
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "implement"), [
+      "implement/ (no files)",
+    ]);
+    fs.writeFileSync(path.join(runDir, "implement", "notes.md"), "done\n", "utf8");
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "implement"), []);
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "document"), [
+      "document/ (no files)",
+    ]);
+
+    // deliver: both report files required and non-empty.
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "deliver"), [
+      "deliver/security-report.md",
+      "deliver/deliver-summary.md",
+    ]);
+    fs.writeFileSync(path.join(runDir, "deliver", "security-report.md"), "ok\n", "utf8");
+    fs.writeFileSync(path.join(runDir, "deliver", "deliver-summary.md"), "", "utf8");
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "deliver"), [
+      "deliver/deliver-summary.md",
+    ]);
   });
 
   it("senai-approve does not compact on the final approval (no next stage)", async () => {
@@ -1329,6 +1446,17 @@ describe("commands", () => {
 
     await commandHandlers["senai-doctor"]("", makeCtx());
     assert.ok(sentMessages.some((m) => m.includes("Architecture setup")));
+  });
+
+  it("registerDocsStructureCommand creates stubs and notifies the counts", async () => {
+    registerDocsStructureCommand(makeApi());
+    assert.ok(commandHandlers["senai-generate-docs-structure"]);
+
+    await commandHandlers["senai-generate-docs-structure"]("", makeCtx());
+    assert.ok(fs.existsSync(path.join(tmpDir, "README.md")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai", "docs-structure.json")));
+    assert.ok(notifications.some((n) => n.message.includes("created 1 stub(s)")));
+    assert.ok(notifications.some((n) => n.message.includes("Next: /senai-plan")));
   });
 
   it("registerArchitectInputsCommands cancels when main menu is dismissed", async () => {
@@ -2939,5 +3067,155 @@ describe("coverage audit gaps", () => {
     assert.ok(backOffered, "Back should be the first option in the role list");
     assert.strictEqual(fs.readFileSync(configPath, "utf8"), before, "file must be unchanged");
     assert.ok(notifications.some((n) => n.message.includes("cancelled")));
+  });
+});
+
+describe("senai-fix v1.1 approve/docs-structure coverage", () => {
+  let tmpDir: string;
+  let notifications: Array<{ message: string; type: string }>;
+  let sentMessages: string[];
+  let commandHandlers: Record<string, (args: string, ctx: ExtensionContext) => Promise<void>>;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-cmd-cov-"));
+    notifications = [];
+    sentMessages = [];
+    commandHandlers = {};
+    saveAgentConfig(tmpDir, { version: 1, agents: { ...DEFAULT_AGENTS } });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+  });
+
+  function makeCtx(): ExtensionContext {
+    return {
+      cwd: tmpDir,
+      ui: {
+        notify: (message: string, type: string) => {
+          notifications.push({ message, type });
+        },
+        confirm: async (_title: string, _message: string) => true,
+        input: async () => "",
+        select: async () => "",
+      },
+      getContextUsage: () => undefined,
+      compact: () => {},
+    } as unknown as ExtensionContext;
+  }
+
+  function makeApi(): ExtensionAPI {
+    return {
+      registerCommand: (name: string, cmd: { handler: (args: string, ctx: ExtensionContext) => Promise<void> }) => {
+        commandHandlers[name] = cmd.handler;
+      },
+      registerTool: () => {},
+      on: () => {},
+      registerMessageRenderer: () => {},
+      sendUserMessage: (message: string) => {
+        sentMessages.push(message);
+      },
+      sendMessage: () => {},
+    } as unknown as ExtensionAPI;
+  }
+
+  function writePlanArtifacts(cwd: string, runId: string): void {
+    const runDir = path.join(cwd, ".IDE_Plans", "senai", "runs", runId);
+    fs.writeFileSync(path.join(runDir, "plan", "plan.md"), "# plan\n", "utf8");
+    for (let i = 1; i <= 4; i++) {
+      fs.writeFileSync(path.join(runDir, "plan", "scouts", `scout-angle_${i}.md`), "scout\n", "utf8");
+    }
+  }
+
+  it("senai-approve at documenting with an empty document/ warns and declining keeps the stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    const runId = loadState(tmpDir).runId;
+    writePlanArtifacts(tmpDir, runId);
+
+    // Approve planning → implementing (artifacts verified).
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+
+    // Write implement output, approve → documenting.
+    const runDir = path.join(tmpDir, ".IDE_Plans", "senai", "runs", runId);
+    fs.writeFileSync(path.join(runDir, "implement", "notes.md"), "done\n", "utf8");
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "documenting");
+
+    // Approve documenting with an empty document/ dir: warn-and-ask; decline.
+    const confirmTitles: string[] = [];
+    let confirmCount = 0;
+    const ctx = makeCtx();
+    ctx.ui.confirm = async (title: string) => {
+      confirmTitles.push(title);
+      confirmCount += 1;
+      return confirmCount === 1; // approve the stage, decline the missing-artifacts override
+    };
+    sentMessages.length = 0;
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.deepStrictEqual(confirmTitles, ["Approve stage", "Artifacts missing"]);
+    assert.strictEqual(loadState(tmpDir).currentStage, "documenting", "stage must not advance when declined");
+    assert.strictEqual(sentMessages.length, 0, "no next-stage prompt should be sent");
+  });
+
+  it("senai-approve compacts at exactly 40% of the context window (percent null)", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 80000, contextWindow: 200000, percent: null });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 1, "80000/200000 is exactly 40% — must compact");
+  });
+
+  it("senai-approve does not compact just below 40% (79999/200000, percent null)", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 79999, contextWindow: 200000, percent: null });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 0, "79999/200000 is below 40% — must not compact");
+  });
+
+  it("senai-generate-docs-structure notifies kept docs on a second run with a real README", async () => {
+    fs.writeFileSync(path.join(tmpDir, "README.md"), "# My real README\n", "utf8");
+    registerDocsStructureCommand(makeApi());
+
+    await commandHandlers["senai-generate-docs-structure"]("", makeCtx());
+
+    assert.ok(
+      notifications.some((n) => n.message.includes("created 0 stub(s), kept 1 existing doc(s)")),
+      `expected the kept count in the notification, got: ${notifications.map((n) => n.message).join(" | ")}`,
+    );
+    assert.ok(
+      notifications.some((n) => n.message.includes("Kept (existing, not overwritten):")),
+      "kept block listed",
+    );
+    assert.strictEqual(
+      fs.readFileSync(path.join(tmpDir, "README.md"), "utf8"),
+      "# My real README\n",
+      "real README must be untouched",
+    );
   });
 });

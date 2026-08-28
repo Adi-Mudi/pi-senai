@@ -4,6 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import piSenaiExtension from "../src/index.js";
+import { resetCompletionGuard } from "../src/completion-guard.js";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 describe("index", () => {
@@ -305,5 +306,140 @@ describe("coverage audit gaps", () => {
 
     assert.ok(tools.includes("senai_merge_architect_drivers"));
     assert.ok(tools.includes("senai_finalize_architecture"));
+  });
+});
+
+describe("completion-guard hook wiring", () => {
+  let tmpDir: string;
+  let registeredCommands: string[];
+  let eventHandlers: Record<string, (event: any, ctx: ExtensionContext) => any>;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-index-guard-"));
+    registeredCommands = [];
+    eventHandlers = {};
+    resetCompletionGuard();
+  });
+
+  function makeApi(): ExtensionAPI {
+    return {
+      registerCommand: (name: string) => {
+        registeredCommands.push(name);
+      },
+      registerTool: () => {},
+      registerMessageRenderer: () => {},
+      on: (event: string, handler: (event: any, ctx: ExtensionContext) => any) => {
+        eventHandlers[event] = handler;
+      },
+      sendUserMessage: () => {},
+      sendMessage: () => {},
+    } as unknown as ExtensionAPI;
+  }
+
+  function makeCtx(): ExtensionContext {
+    return {
+      cwd: tmpDir,
+      ui: {
+        notify: () => {},
+        confirm: async (_title: string, _message: string) => true,
+        input: async () => "",
+        select: async () => "",
+      },
+    } as unknown as ExtensionContext;
+  }
+
+  function writeActiveRun(): void {
+    const state = {
+      version: 1,
+      mission: "Test",
+      runId: "run-1",
+      currentStage: "planning",
+      startedAt: "2026-08-28T00:00:00Z",
+      updatedAt: "2026-08-28T00:00:00Z",
+      stageResults: {},
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+  }
+
+  it("input hook appends the artifact warning to an extension-source completion with a missing artifact", async () => {
+    piSenaiExtension(makeApi());
+    writeActiveRun();
+
+    // Record the spawn through the tool_call hook (name + task carry the artifact path).
+    eventHandlers["tool_call"](
+      {
+        toolName: "subagent",
+        input: { name: "scout-2", task: "Write .IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_2.md" },
+      },
+      makeCtx(),
+    );
+
+    const result = await eventHandlers["input"](
+      { source: "extension", text: 'Sub-agent "scout-2" completed (3s).' },
+      makeCtx(),
+    );
+
+    assert.ok(result, "transform result expected");
+    assert.strictEqual(result.action, "transform");
+    assert.ok(result.text.startsWith('Sub-agent "scout-2" completed (3s).'), "original text kept");
+    assert.ok(result.text.includes("[pi-senai artifact guard]"), "warning appended");
+    assert.ok(result.text.includes("scout-angle_2.md"), "missing artifact named");
+  });
+
+  it("input hook ignores non-extension sources even when the text matches a completion", async () => {
+    piSenaiExtension(makeApi());
+    writeActiveRun();
+    eventHandlers["tool_call"](
+      {
+        toolName: "subagent",
+        input: { name: "scout-2", task: "Write .IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_2.md" },
+      },
+      makeCtx(),
+    );
+
+    const result = await eventHandlers["input"](
+      { source: "user", text: 'Sub-agent "scout-2" completed (3s).' },
+      makeCtx(),
+    );
+
+    assert.strictEqual(result, undefined, "non-extension input must pass through untouched");
+  });
+
+  it("tool_call records spawn artifacts observable via a later input; non-spawn tools record nothing", async () => {
+    piSenaiExtension(makeApi());
+    writeActiveRun();
+
+    // Non-spawn tool: passes through (no block) and records nothing.
+    const bashResult = eventHandlers["tool_call"](
+      { toolName: "bash", input: { command: "ls" } },
+      makeCtx(),
+    );
+    assert.strictEqual(bashResult, undefined, "non-spawn tool must pass through");
+
+    const afterBash = await eventHandlers["input"](
+      { source: "extension", text: 'Sub-agent "scout-2" completed (3s).' },
+      makeCtx(),
+    );
+    assert.strictEqual(afterBash, undefined, "nothing recorded by the bash call");
+
+    // The full round trip: tool_call records, input observes.
+    eventHandlers["tool_call"](
+      {
+        toolName: "subagent_resume",
+        input: { name: "scout-2", task: "Write .IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_2.md" },
+      },
+      makeCtx(),
+    );
+    const afterSpawn = await eventHandlers["input"](
+      { source: "extension", text: 'Sub-agent "scout-2" completed (3s).' },
+      makeCtx(),
+    );
+    assert.ok(afterSpawn?.text?.includes("[pi-senai artifact guard]"), "recorded spawn is verified at completion");
+  });
+
+  it("registers the senai-generate-docs-structure command", () => {
+    piSenaiExtension(makeApi());
+    assert.ok(registeredCommands.includes("senai-generate-docs-structure"));
   });
 });

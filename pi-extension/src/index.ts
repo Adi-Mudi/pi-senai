@@ -8,11 +8,13 @@ import {
   registerArchitectInputsCommands,
   registerCommands,
   registerDoctorCommand,
+  registerDocsStructureCommand,
   registerFilesCommands,
 } from "./commands.js";
 import { loadState } from "./state.js";
 import { buildSenaiCompactionSummary } from "./compaction.js";
 import { guardSpawnCall } from "./spawn-guard.js";
+import { completionWarning, recordSpawnArtifacts } from "./completion-guard.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
 import { migrateLegacyOrchestraDirs } from "./migrate.js";
@@ -43,6 +45,7 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   registerArchitectInputsCommands(pi);
   registerArchitectCommand(pi);
   registerAgentGeneratorCommand(pi);
+  registerDocsStructureCommand(pi);
   registerArchitectTools(pi);
 
   // Supply a deterministic compaction summary while a senai run is active,
@@ -62,12 +65,31 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   // Block subagent spawns that use a bare role/built-in name while a custom
   // agent is mapped for that role — the built-in is read-only and stalls the
   // run. Only active during a senai run; everything else passes through.
+  // Also record the artifact paths each spawn is expected to write, so the
+  // completion guard below can verify them.
   pi.on("tool_call", (event, ctx) => {
+    recordSpawnArtifacts(
+      event.toolName,
+      event.input as Record<string, unknown> | undefined,
+      ctx.cwd,
+    );
     return guardSpawnCall(
       event.toolName,
       event.input as Record<string, unknown> | undefined,
       ctx.cwd,
     );
+  });
+
+  // Artifact-based completion guard: pi-interactive-subagents reports a
+  // subagent "completed" on process exit even when its artifact was never
+  // written. Completion notices arrive as extension steer messages, which
+  // pass through the input hook. When the recorded artifact is missing or
+  // empty, append a resume instruction so the parent never stalls waiting.
+  pi.on("input", (event, ctx) => {
+    if (event.source !== "extension") return;
+    const warning = completionWarning(event.text, ctx.cwd);
+    if (!warning) return;
+    return { action: "transform" as const, text: `${event.text}${warning}` };
   });
 
   // Inject senai status into the system prompt when a run is active.

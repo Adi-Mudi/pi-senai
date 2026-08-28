@@ -23,8 +23,12 @@ Build and test the approved plan. Only one agent writes source files at a time.
 - Pass artifact paths in the task; the subagent reads files itself. Do not paste file contents.
 - After spawning, do NOT poll. Completion and stall notifications arrive automatically.
 - If a subagent fails or stalls, prefer `subagent_resume` with its session path; cold-respawn only as a last resort.
+- On EVERY completion notification, immediately verify with `test -s <artifactPath>` (bash) that the artifact that subagent was assigned exists and is non-empty. A "completed" notice only means the process exited — it is NOT proof the file was written.
+- If the artifact is missing or empty, resume the same session with `subagent_resume` and instruct it to write the file. Do not move on, do not wait, and NEVER ask the user to confirm completion.
 - NEVER do a subagent's job yourself. If it cannot finish, fix the spawn and relaunch.
 - The subagent tool has no `isolation` parameter; never pass one.
+- Only call tools that exist in your toolset. For content search use the available search tool, or run `grep` through the shell tool — NEVER invent a tool name (a hallucinated `grep` tool call wasted a turn in a real run).
+- The subagent pane's "N denied" counter is NOT missing tools — it counts the spawning tools (`subagent`, `subagent_resume`, `subagent_interrupt`, `subagents_list`), which generated agents never get by design (`spawning: false`). It does not mean `write` or `bash` is missing. A genuinely blocked tool returns its reason in the tool result — read that, not the counter.
 
 ## Sequence
 

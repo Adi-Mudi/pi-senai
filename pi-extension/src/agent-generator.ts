@@ -9,6 +9,7 @@ import {
   slugify,
   type ArchitectReport,
 } from "./architect.js";
+import { getDocType, type DocTypeId } from "./doc-catalog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -18,6 +19,8 @@ export interface GeneratedRoleDef {
   tools: string[];
   mandate: string;
   interactive?: boolean;
+  /** Doc-writer roles carry a documentation contract from the catalog. */
+  docType?: DocTypeId;
 }
 
 // The 14 non-architecture Senai roles. The 7 architecture-bound roles are
@@ -29,12 +32,12 @@ export const GENERATED_ROLES: GeneratedRoleDef[] = [
   { role: "discussion", label: "Discussion", tools: ["read", "write"], interactive: true, mandate: "Interview the user, consolidate scout findings, and record decisions in discussion notes." },
   { role: "plan-overview", label: "Plan Overview", tools: ["read", "write"], mandate: "Write the user-friendly plan overview: mission, approach, key decisions, and expected outcome." },
   { role: "test-skeleton", label: "Test Skeleton", tools: ["read", "write"], mandate: "Write failing test skeletons derived from the approved plan before implementation starts." },
-  { role: "linter", label: "Linter", tools: ["read", "bash"], mandate: "Run the project's linters and report violations with file and line references." },
-  { role: "full-test", label: "Full Test", tools: ["read", "bash"], mandate: "Run the full test suite and report failures with exact error output." },
-  { role: "readme-writer", label: "README Writer", tools: ["read", "write"], mandate: "Update the README so it matches what was actually built." },
-  { role: "changelog-writer", label: "Changelog Writer", tools: ["read", "write"], mandate: "Update the CHANGELOG with the changes made in this run." },
-  { role: "api-docs-writer", label: "API Docs Writer", tools: ["read", "write"], mandate: "Update API documentation to match the implemented interfaces." },
-  { role: "other-docs-writer", label: "Other Docs Writer", tools: ["read", "write"], mandate: "Update the remaining project docs (guides, design docs) to match the implementation." },
+  { role: "linter", label: "Linter", tools: ["read", "bash", "write"], mandate: "Run the project's linters and write the violations report (with file and line references) to the artifact path given in your task." },
+  { role: "full-test", label: "Full Test", tools: ["read", "bash", "write"], mandate: "Run the full test suite and write the results report (failures with exact error output) to the artifact path given in your task." },
+  { role: "readme-writer", label: "README Writer", tools: ["read", "write"], mandate: "Update the README so it matches what was actually built.", docType: "readme" },
+  { role: "changelog-writer", label: "Changelog Writer", tools: ["read", "write"], mandate: "Update the CHANGELOG with the changes made in this run.", docType: "changelog" },
+  { role: "api-docs-writer", label: "API Docs Writer", tools: ["read", "write"], mandate: "Update API documentation to match the implemented interfaces.", docType: "api-reference" },
+  { role: "other-docs-writer", label: "Other Docs Writer", tools: ["read", "write"], mandate: "Update the remaining project docs (guides, design docs) to match the implementation.", docType: "how-to" },
   { role: "security-gate", label: "Security Gate", tools: ["read", "write"], mandate: "Run the final security audit and write the security report." },
   { role: "archive", label: "Archive", tools: ["read", "write", "bash"], mandate: "Archive run artifacts and keep the run directory tidy." },
 ];
@@ -64,7 +67,9 @@ export interface WriteAgentsResult {
 
 // Bumped when the generated agent format changes. Written into the footer of
 // every generated agent so doctor can detect files from an older format.
-export const GENERATOR_VERSION = 2;
+// v3: linter and full-test gained the write tool (they write report artifacts).
+// v4: doc-writer roles carry a documentation contract (target, template, cap).
+export const GENERATOR_VERSION = 4;
 
 // Returns the sha256 of a file, or null when it cannot be read.
 function hashFile(filePath: string): string | null {
@@ -223,6 +228,21 @@ export function buildGeneratedAgentMarkdown(
     "- Write your deliverable to the artifact path given in your task. The file on disk is the deliverable.",
     "- Your FINAL message must be at most 10 lines: outcome + artifact path(s). Never paste the deliverable content into the final message.",
   ];
+
+  // Doc-writer roles carry a documentation contract from the catalog: exact
+  // default target, template id, required sections, and the hard length cap.
+  if (def.docType) {
+    const spec = getDocType(def.docType);
+    lines.push(
+      "",
+      "## Documentation contract",
+      "",
+      `- Target: ${spec.defaultPath}`,
+      `- Template: ${spec.id} (based on ${spec.basedOn})`,
+      `- Hard length cap: ${spec.maxLines} lines. Shorter is better.`,
+      `- Required sections, in order: ${spec.requiredSections.length > 0 ? spec.requiredSections.join(", ") : "(none fixed)"}`,
+    );
+  }
 
   const contextBlock = buildProjectContextBlock(report);
   if (contextBlock) {

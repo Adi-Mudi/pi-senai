@@ -32,6 +32,7 @@ import {
   formatDiagnosticReport,
   runSenaiDiagnostic,
 } from "./doctor.js";
+import { generateDocsStructure } from "./doc-selection.js";
 import { buildStagePrompt, resolveSkillPath } from "./prompt.js";
 import {
   runListEditor,
@@ -300,8 +301,37 @@ export function registerCommands(pi: ExtensionAPI) {
       );
       if (!confirmed) return;
 
-      // Advance from current working stage to completed stage.
-      const firstAdvance = advanceStage(ctx.cwd, state, nextStage);
+      // Verify the completed stage actually produced its artifacts before
+      // advancing. Manual stage commands check artifacts at start; approve
+      // never did, which let a real run reach 'delivered' with an empty
+      // document/ folder. Missing artifacts warn and ask instead of blocking:
+      // some stages (document) may legitimately write outside the run dir.
+      const artifactStage = COMPLETED_STAGE_ARTIFACT[state.currentStage];
+      const missingArtifacts =
+        artifactStage && state.runId
+          ? listMissingStageArtifacts(ctx.cwd, state.runId, artifactStage)
+          : [];
+      if (missingArtifacts.length > 0) {
+        const proceed = await runSimpleConfirm(
+          ctx,
+          "Artifacts missing",
+          `Stage '${state.currentStage}' is missing artifact(s):\n${missingArtifacts.join("\n")}\n\nAdvance anyway?`,
+        );
+        if (!proceed) return;
+      }
+
+      // Advance from current working stage to completed stage, recording the
+      // outcome (approval time + artifact check) in state.stageResults.
+      const firstAdvance = advanceStage(
+        ctx.cwd,
+        state,
+        nextStage,
+        `approved ${new Date().toISOString()}; artifacts: ${
+          missingArtifacts.length === 0
+            ? "verified"
+            : `missing ${missingArtifacts.length} (user confirmed)`
+        }`,
+      );
       if (!firstAdvance.ok) {
         ctx.ui.notify(firstAdvance.reason, "error");
         return;
@@ -337,8 +367,15 @@ export function registerCommands(pi: ExtensionAPI) {
       // Stage boundary: compact a large parent context before injecting the
       // next stage prompt. The senai session_before_compact hook supplies a
       // deterministic summary, so run state survives compaction.
+      // percent is null right after a compaction, so also check absolute
+      // tokens: 40% of the context window keeps us below pi's own auto-compact
+      // threshold (contextWindow - 16384) even on large-context models.
       const usage = ctx.getContextUsage();
-      if (usage?.percent != null && usage.percent >= 50) {
+      const overBudget =
+        usage != null &&
+        ((usage.percent != null && usage.percent >= 50) ||
+          (usage.tokens != null && usage.tokens >= 0.4 * usage.contextWindow));
+      if (overBudget) {
         ctx.compact({
           customInstructions: "Pi Senai stage boundary. Preserve the run state summary.",
         });
@@ -483,6 +520,54 @@ function dirHasFiles(dir: string): boolean {
   } catch {
     return false;
   }
+}
+
+/** Working stage -> the artifact group it must have produced. */
+const COMPLETED_STAGE_ARTIFACT: Record<string, "plan" | "implement" | "document" | "deliver"> = {
+  planning: "plan",
+  implementing: "implement",
+  documenting: "document",
+  delivering: "deliver",
+};
+
+function isNonEmptyFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).size > 0;
+  } catch {
+    return false;
+  }
+}
+
+/** Missing-or-empty artifacts for a completed stage. Mirrors the expectations
+ *  of checkStageArtifact, but returns labels instead of notifying, so the
+ *  approve flow can warn-and-confirm. */
+export function listMissingStageArtifacts(
+  cwd: string,
+  runId: string,
+  stage: "plan" | "implement" | "document" | "deliver",
+): string[] {
+  const artifacts = getArtifactPaths(cwd, runId);
+  if (stage === "plan") {
+    const required: Array<[string, string]> = [
+      ["plan/plan.md", artifacts.plan],
+      ["plan/scouts/scout-angle_1.md", artifacts.scoutAngle1],
+      ["plan/scouts/scout-angle_2.md", artifacts.scoutAngle2],
+      ["plan/scouts/scout-angle_3.md", artifacts.scoutAngle3],
+      ["plan/scouts/scout-angle_4.md", artifacts.scoutAngle4],
+    ];
+    return required.filter(([, p]) => !isNonEmptyFile(p)).map(([label]) => label);
+  }
+  if (stage === "implement") {
+    return dirHasFiles(artifacts.implementDir) ? [] : ["implement/ (no files)"];
+  }
+  if (stage === "document") {
+    return dirHasFiles(artifacts.documentDir) ? [] : ["document/ (no files)"];
+  }
+  const required: Array<[string, string]> = [
+    ["deliver/security-report.md", artifacts.securityReport],
+    ["deliver/deliver-summary.md", artifacts.deliverSummary],
+  ];
+  return required.filter(([, p]) => !isNonEmptyFile(p)).map(([label]) => label);
 }
 
 function validateTruthDocuments(
@@ -1263,6 +1348,28 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       fs.writeFileSync(reportPath, text, "utf8");
       pi.sendUserMessage(`${text}\n\nReport saved to .IDE_Plans/senai/doctor-report.md`);
+    },
+  });
+}
+
+export function registerDocsStructureCommand(pi: ExtensionAPI) {
+  pi.registerCommand("senai-generate-docs-structure", {
+    description: "Create the docs folder skeleton and template stubs for the selected document types",
+    handler: async (_args, ctx) => {
+      const result = generateDocsStructure(ctx.cwd);
+      const lines = [
+        `Docs structure: created ${result.created.length} stub(s), kept ${result.kept.length} existing doc(s).`,
+      ];
+      if (result.created.length > 0) {
+        lines.push("", "Created:");
+        for (const p of result.created) lines.push(`  ${p}`);
+      }
+      if (result.kept.length > 0) {
+        lines.push("", "Kept (existing, not overwritten):");
+        for (const p of result.kept) lines.push(`  ${p}`);
+      }
+      lines.push("", "Manifest: .pi/senai/docs-structure.json", "Next: /senai-plan <mission>");
+      ctx.ui.notify(lines.join("\n"), "info");
     },
   });
 }

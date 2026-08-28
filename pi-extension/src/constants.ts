@@ -157,9 +157,19 @@ export function makeRunId(mission: string): string {
   const minutes = String(now.getMinutes()).padStart(2, "0");
   const slug = mission
     .toLowerCase()
+    // Drop path-like tokens (/tmp/foo, ./bar, C:\baz) that come from pasted
+    // temp paths, and UUID-like / long-hex segments — they make unreadable
+    // run ids like "q1-tmp-pi-clipboard-cbcbf548-849e-4918-a".
+    // The long-hex rule requires at least one digit so plain long words
+    // (which can consist of a-f letters only) are never stripped.
+    .replace(/[a-z]:?[\\/][\w./\\-]*/g, " ")
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/g, " ")
+    .replace(/\b(?=[0-9a-f]*[0-9])[0-9a-f]{16,}\b/g, " ")
     .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-|-$/g, "")
-    .slice(0, 40);
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .slice(0, 40)
+    .replace(/-+$/g, "");
   return `${year}-${month}-${day}-${hours}-${minutes}-${slug || "run"}`;
 }
 

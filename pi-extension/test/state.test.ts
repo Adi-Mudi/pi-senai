@@ -83,6 +83,57 @@ describe("state", () => {
     assert.ok((result as { ok: false; reason: string }).reason.includes("Cannot move"));
   });
 
+  it("advanceStage records a stageResult under the stage being left", () => {
+    let state = startRun(tmpDir, "Mission");
+    const planning = advanceStage(tmpDir, state, "planning");
+    assert.strictEqual(planning.ok, true);
+    state = (planning as { ok: true; state: ReturnType<typeof loadState> }).state;
+
+    const planned = advanceStage(tmpDir, state, "planned", "approved; artifacts: verified");
+    assert.strictEqual(planned.ok, true);
+    const next = (planned as { ok: true; state: ReturnType<typeof loadState> }).state;
+    assert.deepStrictEqual(next.stageResults, { planning: "approved; artifacts: verified" });
+    // Persisted to disk.
+    assert.deepStrictEqual(loadState(tmpDir).stageResults, {
+      planning: "approved; artifacts: verified",
+    });
+  });
+
+  it("advanceStage preserves earlier stageResults entries", () => {
+    let state = startRun(tmpDir, "Mission");
+    state = { ...state, stageResults: { planning: "earlier" } };
+    saveState(tmpDir, state);
+
+    const planning = advanceStage(tmpDir, state, "planning", "second run");
+    assert.strictEqual(planning.ok, true);
+    const next = (planning as { ok: true; state: ReturnType<typeof loadState> }).state;
+    assert.deepStrictEqual(next.stageResults, { planning: "earlier", none: "second run" });
+  });
+
+  it("advanceStage without a stageResult leaves stageResults unchanged", () => {
+    let state = startRun(tmpDir, "Mission");
+    state = { ...state, stageResults: { planning: "earlier" } };
+    saveState(tmpDir, state);
+
+    const planning = advanceStage(tmpDir, state, "planning");
+    assert.strictEqual(planning.ok, true);
+    const next = (planning as { ok: true; state: ReturnType<typeof loadState> }).state;
+    assert.deepStrictEqual(next.stageResults, { planning: "earlier" });
+  });
+
+  it("advanceStage with a stageResult on an illegal transition records nothing", () => {
+    let state = startRun(tmpDir, "Mission");
+    const planning = advanceStage(tmpDir, state, "planning");
+    assert.strictEqual(planning.ok, true);
+    state = (planning as { ok: true; state: ReturnType<typeof loadState> }).state;
+
+    // planning -> documenting is not a legal transition; the result must be
+    // rejected BEFORE anything is recorded.
+    const rejected = advanceStage(tmpDir, state, "documenting", "should not be recorded");
+    assert.strictEqual(rejected.ok, false);
+    assert.deepStrictEqual(loadState(tmpDir).stageResults, {}, "nothing recorded on rejection");
+  });
+
   it("advanceStage returns a new state object and does not mutate the input", () => {
     const state = startRun(tmpDir, "Mission");
     const planning = advanceStage(tmpDir, state, "planning");

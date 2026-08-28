@@ -86,6 +86,7 @@ export function advanceStage(
   cwd: string,
   state: SenaiState,
   nextStage: Stage,
+  stageResult?: string,
 ): { ok: true; state: SenaiState } | { ok: false; reason: string } {
   const allowed = STAGE_TRANSITIONS[state.currentStage];
   if (!allowed.includes(nextStage)) {
@@ -99,6 +100,12 @@ export function advanceStage(
     currentStage: nextStage,
     updatedAt: new Date().toISOString(),
   };
+  // Record how the stage we are leaving ended (approval time + artifact
+  // check outcome). Keyed by the stage being left, so each entry is written
+  // once, at the moment the stage completes.
+  if (stageResult !== undefined) {
+    nextState.stageResults = { ...state.stageResults, [state.currentStage]: stageResult };
+  }
   saveState(cwd, nextState);
   return { ok: true, state: nextState };
 }

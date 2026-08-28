@@ -164,4 +164,40 @@ describe("smoke", () => {
       assert.ok(fs.existsSync(file), `missing artifact: ${file}`);
     }
   });
+
+  it("records a stageResults entry for every stage after the full lifecycle", async () => {
+    registerCommands(makeApi());
+
+    await commandHandlers["senai-plan"]("Add a hello world CLI", makeCtx());
+    const runDir = getRunDir();
+    const write = (rel: string) => {
+      fs.mkdirSync(path.dirname(path.join(runDir, rel)), { recursive: true });
+      fs.writeFileSync(path.join(runDir, rel), "# artifact\n");
+    };
+
+    // Plan artifacts, then approve (confirm always true) → implementing.
+    write("plan/plan.md");
+    for (let i = 1; i <= 4; i++) write(`plan/scouts/scout-angle_${i}.md`);
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+
+    write("implement/src/index.ts");
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "documenting");
+
+    write("document/README.md");
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivering");
+
+    write("deliver/security-report.md");
+    write("deliver/deliver-summary.md");
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
+
+    const results = loadState(tmpDir).stageResults;
+    for (const stage of ["planning", "implementing", "documenting", "delivering"]) {
+      assert.ok(results[stage], `stageResults entry for ${stage}`);
+      assert.match(results[stage] ?? "", /^approved /, `${stage} entry records the approval`);
+    }
+  });
 });

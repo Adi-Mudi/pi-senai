@@ -43,6 +43,7 @@ import {
   getProjectTechnologiesDir,
   parseKeywords,
 } from "./agent-generator.js";
+import { DOC_TYPES, isDocStub, type DocTypeId } from "./doc-catalog.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 
@@ -88,7 +89,9 @@ const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
 
 // Roles that only report via their final message and never write artifact
 // files. All artifact-writing roles require (and may have) the write tool.
-const READONLY_ROLES: SenaiRole[] = ["linter", "full-test"];
+// Currently empty: linter and full-test write report artifacts since
+// generator v3. Keep the mechanism for future read-only roles.
+const READONLY_ROLES: SenaiRole[] = [];
 
 const CONFLICTING_READONLY_PATTERNS = [
   { pattern: /fix only/i, reason: "Agent mandate is 'fix only'" },
@@ -143,6 +146,8 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   }
 
   sections.push(checkEnvironment());
+  sections.push(checkSubagentExtension());
+  sections.push(checkStrayFiles(cwd));
   sections.push(checkArchitectureSetup(cwd));
   sections.push(checkArchitectureAgentMapping(cwd, agentConfig));
   sections.push(checkGeneratedAgentContent(cwd));
@@ -152,6 +157,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   sections.push(checkAgentSkillReferences(cwd, resolvedAgents));
   sections.push(checkAgentFileIntegrity(cwd, resolvedAgents));
   sections.push(checkSecretScan(cwd));
+  sections.push(checkDocsFactory(cwd));
 
   const summary = sections.reduce(
     (acc, section) => {
@@ -561,12 +567,65 @@ function checkRunArtifacts(cwd: string): DiagnosticSection {
     const missing = missingLabels(deliverArtifacts);
     if (missing.length > 0) {
       items.push({
-        status: "warning",
+        status: "error",
         message: `Run is delivered but ${missing.length} deliver artifact(s) are missing or empty`,
         details: missing,
       });
     } else {
       items.push({ status: "ok", message: "Both deliver-stage artifacts exist and are non-empty." });
+    }
+
+    // A delivered run must have document-stage output; "delivered" with an
+    // empty document/ directory means stages were skipped or state drifted.
+    let documentEmpty = true;
+    try {
+      documentEmpty = fs.readdirSync(artifacts.documentDir).length === 0;
+    } catch {
+      documentEmpty = true;
+    }
+    if (documentEmpty) {
+      items.push({
+        status: "error",
+        message: "Run is delivered but the document/ directory is empty or missing.",
+        details: ["Stage state and artifacts disagree — inspect the run before trusting it."],
+      });
+    }
+
+    // Implement-stage reports must live in implement/, never in deliver/.
+    let deliverEntries: string[] = [];
+    try {
+      deliverEntries = fs.readdirSync(artifacts.deliverDir);
+    } catch {
+      deliverEntries = [];
+    }
+    const misplaced = deliverEntries.filter((name) =>
+      ["lint-report.md", "test-report.md", "full-test-report.md"].includes(name),
+    );
+    if (misplaced.length > 0) {
+      items.push({
+        status: "error",
+        message: `deliver/ contains implement-stage file(s): ${misplaced.join(", ")}`,
+        details: ["Move them into the run's implement/ directory."],
+      });
+    }
+  }
+
+  // plan.md is injected into every later stage prompt — flag token bloat.
+  const PLAN_SIZE_WARN_BYTES = 50 * 1024;
+  if (rank >= STAGE_RANK.planned) {
+    try {
+      const size = fs.statSync(artifacts.plan).size;
+      if (size > PLAN_SIZE_WARN_BYTES) {
+        items.push({
+          status: "warning",
+          message: `plan.md is ${Math.round(size / 1024)}KB (>${PLAN_SIZE_WARN_BYTES / 1024}KB) — token bloat.`,
+          details: [
+            "plan.md is injected into every later stage prompt. Slim it down and move detail into referenced files under the plan directory.",
+          ],
+        });
+      }
+    } catch {
+      /* missing plan.md is already reported above */
     }
   }
 
@@ -896,17 +955,20 @@ function checkAgentsFiles(
 
   // Recommended roles without a truth document get a warning with concrete
   // suggestions; the user approves by running /senai-configure-agents-files.
-  // Assignments stay optional.
+  // Assignments stay optional. One item per role (not one aggregated item) so
+  // every missing assignment is visible in the summary, with the exact
+  // default path to assign.
   const suggestions = allSuggestions.filter(
     (s) => !config.documents[s.role]?.primary,
   );
-  if (suggestions.length > 0) {
+  for (const s of suggestions) {
     items.push({
       status: "warning",
-      message: `${suggestions.length} recommended role(s) have no truth document.`,
+      message: `${ROLE_LABELS[s.role]} (${s.role}) has no truth document. Assign: ${s.path}`,
       details: [
-        ...suggestions.map((s) => `${ROLE_LABELS[s.role]} (${s.role}) → ${s.path} (${s.reason})`),
-        "Assignments are optional but recommended. Run /senai-configure-agents-files to assign.",
+        `Why: ${s.reason}.`,
+        "Without a truth document this role reads whatever it finds — the main source of doc bloat and contradictions.",
+        `Fix: run /senai-configure-agents-files and set the truth document to ${s.path}.`,
       ],
     });
   }
@@ -943,7 +1005,8 @@ function checkEnvironment(): DiagnosticSection {
     const settingsPath = path.join(getAgentDir(), "settings.json");
     if (fs.existsSync(settingsPath)) {
       const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as {
-        retry?: { enabled?: boolean };
+        retry?: { enabled?: boolean; maxRetries?: number; baseDelayMs?: number };
+        compaction?: { enabled?: boolean; reserveTokens?: number };
       };
       if (settings.retry?.enabled === false) {
         items.push({
@@ -956,6 +1019,36 @@ function checkEnvironment(): DiagnosticSection {
         });
       } else {
         items.push({ status: "ok", message: "pi retry settings are enabled." });
+        const maxRetries = settings.retry?.maxRetries;
+        if (maxRetries === undefined || maxRetries < 5) {
+          items.push({
+            status: "info",
+            message: `retry.maxRetries is ${maxRetries ?? "default (3)"} — recommend >= 5 for senai runs.`,
+            details: [
+              "Parallel subagent spawns can hit provider 429s; pi's default backoff (3 attempts at 2/4/8s) is too short.",
+              `Set "retry": { "maxRetries": 5, "baseDelayMs": 5000 } in ${settingsPath}.`,
+            ],
+          });
+        }
+      }
+      if (settings.compaction?.enabled === false) {
+        items.push({
+          status: "warning",
+          message: "pi compaction is disabled (compaction.enabled = false).",
+          details: [
+            "Long senai runs will overflow the context window instead of compacting.",
+            "Re-enable compaction or remove the flag in settings.json.",
+          ],
+        });
+      } else {
+        const reserve = settings.compaction?.reserveTokens ?? 16384;
+        items.push({
+          status: "info",
+          message: `pi auto-compacts when context exceeds contextWindow - ${reserve} tokens.`,
+          details: [
+            "Senai's stage-boundary compaction targets 40% of the window so it fires before this threshold.",
+          ],
+        });
       }
     }
   } catch {
@@ -966,6 +1059,155 @@ function checkEnvironment(): DiagnosticSection {
   }
 
   return { title: "Runtime environment", items };
+}
+
+/** Known extensions that provide a `subagent` tool. More than one installed
+ *  means ambiguous tool resolution and conflicting behavior. */
+const SUBAGENT_PROVIDER_PACKAGES = [
+  "pi-interactive-subagents",
+  "pi-subagents",
+  "pi-teams",
+  "extensions/subagent",
+];
+
+/** Compares dotted versions; returns negative when a < b. */
+export function compareVersions(a: string, b: string): number {
+  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
+  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (d !== 0) return d;
+  }
+  return 0;
+}
+
+/** Reads pi's user-level package list (read-only) and verifies the subagent
+ *  extension senai depends on: present, new enough, and not shadowed by
+ *  dead entries or competing providers. */
+function checkSubagentExtension(): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const agentDir = getAgentDir();
+  const settingsPath = path.join(agentDir, "settings.json");
+
+  let packages: string[] = [];
+  try {
+    const settings = JSON.parse(fs.readFileSync(settingsPath, "utf8")) as { packages?: string[] };
+    packages = Array.isArray(settings.packages) ? settings.packages : [];
+  } catch {
+    return {
+      title: "Subagent extension",
+      items: [{ status: "info", message: "Could not read pi settings.json — subagent extension check skipped." }],
+    };
+  }
+
+  // Dead local-path package entries (non npm:/git: sources that don't exist).
+  for (const pkg of packages) {
+    if (pkg.startsWith("npm:") || pkg.startsWith("git:")) continue;
+    const pkgPath = path.isAbsolute(pkg) ? pkg : path.join(agentDir, pkg);
+    if (!fs.existsSync(pkgPath)) {
+      items.push({
+        status: "warning",
+        message: `Dead package entry in settings.json: "${pkg}"`,
+        details: [
+          `Resolved path does not exist: ${pkgPath}`,
+          "A stale entry that later reappears can shadow the real subagent extension. Remove it from settings.json.",
+        ],
+      });
+    }
+  }
+
+  // Multiple subagent providers installed.
+  const providers = packages.filter((pkg) =>
+    SUBAGENT_PROVIDER_PACKAGES.some((known) => pkg.includes(known)),
+  );
+  if (providers.length > 1) {
+    items.push({
+      status: "warning",
+      message: `Multiple subagent-providing extensions installed: ${providers.join(", ")}`,
+      details: [
+        "Senai is tested against pi-interactive-subagents; other providers may register conflicting `subagent` tools.",
+        "Keep exactly one subagent provider in the packages list.",
+      ],
+    });
+  }
+
+  // pi-interactive-subagents presence and version (git packages live in <agentDir>/git/<host>/<owner>/<repo>/).
+  const hasHazAT = packages.some((pkg) => pkg.includes("pi-interactive-subagents"));
+  if (!hasHazAT) {
+    items.push({
+      status: "error",
+      message: "pi-interactive-subagents is not in pi's packages list.",
+      details: ["Senai delegates all subagent spawning to it. Install: pi install git:github.com/HazAT/pi-interactive-subagents"],
+    });
+  } else {
+    let version: string | null = null;
+    try {
+      const pkgJson = path.join(agentDir, "git", "github.com", "HazAT", "pi-interactive-subagents", "package.json");
+      version = (JSON.parse(fs.readFileSync(pkgJson, "utf8")) as { version?: string }).version ?? null;
+    } catch {
+      version = null;
+    }
+    if (version === null) {
+      items.push({ status: "info", message: "pi-interactive-subagents is listed but its installed version could not be read." });
+    } else if (compareVersions(version, "3.7.2") < 0) {
+      items.push({
+        status: "warning",
+        message: `pi-interactive-subagents ${version} is older than 3.7.2.`,
+        details: ["Update it — older versions lack the failure reporting senai relies on."],
+      });
+    } else {
+      items.push({ status: "ok", message: `pi-interactive-subagents ${version} installed.` });
+    }
+  }
+
+  return { title: "Subagent extension", items };
+}
+
+/** Leftover helper scripts (tmp_*.sh / tmp_*.ts) in the project root or run
+ *  directories — debris from subagent heredoc workarounds. */
+function checkStrayFiles(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const stray: string[] = [];
+  const isStray = (name: string) => /^tmp_.*\.(sh|ts)$/.test(name);
+
+  try {
+    for (const entry of fs.readdirSync(cwd)) {
+      if (isStray(entry)) stray.push(entry);
+    }
+  } catch {
+    /* unreadable root — nothing to report */
+  }
+
+  const runsDir = path.join(cwd, ".IDE_Plans", "senai", "runs");
+  const walk = (dir: string, rel: string, depth: number): void => {
+    if (depth > 4) return;
+    let entries: fs.Dirent[];
+    try {
+      entries = fs.readdirSync(dir, { withFileTypes: true });
+    } catch {
+      return;
+    }
+    for (const entry of entries) {
+      const entryRel = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        walk(path.join(dir, entry.name), entryRel, depth + 1);
+      } else if (isStray(entry.name)) {
+        stray.push(path.join(".IDE_Plans", "senai", "runs", entryRel).replace(/\\/g, "/"));
+      }
+    }
+  };
+  walk(runsDir, "", 0);
+
+  if (stray.length > 0) {
+    items.push({
+      status: "warning",
+      message: `${stray.length} stray tmp_* helper file(s) found`,
+      details: [...stray, "Leftovers from subagent heredoc workarounds. Review and delete them."],
+    });
+  } else {
+    items.push({ status: "ok", message: "No stray tmp_* helper files." });
+  }
+  return { title: "Stray files", items };
 }
 
 function isPathConflict(a: string, b: string): boolean {
@@ -1869,6 +2111,147 @@ function checkSecretScan(cwd: string): DiagnosticSection {
   }
 
   return { title: "Secret scan", items };
+}
+
+interface DocsStructureManifestTarget {
+  path: string;
+  docType: string;
+  maxLines: number;
+}
+
+/** Doc factory checks:
+ *  1. For each manifest target that is filled (no longer a stub): validate the
+ *     template's required sections are present, in order, and the file is
+ *     within its length cap. Over cap or missing section → warning naming the
+ *     file, the count/section, and the cap.
+ *  2. Missing skeleton stubs → warning; unexpected non-stub files in
+ *     factory-owned subfolders → info. */
+function checkDocsFactory(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const manifestPath = path.join(cwd, ".pi", "senai", "docs-structure.json");
+  if (!fs.existsSync(manifestPath)) {
+    items.push({
+      status: "info",
+      message: "No docs skeleton generated.",
+      details: [
+        "Run /senai-generate-docs-structure to create the docs folder skeleton and template stubs for the selected document types.",
+      ],
+    });
+    return { title: "Documentation factory", items };
+  }
+
+  let targets: DocsStructureManifestTarget[];
+  try {
+    const parsed = JSON.parse(fs.readFileSync(manifestPath, "utf8")) as Record<string, unknown>;
+    const rawTargets = Array.isArray(parsed.targets) ? parsed.targets : [];
+    targets = rawTargets
+      .filter((t): t is Record<string, unknown> => typeof t === "object" && t !== null)
+      .map((t) => ({
+        path: String(t.path ?? ""),
+        docType: String(t.docType ?? ""),
+        maxLines: typeof t.maxLines === "number" ? t.maxLines : 0,
+      }))
+      .filter((t) => t.path.length > 0);
+  } catch (err: any) {
+    items.push({
+      status: "warning",
+      message: `Docs structure manifest is corrupt: ${err.message}`,
+      details: ["Fix: re-run /senai-generate-docs-structure to rewrite .pi/senai/docs-structure.json."],
+    });
+    return { title: "Documentation factory", items };
+  }
+
+  const manifestPaths = new Set(targets.map((t) => t.path));
+
+  for (const target of targets) {
+    const fullPath = path.join(cwd, target.path);
+    if (!fs.existsSync(fullPath)) {
+      items.push({
+        status: "warning",
+        message: `Skeleton doc missing: ${target.path}`,
+        details: [
+          "The docs skeleton was generated but this stub was deleted.",
+          "Fix: re-run /senai-generate-docs-structure.",
+        ],
+      });
+      continue;
+    }
+    let content: string;
+    try {
+      content = fs.readFileSync(fullPath, "utf8");
+    } catch {
+      continue;
+    }
+    if (isDocStub(content)) continue; // unfilled stub: nothing to validate yet
+    const spec = target.docType in DOC_TYPES ? DOC_TYPES[target.docType as DocTypeId] : undefined;
+    if (!spec) continue;
+    const lines = content.split("\n");
+    if (lines.length > spec.maxLines) {
+      items.push({
+        status: "warning",
+        message: `${target.path} is ${lines.length} lines — over the ${spec.maxLines}-line cap (${spec.basedOn}).`,
+        details: [
+          "The doc factory keeps docs short and cheap in tokens. Trim to the cap; move detail into a linked page of the same type.",
+        ],
+      });
+    }
+    let cursor = -1;
+    for (const section of spec.requiredSections) {
+      const idx = lines.findIndex((l, i) => i > cursor && l.trim() === section);
+      if (idx === -1) {
+        items.push({
+          status: "warning",
+          message: `${target.path} is missing required section "${section}" (template: ${spec.id}).`,
+          details: [`Template ${spec.id} requires, in order: ${spec.requiredSections.join(", ")}.`],
+        });
+      } else {
+        cursor = idx;
+      }
+    }
+  }
+
+  const factoryDirs = ["docs/tutorials", "docs/how-to", "docs/reference", "docs/explanation", "docs/adr"];
+  const stray: string[] = [];
+  for (const dir of factoryDirs) {
+    const fullDir = path.join(cwd, dir);
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(fullDir);
+    } catch {
+      continue;
+    }
+    for (const entry of entries) {
+      if (!entry.endsWith(".md")) continue;
+      const rel = `${dir}/${entry}`;
+      if (manifestPaths.has(rel)) continue;
+      let content = "";
+      try {
+        content = fs.readFileSync(path.join(fullDir, entry), "utf8");
+      } catch {
+        continue;
+      }
+      if (!isDocStub(content)) stray.push(rel);
+    }
+  }
+  if (stray.length > 0) {
+    items.push({
+      status: "info",
+      message: `${stray.length} file(s) in factory docs folders are not part of the generated skeleton.`,
+      details: [
+        ...stray,
+        "Not an error — your own docs are fine here. Regenerate the skeleton if they should be factory-managed.",
+      ],
+    });
+  }
+
+  if (items.length === 0) {
+    items.push({
+      status: "ok",
+      message: `Docs skeleton intact (${targets.length} target(s)); all filled docs within template and length limits.`,
+    });
+  }
+
+  return { title: "Documentation factory", items };
 }
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {

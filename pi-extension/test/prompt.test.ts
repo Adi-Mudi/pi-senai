@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadSkill, buildStagePrompt, resolveSkillPath } from "../src/prompt.js";
+import { loadSkill, buildStagePrompt, resolveSkillPath, substituteArtifactPaths } from "../src/prompt.js";
 import { saveAgentConfig } from "../src/agent-config.js";
 import { saveFilesConfig } from "../src/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
@@ -89,6 +89,31 @@ describe("prompt", () => {
     assert.ok(prompt.includes("Run ID: run-1"));
     assert.ok(prompt.includes("Plan Stage"));
     assert.ok(prompt.includes("scout-angle_4.md"));
+  });
+
+  it("buildStagePrompt substitutes artifact-path placeholders with real run paths", () => {
+    const state = makeState("delivering", "run-9");
+    const { prompt } = buildStagePrompt(cwd, state, "deliver");
+
+    assert.ok(!prompt.includes("<securityReport>"), "no literal <securityReport> token");
+    assert.ok(!prompt.includes("<deliverSummary>"), "no literal <deliverSummary> token");
+    assert.ok(!prompt.includes("<plan>"), "no literal <plan> token");
+    assert.ok(
+      prompt.includes(path.join(cwd, ".IDE_Plans/senai/runs/run-9/deliver/security-report.md")),
+      "real security-report path present",
+    );
+    assert.ok(
+      prompt.includes(path.join(cwd, ".IDE_Plans/senai/runs/run-9/plan/plan-overview.md")),
+      "<planOverview> substituted without being mangled by <plan>",
+    );
+  });
+
+  it("substituteArtifactPaths leaves non-artifact tokens alone", () => {
+    const state = makeState("planning", "run-1");
+    const { context } = buildStagePrompt(cwd, state, "plan");
+    const out = substituteArtifactPaths("Agent: <mapped planner agent>. Mission: <mission>.", context.artifacts);
+    assert.ok(out.includes("<mapped planner agent>"), "registry tokens stay for the LLM");
+    assert.ok(out.includes("<mission>"), "mission token is handled by missionLine, not here");
   });
 
   it("buildStagePrompt includes the agent registry block with defaults", () => {
@@ -378,6 +403,76 @@ describe("coverage audit gaps", () => {
       );
     } finally {
       fs.rmSync(skillPath, { recursive: true, force: true });
+    }
+  });
+
+  it("buildStagePrompt for the document stage includes the doc-writer selection block", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-prompt-docsel-"));
+    const makeDocState = (stage: string): SenaiState => ({
+      version: 1,
+      mission: "Build CLI",
+      runId: "run-doc",
+      currentStage: stage as SenaiState["currentStage"],
+      startedAt: "2026-06-12T00:00:00Z",
+      updatedAt: "2026-06-12T00:00:00Z",
+      stageResults: {},
+    });
+    const { prompt } = buildStagePrompt(tmpDir, makeDocState("documenting"), "document");
+    assert.ok(
+      prompt.includes("## Document writers for this run"),
+      "document stage must include the writer selection block",
+    );
+
+    const { prompt: planPrompt } = buildStagePrompt(tmpDir, makeDocState("planning"), "plan");
+    assert.ok(
+      !planPrompt.includes("## Document writers for this run"),
+      "non-document stages must not include the writer selection block",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("substituteArtifactPaths replaces all 12 artifact placeholders", () => {
+    const tokens = [
+      "<planOverview>",
+      "<discussionNotes>",
+      "<scoutAngle1>",
+      "<scoutAngle2>",
+      "<scoutAngle3>",
+      "<scoutAngle4>",
+      "<reviewCorrectness>",
+      "<reviewSecurity>",
+      "<reviewTests>",
+      "<securityReport>",
+      "<deliverSummary>",
+      "<plan>",
+    ];
+    const state: SenaiState = {
+      version: 1,
+      mission: "Build CLI",
+      runId: "run-all",
+      currentStage: "delivering",
+      startedAt: "2026-06-12T00:00:00Z",
+      updatedAt: "2026-06-12T00:00:00Z",
+      stageResults: {},
+    };
+    const { context } = buildStagePrompt("/fake/project", state, "deliver");
+    const out = substituteArtifactPaths(tokens.join("\n"), context.artifacts);
+    assert.ok(!out.includes("<"), "no placeholder token remains");
+    for (const key of [
+      "planOverview",
+      "discussionNotes",
+      "scoutAngle1",
+      "scoutAngle2",
+      "scoutAngle3",
+      "scoutAngle4",
+      "reviewCorrectness",
+      "reviewSecurity",
+      "reviewTests",
+      "securityReport",
+      "deliverSummary",
+      "plan",
+    ] as const) {
+      assert.ok(out.includes(context.artifacts[key]), `${key} path substituted`);
     }
   });
 });

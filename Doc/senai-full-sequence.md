@@ -238,10 +238,10 @@ Auto-starts Document
 |------|-------|---------|---------|
 | 1 | test-skeleton | lineage-only | Write test stubs and scaffolding first |
 | 2 | implementer | lineage-only | Implement the approved plan |
-| 3 | linter | fresh | Run linter and report style issues |
+| 3 | linter | fresh | Run linter and write the violations report to the run's implement directory |
 | 4 | test | fresh | Run unit tests |
 | 5 | code-review | fresh | Review the diff for correctness and regressions |
-| 6 | full-test | fresh | Run integration / e2e tests |
+| 6 | full-test | fresh | Run integration / e2e tests and write the results report to the run's implement directory |
 
 ### Hard Rules
 - Only the implementer edits source files.
@@ -259,15 +259,12 @@ Auto-starts Document
 **Command:** `/senai-document`
 
 ### Purpose
-Write and update all project documentation.
+Fill the documentation skeleton created by `/senai-generate-docs-structure`: few, short, standard-formatted docs with hard length caps.
 
 ### Sequence
 
 ```
-readme-writer      ──┐
-changelog-writer   ──┤
-api-docs-writer    ──┼──▶ All complete
-other-docs-writer  ──┘
+Batch 1 (≤4 writers) ──▶ all artifacts verified ──▶ Batch 2 ──▶ ...
          │
          ▼
   Parent approval gate (/senai-approve)
@@ -280,13 +277,16 @@ other-docs-writer  ──┘
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
-| 1 | readme-writer | fresh | `README.md` |
-| 1 | changelog-writer | fresh | `CHANGELOG.md` |
-| 1 | api-docs-writer | fresh | `docs/api/` |
-| 1 | other-docs-writer | fresh | `CONTRIBUTING.md`, `LICENSE`, etc. |
+| 1 | readme-writer | fresh | `README.md` (always selected; Standard Readme template, ≤150 lines) |
+| 1 | changelog-writer | fresh | `CHANGELOG.md` (versioned projects; Keep a Changelog, ~15 lines/entry) |
+| 1 | api-docs-writer | fresh | `docs/reference/` (packages with a public API surface; Google API style, ≤60 lines/symbol page) |
+| 1 | other-docs-writer | fresh | `CONTRIBUTING.md` (projects accepting contributions), `docs/explanation/architecture.md` (when an architecture exists), guides — each within its template cap |
 
 ### Notes
-- All four writers run in parallel because they write to different files.
+- A deterministic decision table (`doc-selection.ts`) selects which writers this project needs and injects a concrete write plan into the stage prompt: each task names its target path, template id, and length cap, grouped into explicit batches of max 4 writers.
+- Templates and caps live in the doc catalog (`doc-catalog.ts`), shared by selection, `/senai-generate-docs-structure`, the generated writer agents (documentation contract in their body, generator v4), and doctor (section/format validation).
+- Writers fill the existing template stub at their target path — they never invent new documents or sections, and never exceed the cap.
+- Batch N+1 waits until every batch-N artifact is verified on disk; enforcement is the stage prompt plus the completion guard — pi.dev has no official concurrency/locking. Spawns within a batch are staggered to avoid provider 429 rate limits.
 - No source code edits in this stage.
 
 ### Approval Gate
@@ -305,6 +305,9 @@ Final security check and packaging.
 ### Sequence
 
 ```
+mission verification
+    │
+    ▼
 security-gate
     │
     ▼
@@ -321,11 +324,13 @@ Run marked delivered
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
+| 0 | mission verification (parent, blocking) | — | Runs every step of the plan's `## Verification` section via bash; any failure stops the stage before the security gate |
 | 1 | security-gate | fresh | `.IDE_Plans/senai/runs/<run-id>/deliver/security-report.md` |
-| 2 | archive | lineage-only | `.IDE_Plans/senai/runs/<run-id>/deliver/deliver-summary.md` + archive artifact |
+| 2 | archive | lineage-only | `.IDE_Plans/senai/runs/<run-id>/deliver/deliver-summary.md` (includes the verification outcome) + archive artifact |
 
 ### Approval Gate
-- If security gate passes → run `/senai-approve` to finish the run.
+- If verification and the security gate pass → run `/senai-approve` to finish the run.
+- If a verification step fails → stop and report it; the user decides to fix first or accept the failure explicitly.
 - If security issues found → fix and re-run.
 
 ---

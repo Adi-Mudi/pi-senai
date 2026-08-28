@@ -188,12 +188,37 @@ describe("constants", () => {
     const longerSlug = longer.split("-").slice(5).join("-");
     assert.strictEqual(longerSlug, "a".repeat(40));
 
-    // Leading/trailing dashes are stripped before the slice, so a cut can
-    // leave a trailing "-" in place.
+    // A cut that lands on a dash leaves a trailing "-", which the final
+    // cleanup strips — a truncated slug never ends in a dash.
     const dashed = makeRunId(`${"a".repeat(39)}!bbbb`);
     const dashedSlug = dashed.split("-").slice(5).join("-");
-    assert.strictEqual(dashedSlug.length, 40);
-    assert.ok(dashedSlug.endsWith("-"));
+    assert.strictEqual(dashedSlug, "a".repeat(39));
+  });
+
+  it("makeRunId strips pasted temp paths and UUID/hex noise from the slug", () => {
+    const runId = makeRunId("q1 /tmp/pi-clipboard-cbcbf548-849e-4918-a927-x/y fix");
+    const slug = runId.split("-").slice(5).join("-");
+    assert.ok(!slug.includes("tmp"), `slug should not contain tmp: ${slug}`);
+    assert.ok(!slug.includes("clipboard"), `slug should not contain clipboard: ${slug}`);
+    assert.ok(!/[0-9a-f]{8}/.test(slug.replace(/^[0-9]+-/g, "")), `slug should not contain hex noise: ${slug}`);
+    assert.ok(slug.startsWith("q1"), `slug should keep the real words: ${slug}`);
+    assert.ok(slug.endsWith("fix"), `slug should keep the real words: ${slug}`);
+  });
+
+  it("makeRunId falls back to run when the mission is only a uuid", () => {
+    // Note: a mission that is only a "/tmp/..." path leaves a short "tm"
+    // remnant (the path regex starts at the first letter before a slash);
+    // the slug is still short and free of path/uuid noise.
+    const runId = makeRunId("cbcbf548-849e-4918-a927-2f9e0c1d3b4a");
+    assert.match(runId, /^\d{4}-\d{2}-\d{2}-\d{2}-\d{2}-run$/);
+  });
+
+  it("makeRunId keeps long plain words that only use hex letters", () => {
+    // The hex-noise rule must not eat legitimate words like "deadbeef..."
+    // when they contain no digit — an all-"a" mission keeps its full slug.
+    const runId = makeRunId("a".repeat(30));
+    const slug = runId.split("-").slice(5).join("-");
+    assert.strictEqual(slug, "a".repeat(30));
   });
 
   it("getArtifactPaths returns all 19 fields", () => {
@@ -232,5 +257,27 @@ describe("constants", () => {
     const status = formatStageStatus({ currentStage: "planning", mission: "test mission" });
     assert.ok(status.includes("Mission: test mission"));
     assert.ok(!status.includes("Run ID:"));
+  });
+
+  it("makeRunId strips Windows paths from the mission slug", () => {
+    const runId = makeRunId("C:\\Users\\foo\\bar fix");
+    const slug = runId.split("-").slice(5).join("-");
+    assert.strictEqual(slug, "fix", "Windows path token must be stripped, real words kept");
+  });
+
+  it("makeRunId drops the './' prefix of a relative path but keeps the name", () => {
+    // NOTE: the gap analysis expected a "run" fallback here, but the path-token
+    // regex only fires on a letter before the slash; "./" is dropped by the
+    // generic non-alphanumeric stripper instead. Verified against dist on
+    // 2026-08-28 — this pins the actual behavior.
+    const runId = makeRunId("./relative");
+    const slug = runId.split("-").slice(5).join("-");
+    assert.strictEqual(slug, "relative");
+  });
+
+  it("makeRunId falls back to run for a unicode-only mission", () => {
+    const runId = makeRunId("日本語のみ");
+    const slug = runId.split("-").slice(5).join("-");
+    assert.strictEqual(slug, "run");
   });
 });

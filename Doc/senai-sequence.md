@@ -189,24 +189,24 @@ full-test
 
 ### Purpose
 
-Produce and update all project documentation.
+Fill the documentation skeleton created by `/senai-generate-docs-structure` — few, short, standard-formatted docs.
 
 ### Sequence
 
 ```
-readme-writer      ──┐
-changelog-writer   ──┤
-api-docs-writer    ──┼──▶ All complete
-other-docs-writer  ──┘
+Batch 1 (≤4 writers) ──▶ all artifacts verified ──▶ Batch 2 ──▶ ...
          │
          ▼
   /senai-approve ──▶ auto-starts Deliver
 ```
 
+The stage prompt's **Document writers for this run** block lists each task with its target path, template id, and length cap, grouped into explicit batches. Writers fill the template stub at their target path — they never invent new documents.
+
 ### Notes
 
-- All four writers run in parallel.
-- Each writer works on a different output, so there is no conflict.
+- Writers run in batches of max 4; batch N+1 starts only after every batch-N artifact is verified on disk. Enforcement is the stage prompt plus the completion guard — pi.dev has no official concurrency/locking.
+- Templates and caps come from the doc catalog (`doc-catalog.ts`): Standard Readme (~150 lines), Keep a Changelog (~15 lines/entry), Nygard ADR (~120 lines), Google API style reference pages (~60 lines/symbol), Diátaxis how-to/tutorial/explanation (~150 lines), arc42-lite architecture (~250 lines).
+- Selected types only: a solo project gets a README, not a 123KB CONTRIBUTING.md.
 - No source code edits in this stage.
 
 ### Approval Gate
