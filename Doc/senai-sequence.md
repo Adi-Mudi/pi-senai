@@ -12,6 +12,8 @@
 
 Pi Senai is a stage-gated agent orchestration extension for Pi. Each stage is a sequence of specialized subagents. Every stage ends with a parent approval gate. Running `/senai-approve` advances the run through the completed stage **and** automatically starts the next stage.
 
+**Discussion entry point.** Before the Plan stage, a user can run `/senai-discussion "<topic>"` to refine the mission in a conversational pass (parent LLM only, no subagents). The discussion writes a draft `mission-brief.md` and a transcript (`discussions/discussion-NN-<slug>.md`); `/senai-discussion-approve` finalizes the brief. Discussions are orthogonal to the stage machine — they do NOT mutate `state.json.stage` and can be opened from any state (`none`, active stages, `delivered`). `/senai-plan` warns before replacing an active run and, when a pre-run brief exists, references it from `state.missionBriefPath`.
+
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
 │  PLAN   │ ──▶ │  IMPLEMENT  │ ──▶ │  DOCUMENT   │ ──▶ │  DELIVER  │
@@ -57,6 +59,8 @@ Other commands:
 
 - `/senai-status` — show current stage, mission, run ID, artifact paths, and next command.
 - `/senai-reset` — clear the active run state (artifacts are preserved).
+- `/senai-discussion "<topic>"` — open a conversational mission-refinement pass (parent LLM only, no subagents). Invocable from any state. Writes a draft `mission-brief.md` and a transcript `discussions/discussion-NN-<slug>.md`.
+- `/senai-discussion-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Discussion — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/senai/discussions/pre-run/mission-brief.md`.
 
 ---
 

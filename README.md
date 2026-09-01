@@ -127,6 +127,13 @@ Reset the current run:
 /senai-reset
 ```
 
+Refine the mission in a conversational pass before planning (parent LLM only, no subagents; invocable from any state):
+
+```
+/senai-discussion "<topic>"
+/senai-discussion-approve
+```
+
 ## Agent configuration
 
 Before running any stage, Pi Senai needs three valid configuration files under `.pi/senai/`: `agents.json`, `files.json`, and `agents_files.json`.

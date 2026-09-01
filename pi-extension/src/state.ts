@@ -9,6 +9,16 @@ import {
   type Stage,
 } from "./constants.js";
 
+/** One recorded /senai-discussion event. `afterStage` is the stage that
+ *  was active when the discussion ran; undefined for discussions recorded
+ *  before any run started (pre-run / .IDE_Plans/senai/discussions/pre-run/). */
+export interface DiscussionEvent {
+  ts: string;
+  transcriptPath: string;
+  briefPath: string;
+  afterStage?: Stage;
+}
+
 export interface SenaiState {
   version: number;
   mission: string;
@@ -17,6 +27,14 @@ export interface SenaiState {
   startedAt: string;
   updatedAt: string;
   stageResults: Record<string, string | null>;
+  /** Total discussions finalized for the active run (resets when a new run
+   *  starts). Pre-run discussions do not bump this counter. */
+  discussions?: number;
+  /** Append-only log of finalized discussions, oldest first. */
+  discussionEvents?: DiscussionEvent[];
+  /** Path to the mission-brief.md consumed by /senai-plan, when a pre-run
+   *  discussion fed the run. Relative to cwd, slash-style. */
+  missionBriefPath?: string;
 }
 
 const CURRENT_VERSION = 1;
@@ -30,6 +48,8 @@ export function defaultState(): SenaiState {
     startedAt: "",
     updatedAt: "",
     stageResults: {},
+    discussions: 0,
+    discussionEvents: [],
   };
 }
 
@@ -119,6 +139,45 @@ export function resetState(cwd: string): void {
   }
 }
 
+/** Append a finalized discussion event and bump the discussions counter.
+ *  Pure state helper; the caller writes the file system changes before
+ *  calling this, so on a partial failure the brief/transcript are on disk
+ *  but the counter is stale (doctor warns on that). */
+export function recordDiscussion(
+  cwd: string,
+  state: SenaiState,
+  event: DiscussionEvent,
+): { ok: true; state: SenaiState } | { ok: false; reason: string } {
+  if (!event.ts || !event.transcriptPath || !event.briefPath) {
+    return { ok: false, reason: "Discussion event is missing required fields." };
+  }
+  const events = state.discussionEvents ?? [];
+  const next: SenaiState = {
+    ...state,
+    discussions: (state.discussions ?? 0) + 1,
+    discussionEvents: [...events, event],
+    updatedAt: new Date().toISOString(),
+  };
+  saveState(cwd, next);
+  return { ok: true, state: next };
+}
+
+/** Persist a reference to the pre-run brief that fed the active run.
+ *  Called from /senai-plan when it consumes a pre-run discussion. */
+export function setMissionBriefPath(
+  cwd: string,
+  state: SenaiState,
+  missionBriefPath: string,
+): SenaiState {
+  const next: SenaiState = {
+    ...state,
+    missionBriefPath,
+    updatedAt: new Date().toISOString(),
+  };
+  saveState(cwd, next);
+  return next;
+}
+
 function migrateState(old: any): SenaiState {
   const fresh = defaultState();
   if (old && typeof old === "object") {
@@ -132,6 +191,14 @@ function migrateState(old: any): SenaiState {
     if (old.stageResults && typeof old.stageResults === "object") {
       fresh.stageResults = old.stageResults;
     }
+    // Legacy states may lack the new fields; treat their absence as defaults.
+    if (typeof old.discussions === "number") fresh.discussions = old.discussions;
+    if (Array.isArray(old.discussionEvents)) {
+      fresh.discussionEvents = old.discussionEvents.filter(
+        (e: any) => e && typeof e.ts === "string" && typeof e.transcriptPath === "string" && typeof e.briefPath === "string",
+      );
+    }
+    if (typeof old.missionBriefPath === "string") fresh.missionBriefPath = old.missionBriefPath;
   }
   return fresh;
 }

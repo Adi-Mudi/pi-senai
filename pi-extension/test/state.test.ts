@@ -10,6 +10,8 @@ import {
   startRun,
   advanceStage,
   resetState,
+  recordDiscussion,
+  setMissionBriefPath,
 } from "../src/state.js";
 
 describe("state", () => {
@@ -369,5 +371,88 @@ describe("coverage audit gaps", () => {
     assert.strictEqual(loaded.startedAt, "2025-01-01T00:00:00Z");
     assert.strictEqual(loaded.updatedAt, "2025-06-01T00:00:00Z");
     assert.deepStrictEqual(loaded.stageResults, { planning: "plan.md" });
+  });
+});
+
+describe("state — discussion fields", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-disc-"));
+  });
+
+  it("recordDiscussion appends an event and bumps the counter", () => {
+    const state = startRun(tmpDir, "Mission");
+    const result = recordDiscussion(tmpDir, state, {
+      ts: new Date().toISOString(),
+      transcriptPath: "discussion-01-x.md",
+      briefPath: "mission-brief.md",
+    });
+    assert.strictEqual(result.ok, true);
+    const next = (result as { ok: true; state: ReturnType<typeof loadState> }).state;
+    assert.strictEqual(next.discussions, 1);
+    assert.strictEqual(next.discussionEvents?.length, 1);
+    assert.strictEqual(next.discussionEvents?.[0].transcriptPath, "discussion-01-x.md");
+  });
+
+  it("recordDiscussion rejects events with missing required fields", () => {
+    const state = startRun(tmpDir, "Mission");
+    const result = recordDiscussion(tmpDir, state, {
+      ts: "",
+      transcriptPath: "x.md",
+      briefPath: "y.md",
+    });
+    assert.strictEqual(result.ok, false);
+  });
+
+  it("recordDiscussion does not mutate the input state", () => {
+    const state = startRun(tmpDir, "Mission");
+    const before = JSON.stringify(state);
+    recordDiscussion(tmpDir, state, {
+      ts: new Date().toISOString(),
+      transcriptPath: "x.md",
+      briefPath: "y.md",
+    });
+    assert.strictEqual(JSON.stringify(state), before);
+  });
+
+  it("setMissionBriefPath persists the brief path", () => {
+    const state = startRun(tmpDir, "Mission");
+    setMissionBriefPath(tmpDir, state, ".IDE_Plans/senai/discussions/pre-run/mission-brief.md");
+    const reloaded = loadState(tmpDir);
+    assert.strictEqual(
+      reloaded.missionBriefPath,
+      ".IDE_Plans/senai/discussions/pre-run/mission-brief.md",
+    );
+  });
+
+  it("loadState leaves missing discussion fields on a v1 state (matches legacy behavior)", () => {
+    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    fs.mkdirSync(path.dirname(statePath), { recursive: true });
+    fs.writeFileSync(
+      statePath,
+      JSON.stringify({
+        version: 1,
+        mission: "legacy",
+        runId: "r",
+        currentStage: "planning",
+        startedAt: "",
+        updatedAt: "",
+        stageResults: {},
+      }),
+    );
+    const loaded = loadState(tmpDir);
+    // v1 states skip migration entirely (see the existing "missing fields
+    // as-is" test), so missing fields stay missing. New state.json files
+    // written by recordDiscussion/setMissionBriefPath populate the fields.
+    assert.strictEqual(loaded.discussions, undefined);
+    assert.strictEqual(loaded.discussionEvents, undefined);
+  });
+
+  it("defaultState seeds the new fields so fresh runs start clean", () => {
+    const state = defaultState();
+    assert.strictEqual(state.discussions, 0);
+    assert.deepStrictEqual(state.discussionEvents, []);
+    assert.strictEqual(state.missionBriefPath, undefined);
   });
 });

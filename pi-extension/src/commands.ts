@@ -33,7 +33,7 @@ import {
   runSenaiDiagnostic,
 } from "./doctor.js";
 import { generateDocsStructure } from "./doc-selection.js";
-import { buildStagePrompt, resolveSkillPath } from "./prompt.js";
+import { buildStagePrompt, loadSkill, resolveSkillPath } from "./prompt.js";
 import {
   runListEditor,
   type ListEditorCustomAction,
@@ -51,10 +51,23 @@ import {
 import {
   advanceStage,
   loadState,
+  recordDiscussion,
   resetState,
+  setMissionBriefPath,
   startRun,
+  type DiscussionEvent,
   type SenaiState,
 } from "./state.js";
+import {
+  getPreRunDiscussionDir,
+  getPreRunMissionBriefPath,
+  getRunDiscussionsDir,
+  getRunMissionBriefPath,
+} from "./constants.js";
+import {
+  finalizeMissionBrief,
+  validateBriefSections,
+} from "./mission-brief.js";
 import {
   createDefaultArchitectInputsConfig,
   getSelectedInputPaths,
@@ -120,16 +133,51 @@ export function registerCommands(pi: ExtensionAPI) {
         return;
       }
 
+      // Warn-and-confirm when a run is already in flight. state.json.stage
+      // is the source of truth — none and delivered are the only safe
+      // starting points; every active stage has artifacts the user might
+      // lose by overwriting. Default = cancel (the user re-reads state and
+      // chooses again). Note: /senai-plan does NOT touch stage — the warn
+      // runs before startRun, never mutates state.
+      const existing = loadState(ctx.cwd);
+      const activeStage = existing.currentStage;
+      if (activeStage !== "none" && activeStage !== "delivered") {
+        const proceed = await runSimpleConfirm(
+          ctx,
+          "Active run in progress",
+          `Run "${existing.mission}" (${existing.runId}) is in stage '${activeStage}'.\n\n` +
+            `Starting /senai-plan will REPLACE state.json with a new run.\n` +
+            `To refine the active run without replacing it, run /senai-discussion instead.\n\n` +
+            `Start a new run anyway?`,
+        );
+        if (!proceed) {
+          ctx.ui.notify("Cancelled. Run /senai-discussion to update the active run.", "info");
+          return;
+        }
+      }
+
       const state = startRun(ctx.cwd, mission);
-      const advance = advanceStage(ctx.cwd, state, "planning");
+
+      // Consume a pre-run discussion if one exists; reference it in state.
+      const preRunBrief = getPreRunMissionBriefPath(ctx.cwd);
+      let nextState = state;
+      if (fs.existsSync(preRunBrief)) {
+        nextState = setMissionBriefPath(ctx.cwd, state, path.relative(ctx.cwd, preRunBrief));
+      }
+
+      const advance = advanceStage(ctx.cwd, nextState, "planning");
       if (!advance.ok) {
         ctx.ui.notify(advance.reason, "error");
         return;
       }
 
+      const briefNote = advance.state.missionBriefPath
+        ? `\nPre-run mission brief consumed: ${advance.state.missionBriefPath}`
+        : "";
       ctx.ui.notify(
         `Plan stage started for: ${mission}\n` +
-          `When the plan is ready and you approve it, run /senai-approve to continue.`,
+          `When the plan is ready and you approve it, run /senai-approve to continue.` +
+          briefNote,
         "info",
       );
 
@@ -402,6 +450,116 @@ export function registerCommands(pi: ExtensionAPI) {
       if (!confirmed) return;
       resetState(ctx.cwd);
       ctx.ui.notify("Senai state reset.", "info");
+    },
+  });
+}
+
+export function registerDiscussionCommands(pi: ExtensionAPI) {
+  // /senai-discussion is conversational: the parent LLM runs the
+  // AskUserQuestion loops driven by skills/senai-discussion.md, then
+  // calls recordDiscussion from mission-brief.ts. This slash command
+  // emits the stage prompt that loads the skill; the parent does the
+  // actual Q&A and writes the brief via its own tool calls.
+  pi.registerCommand("senai-discussion", {
+    description: "Open a discussion with the user to refine the mission: /senai-discussion <topic>",
+    handler: async (args, ctx) => {
+      const topic = args.trim();
+      const state = loadState(ctx.cwd);
+      const location = state.runId ? `run ${state.runId}` : "pre-run";
+      const stage = state.currentStage;
+      ctx.ui.notify(
+        `Opening /senai-discussion (${location}, stage '${stage}').\n` +
+          `The parent will ask the mission-type question first, then 2-5 focused questions.\n` +
+          `Use /senai-discussion-approve to finalize the mission-brief.md.`,
+        "info",
+      );
+      const briefLocation = state.runId
+        ? getRunMissionBriefPath(ctx.cwd, state.runId)
+        : getPreRunMissionBriefPath(ctx.cwd);
+      const prompt = [
+        `<pi-senai stage="discussion">`,
+        `Topic: ${topic || "(no topic — start with the mission-type question)"}`,
+        `Run: ${state.runId || "(none — pre-run)"}`,
+        `Stage: ${state.currentStage}`,
+        `Brief location: ${briefLocation}`,
+        `</pi-senai>`,
+        ``,
+        loadSkill("discussion"),
+      ].join("\n");
+      pi.sendUserMessage(prompt);
+    },
+  });
+
+  pi.registerCommand("senai-discussion-approve", {
+    description: "Finalize the current mission-brief.md (clears the draft marker, logs the event)",
+    handler: async (_args, ctx) => {
+      const state = loadState(ctx.cwd);
+      const briefPath = state.runId
+        ? getRunMissionBriefPath(ctx.cwd, state.runId)
+        : getPreRunMissionBriefPath(ctx.cwd);
+
+      if (!fs.existsSync(briefPath)) {
+        ctx.ui.notify(
+          "No mission-brief.md found. Run /senai-discussion first.",
+          "warning",
+        );
+        return;
+      }
+
+      const raw = fs.readFileSync(briefPath, "utf8");
+      const missing = validateBriefSections(raw);
+      if (missing.length > 0) {
+        const proceed = await runSimpleConfirm(
+          ctx,
+          "Mission brief has gaps",
+          `The brief is missing required sections:\n${missing.join("\n")}\n\nFinalize anyway?`,
+        );
+        if (!proceed) {
+          ctx.ui.notify("Cancelled. Fill the missing sections, then re-run /senai-discussion-approve.", "info");
+          return;
+        }
+      }
+
+      finalizeMissionBrief(briefPath);
+
+      // Log the event. We re-read the transcript directory to find the
+      // most recent transcript file (the parent just wrote one).
+      const transcriptsDir = state.runId
+        ? getRunDiscussionsDir(ctx.cwd, state.runId)
+        : getPreRunDiscussionDir(ctx.cwd);
+      let transcriptPath = "";
+      try {
+        const files = fs
+          .readdirSync(transcriptsDir)
+          .filter((n) => /^discussion-\d{2}-/.test(n))
+          .sort();
+        const last = files[files.length - 1];
+        if (last) transcriptPath = path.join(transcriptsDir, last);
+      } catch {
+        // Directory might not exist if the parent forgot to write a transcript.
+        transcriptPath = "";
+      }
+
+      const event: DiscussionEvent = {
+        ts: new Date().toISOString(),
+        transcriptPath: path.relative(ctx.cwd, transcriptPath) || transcriptPath,
+        briefPath: path.relative(ctx.cwd, briefPath),
+        afterStage: state.runId ? state.currentStage : undefined,
+      };
+
+      const recorded = recordDiscussion(ctx.cwd, state, event);
+      if (!recorded.ok) {
+        ctx.ui.notify(recorded.reason, "error");
+        return;
+      }
+
+      ctx.ui.notify(
+        `Mission brief finalized. Discussions so far: ${recorded.state.discussions ?? 1}.\n` +
+          (state.runId
+            ? "Next: run /senai-plan again or /senai-approve to continue the run."
+            : "Next: run /senai-plan <mission> to start a run that consumes this brief."),
+        "info",
+      );
     },
   });
 }

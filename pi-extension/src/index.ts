@@ -7,6 +7,7 @@ import {
   registerArchitectCommand,
   registerArchitectInputsCommands,
   registerCommands,
+  registerDiscussionCommands,
   registerDoctorCommand,
   registerDocsStructureCommand,
   registerFilesCommands,
@@ -38,6 +39,7 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   }
 
   registerCommands(pi);
+  registerDiscussionCommands(pi);
   registerAgentCommands(pi);
   registerFilesCommands(pi);
   registerAgentsFilesCommands(pi);

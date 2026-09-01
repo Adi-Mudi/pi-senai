@@ -6,6 +6,7 @@ import * as path from "node:path";
 import {
   checkStageArtifact,
   registerCommands,
+  registerDiscussionCommands,
   registerAgentCommands,
   registerFilesCommands,
   registerAgentsFilesCommands,
@@ -127,6 +128,7 @@ describe("commands", () => {
 
   it("registerCommands registers all senai commands", () => {
     registerCommands(makeApi());
+    registerDiscussionCommands(makeApi());
 
     [
       "senai-plan",
@@ -136,6 +138,8 @@ describe("commands", () => {
       "senai-status",
       "senai-approve",
       "senai-reset",
+      "senai-discussion",
+      "senai-discussion-approve",
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
   });
 
@@ -3217,5 +3221,170 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
       "# My real README\n",
       "real README must be untouched",
     );
+  });
+
+  // /senai-discussion command cases — share closure with the main describe so
+  // tmpDir / makeApi / makeCtx / commandHandlers / notifications / sentMessages
+  // are all in scope.
+  it("/senai-plan does NOT warn when state is none", async () => {
+    registerCommands(makeApi());
+    notifications.length = 0;
+    sentMessages.length = 0;
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+    assert.ok(!notifications.some((n) => n.message.includes("Active run in progress")));
+  });
+
+  it("/senai-plan does NOT warn when state is delivered", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    // Approve through all stages to reach delivered.
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
+
+    notifications.length = 0;
+    await commandHandlers["senai-plan"]("New", makeCtx());
+    assert.ok(!notifications.some((n) => n.message.includes("Active run in progress")));
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+    assert.strictEqual(loadState(tmpDir).mission, "New");
+  });
+
+  it("/senai-plan warns and cancels when a run is active and the user declines", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("First", makeCtx());
+    // Now in 'planning' (active). Try to start another.
+    notifications.length = 0;
+
+    const ctx = makeCtx();
+    ctx.ui.confirm = async () => false;
+    await commandHandlers["senai-plan"]("Second", ctx);
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.currentStage, "planning", "state must not advance");
+    assert.strictEqual(state.mission, "First", "mission must not change");
+    assert.ok(
+      notifications.some((n) =>
+        n.message.includes("Active run in progress") ||
+        n.message.includes("Cancelled"),
+      ),
+    );
+  });
+
+  it("/senai-plan warns and proceeds when the user confirms", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("First", makeCtx());
+
+    const ctx = makeCtx();
+    ctx.ui.confirm = async () => true;
+    await commandHandlers["senai-plan"]("Second", ctx);
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.mission, "Second", "mission replaced on confirm");
+    assert.strictEqual(state.currentStage, "planning");
+  });
+
+  it("/senai-plan consumes a pre-run mission-brief.md and stores missionBriefPath", async () => {
+    const briefRel = ".IDE_Plans/senai/discussions/pre-run/mission-brief.md";
+    fs.mkdirSync(path.dirname(path.join(tmpDir, briefRel)), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, briefRel), "## Refined mission\nfoo\n", "utf8");
+
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.missionBriefPath, briefRel);
+    assert.ok(
+      notifications[0].message.includes(`Pre-run mission brief consumed: ${briefRel}`),
+    );
+  });
+
+  it("/senai-discussion with no active run emits the skill and pre-run notify", async () => {
+    registerDiscussionCommands(makeApi());
+    notifications.length = 0;
+    sentMessages.length = 0;
+
+    await commandHandlers["senai-discussion"]("refine", makeCtx());
+
+    assert.ok(notifications[0].message.includes("pre-run"));
+    assert.strictEqual(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes("Discussion Stage"));
+    assert.ok(sentMessages[0].includes("Brief location:"));
+  });
+
+  it("/senai-discussion-approve with no brief warns and skips", async () => {
+    registerDiscussionCommands(makeApi());
+    notifications.length = 0;
+
+    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("No mission-brief.md found"));
+  });
+
+  it("/senai-discussion-approve finalizes a brief and appends a discussionEvents entry", async () => {
+    // Pre-create a brief AND a transcript file under pre-run, so the
+    // approve command has something to record against.
+    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    const briefPath = path.join(preDir, "mission-brief.md");
+    fs.writeFileSync(
+      briefPath,
+      [
+        "<!-- pi-senai mission-brief: draft -->",
+        "## Problem statement\nx",
+        "## Mission type\nfeature",
+        "## Success criteria\n- ok",
+        "## Out-of-scope\n- n/a",
+        "## Open questions\n- none",
+        "## Refined mission\nm",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(preDir, "discussion-01-refine.md"), "t", "utf8");
+
+    registerDiscussionCommands(makeApi());
+    notifications.length = 0;
+    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+
+    const after = fs.readFileSync(briefPath, "utf8");
+    assert.ok(!after.startsWith("<!-- pi-senai mission-brief: draft -->"));
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.discussions, 1);
+    assert.strictEqual(state.discussionEvents?.length, 1);
+    assert.strictEqual(state.discussionEvents?.[0].transcriptPath, ".IDE_Plans/senai/discussions/pre-run/discussion-01-refine.md");
+    assert.strictEqual(state.discussionEvents?.[0].afterStage, undefined, "pre-run has no afterStage");
+    assert.ok(notifications[0].message.includes("Mission brief finalized"));
+  });
+
+  it("/senai-discussion-approve warns before finalizing a brief with missing sections", async () => {
+    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    const briefPath = path.join(preDir, "mission-brief.md");
+    fs.writeFileSync(
+      briefPath,
+      [
+        "<!-- pi-senai mission-brief: draft -->",
+        "## Problem statement\nx",
+        // All other sections missing.
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(preDir, "discussion-01-test.md"), "t", "utf8");
+
+    registerDiscussionCommands(makeApi());
+    const ctx = makeCtx();
+    ctx.ui.confirm = async () => false;
+    notifications.length = 0;
+    await commandHandlers["senai-discussion-approve"]("", ctx);
+
+    // Marker stays because the user declined the missing-sections override.
+    assert.ok(fs.readFileSync(briefPath, "utf8").startsWith("<!-- pi-senai mission-brief: draft -->"));
+    assert.ok(
+      notifications.some((n) => n.message.includes("Cancelled")),
+      "declining the gaps override emits a Cancelled notify",
+    );
+    assert.ok((loadState(tmpDir).discussions ?? 0) === 0);
   });
 });

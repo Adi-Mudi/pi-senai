@@ -65,7 +65,8 @@ npm test
 │   ├── compaction.ts             # deterministic compaction summary for active runs
 │   ├── completion-guard.ts       # artifact-based subagent completion/stall guard
 │   ├── doc-catalog.ts            # doc-type catalog: fixed templates + length caps (single source of truth)
-│   └── doc-selection.ts          # deterministic Document stage writer selection + batched write plan
+│   ├── doc-selection.ts          # deterministic Document stage writer selection + batched write plan
+│   └── mission-brief.ts          # /senai-discussion helpers: draft marker, monotonic sequence, amendment cross-out, section validation
 ├── pi-extension/test/   # unit tests
 ├── skills/              # stage skill markdown files
 │   ├── senai-plan.md
@@ -101,6 +102,8 @@ All three files are required before any stage command (`/senai-plan`, `/senai-im
 Every `.pi/senai/` config file (these three plus `architect-inputs.json`) starts with a `_comment` field: a one-line plain instruction saying what the file is for and which command manages it. Savers always write it; loaders strip it after parsing, so the in-memory shape and validation are unchanged.
 
 Use `/senai-doctor` to audit the full setup. Every report opens with a "Setup progress" section that marks the 7 setup steps done or pending and names the one next command, so a first-time user can follow it step by step. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs. Once an architecture exists, it also validates the architecture agent mapping (the seven architecture-bound roles must resolve to the generated agents (code-review shares the reviewer-correctness agent)), the generated agent file contents (tools, skill link, architecture.md/ADR references, forbidden patterns), and drift (content-hash manifest). Strict checks also cover generated team agents (mandate and technology craft), technology resources, every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), and a secret scan over agent, skill, and config files. A "Subagent extension" section audits pi's package list (pi-interactive-subagents present and >= 3.7.2, warnings for multiple subagent providers and dead package entries), a "Stray files" section flags leftover `tmp_*.sh`/`tmp_*.ts` helper scripts in the project root and run directories, and the environment section recommends `retry.maxRetries >= 5`, warns when compaction is disabled, and shows pi's auto-compact threshold. The run audit reports a delivered run with missing deliver artifacts, an empty `document/` directory, or implement-stage files inside `deliver/` as errors, and warns when plan.md exceeds 50KB. A "Documentation factory" section validates the docs skeleton from `/senai-generate-docs-structure` (missing stubs warn; filled docs must contain their template's required sections and stay within the catalog length cap; stray non-stub files in factory docs folders are info). Each run saves the report to `.IDE_Plans/senai/doctor-report.md`.
+
+A "Discussions" section validates every `mission-brief.md` (pre-run and per-run) against the required section list (Problem statement, Mission type, Success criteria, Out-of-scope, Open questions, Refined mission), flags runs with multiple active `discussion-*` subfolders, and reports orphan pre-run transcripts with no brief. Setup progress gains one optional step noting `/senai-discussion` as a pre-Plan refinement pass.
 
 ## Document factory
 
@@ -183,10 +186,13 @@ State file:
 .IDE_Plans/senai/state.json
 ```
 
+`state.json` schema (version 1): `version`, `mission`, `runId`, `currentStage`, `startedAt`, `updatedAt`, `stageResults`, plus (since the discussion entry point) the optional fields `discussions: number`, `discussionEvents: Array<{ts, transcriptPath, briefPath, afterStage?}>`, and `missionBriefPath?: string`. Legacy v1 states load with these fields undefined; `defaultState()` seeds `discussions: 0` and `discussionEvents: []` for fresh runs.
+
 Run artifacts:
 
 ```text
 .IDE_Plans/senai/runs/<run-id>/
+├── mission-brief.md          # living doc updated by /senai-discussion (when active run)
 ├── plan/
 │   ├── plan.md
 │   ├── plan-overview.md
@@ -202,9 +208,22 @@ Run artifacts:
 │       └── review-tests.md
 ├── implement/
 ├── document/
-└── deliver/
-    ├── security-report.md
-    └── deliver-summary.md
+├── deliver/
+│   ├── security-report.md
+│   └── deliver-summary.md
+└── discussions/              # per-run transcripts (monotonic NN)
+    ├── discussion-01-<slug>.md
+    ├── discussion-02-<slug>.md
+    └── …
+```
+
+Pre-run discussion folder (no run active yet):
+
+```text
+.IDE_Plans/senai/discussions/pre-run/
+├── mission-brief.md          # consumed by /senai-plan on next start
+├── discussion-01-<slug>.md
+└── …
 ```
 
 Run ID format:
@@ -227,6 +246,8 @@ YYYY-MM-DD-HH-MM-<mission-slug>
 | `delivering` → `delivered` | `/senai-approve` |
 
 Stage transitions are defined in `constants.ts` as `STAGE_TRANSITIONS`.
+
+**Discussion is orthogonal.** `/senai-discussion` and `/senai-discussion-approve` are NOT stages — they do NOT appear in `STAGE_TRANSITIONS` and never mutate `state.json.stage`. The state machine stays linear. Discussions run from `none`, any active stage, or `delivered`. When a run is active, artifacts live under `.IDE_Plans/senai/runs/<run-id>/`; otherwise under `.IDE_Plans/senai/discussions/pre-run/`. Plan replacement uses an ADR-style supersede banner on `plan.md` rather than overwriting it.
 
 ## Coding conventions
 

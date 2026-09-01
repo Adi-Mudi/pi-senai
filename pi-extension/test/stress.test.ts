@@ -18,6 +18,7 @@ import { buildDocWritePlan, generateDocsStructure } from "../src/doc-selection.j
 import { DOC_TYPES, isDocStub, renderTemplateStub, type DocTypeId } from "../src/doc-catalog.js";
 import { listMissingStageArtifacts } from "../src/commands.js";
 import { makeRunId } from "../src/constants.js";
+import { recordDiscussion } from "../src/mission-brief.js";
 import { saveArchitectProfile } from "../src/architect.js";
 import { createHash } from "node:crypto";
 
@@ -577,6 +578,85 @@ describe("doctor docs-factory stress", () => {
       elapsed < GENEROUS_DOCTOR_BUDGET_MS,
       `10 diagnostics took ${elapsed.toFixed(0)} ms (budget ${GENEROUS_DOCTOR_BUDGET_MS} ms)`,
     );
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+});
+
+describe("discussions stress", () => {
+  it("50 sequential recordDiscussion calls keep transcripts monotonic and the brief bounded", () => {
+    const cwd = makeTmp("stress-disc-monotonic-");
+    const start = performance.now();
+
+    for (let i = 0; i < 50; i++) {
+      recordDiscussion({
+        cwd,
+        label: `iteration-${i}`,
+        transcript: `transcript-${i}`,
+        discussionSection: `notes-${i}`,
+      });
+    }
+
+    const elapsed = performance.now() - start;
+    console.log(`discussions: 50 recordDiscussion calls in ${elapsed.toFixed(0)} ms`);
+
+    const transcriptsDir = path.join(cwd, ".IDE_Plans/senai/discussions/pre-run");
+    const allEntries = fs.readdirSync(transcriptsDir).sort();
+    const files = allEntries.filter((n) => /^discussion-\d{2}-/.test(n));
+    assert.strictEqual(files.length, 50, `transcript files: ${files.join(", ")}`);
+    assert.ok(files[0].startsWith("discussion-01-"));
+    assert.ok(files[49].startsWith("discussion-50-"));
+
+    const briefPath = path.join(cwd, ".IDE_Plans/senai/discussions/pre-run/mission-brief.md");
+    const brief = fs.readFileSync(briefPath, "utf8");
+    const sections = brief.match(/## Discussion — /g) ?? [];
+    assert.strictEqual(sections.length, 50);
+
+    const size = fs.statSync(briefPath).size;
+    assert.ok(size < 200 * 1024, `brief ${size} bytes should stay under 200KB`);
+
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("20 recordDiscussion calls in a tight burst stay under the misc budget", () => {
+    const cwd = makeTmp("stress-disc-burst-");
+    const start = performance.now();
+    for (let i = 0; i < 20; i++) {
+      recordDiscussion({
+        cwd,
+        label: `burst-${i}`,
+        transcript: "t",
+        discussionSection: "d",
+      });
+    }
+    const elapsed = performance.now() - start;
+    console.log(`discussions: 20 recordDiscussion calls in ${elapsed.toFixed(0)} ms`);
+    assert.ok(
+      elapsed < GENEROUS_MISC_BUDGET_MS,
+      `burst took ${elapsed.toFixed(0)} ms (budget ${GENEROUS_MISC_BUDGET_MS} ms)`,
+    );
+    fs.rmSync(cwd, { recursive: true, force: true });
+  });
+
+  it("transcripts never cross between runs", () => {
+    const cwd = makeTmp("stress-disc-runs-");
+    for (const runId of ["run-aaa", "run-bbb", "run-ccc", "run-ddd", "run-eee"]) {
+      for (let i = 0; i < 3; i++) {
+        recordDiscussion({
+          cwd,
+          runId,
+          label: `r-${i}`,
+          transcript: "t",
+          discussionSection: "d",
+        });
+      }
+    }
+    for (const runId of ["run-aaa", "run-bbb", "run-ccc", "run-ddd", "run-eee"]) {
+      const d = path.join(cwd, ".IDE_Plans/senai/runs", runId, "discussions");
+      const files = fs.readdirSync(d).sort();
+      assert.strictEqual(files.length, 3, `${runId} should have 3 transcripts`);
+      assert.ok(files[0].startsWith("discussion-01-"));
+      assert.ok(files[2].startsWith("discussion-03-"));
+    }
     fs.rmSync(cwd, { recursive: true, force: true });
   });
 });

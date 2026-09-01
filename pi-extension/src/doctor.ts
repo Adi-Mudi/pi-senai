@@ -44,6 +44,7 @@ import {
   parseKeywords,
 } from "./agent-generator.js";
 import { DOC_TYPES, isDocStub, type DocTypeId } from "./doc-catalog.js";
+import { validateBriefSections } from "./mission-brief.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 
@@ -131,6 +132,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
 
   sections.push(checkSetupProgress(cwd));
   sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
+  sections.push(checkDiscussions(cwd));
 
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
   sections.push(checkAgentMappings(resolvedAgents));
@@ -255,9 +257,13 @@ function checkSetupProgress(cwd: string): DiagnosticSection {
     status: allDone ? "ok" : "info",
     message: `7. First run — ${allDone ? "ready (/senai-plan <mission>)" : "pending"}`,
   });
+  items.push({
+    status: "info",
+    message: "8. Optional: /senai-discussion — refine the mission in a conversational pass before /senai-plan.",
+  });
 
   if (allDone) {
-    items.push({ status: "ok", message: "Setup complete — run /senai-plan <mission> to start your first run." });
+    items.push({ status: "ok", message: "Setup complete — run /senai-plan <mission> to start your first run (or /senai-discussion first to refine the mission)." });
   } else {
     const next = steps.find((s) => !s.done)!;
     items.push({ status: "info", message: `Setup progress: ${completed}/5 checks complete. Next: run ${next.command}.` });
@@ -2288,4 +2294,104 @@ export function formatDiagnosticReport(report: DiagnosticReport): string {
   }
 
   return lines.join("\n");
+}
+
+/** Discussion checks:
+ *  1. For each run directory containing a discussions/ folder, validate that
+ *     exactly one discussion transcript subfolder is active — multiple active
+ *     subfolders → warning naming the run id.
+ *  2. For every existing mission-brief.md (pre-run and per-run), validate
+ *     that all REQUIRED_BRIEF_SECTIONS are present, in order. Missing
+ *     sections → warning naming the file and the missing section.
+ *  3. Orphan pre-run discussion folder with no mission-brief.md → info
+ *     (the user started a discussion but never wrote the brief). */
+function checkDiscussions(cwd: string): DiagnosticSection {
+  const title = "Discussions";
+  const items: DiagnosticItem[] = [];
+
+  // Per-run folders
+  const runsRoot = path.join(cwd, ".IDE_Plans/senai/runs");
+  let runDirs: string[] = [];
+  try {
+    runDirs = fs.readdirSync(runsRoot, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => path.join(runsRoot, e.name));
+  } catch {
+    runDirs = [];
+  }
+
+  for (const runDir of runDirs) {
+    const discussionsDir = path.join(runDir, "discussions");
+    let entries: string[] = [];
+    try {
+      entries = fs.readdirSync(discussionsDir, { withFileTypes: true })
+        .filter((e) => e.isDirectory())
+        .map((e) => e.name);
+    } catch {
+      entries = [];
+    }
+    // Active folders = directories whose name starts with "discussion-".
+    const active = entries.filter((n) => /^discussion-/.test(n));
+    if (active.length > 1) {
+      items.push({
+        status: "warning",
+        message: `Run ${path.basename(runDir)} has ${active.length} active discussion folders`,
+        details: [
+          ...active.map((a) => `  ${a}`),
+          "Multiple active discussions on one run usually means a stale parent left a folder open. Archive the older ones.",
+        ],
+      });
+    }
+
+    const briefPath = path.join(runDir, "mission-brief.md");
+    if (fs.existsSync(briefPath)) {
+      const brief = fs.readFileSync(briefPath, "utf8");
+      const missing = validateBriefSections(brief);
+      if (missing.length > 0) {
+        items.push({
+          status: "warning",
+          message: `Mission brief in run ${path.basename(runDir)} is missing ${missing.length} required section(s)`,
+          details: [...missing.map((m) => `  ${m}`), "Run /senai-discussion to add the missing sections."],
+        });
+      }
+    }
+  }
+
+  // Pre-run folder
+  const preRunDir = path.join(cwd, ".IDE_Plans/senai/discussions/pre-run");
+  let preRunEntries: string[] = [];
+  try {
+    preRunEntries = fs.readdirSync(preRunDir);
+  } catch {
+    preRunEntries = [];
+  }
+
+  const preRunHasBrief = fs.existsSync(path.join(preRunDir, "mission-brief.md"));
+  const preRunHasTranscripts = preRunEntries.some((n) => /^discussion-\d{2}-/.test(n));
+
+  if (preRunHasTranscripts && !preRunHasBrief) {
+    items.push({
+      status: "info",
+      message: "Pre-run discussions exist but no mission-brief.md was written.",
+      details: ["Run /senai-discussion-approve to finalize the brief, or delete the orphan transcripts."],
+    });
+  }
+
+  if (preRunHasBrief) {
+    const brief = fs.readFileSync(path.join(preRunDir, "mission-brief.md"), "utf8");
+    const missing = validateBriefSections(brief);
+    if (missing.length > 0) {
+      items.push({
+        status: "warning",
+        message: `Pre-run mission brief is missing ${missing.length} required section(s)`,
+        details: [...missing.map((m) => `  ${m}`), "Run /senai-discussion to add the missing sections."],
+      });
+    }
+  }
+
+  if (items.length === 0) {
+    items.push({ status: "ok", message: "No discussion artifacts to validate (or all valid)." });
+  }
+
+  return { title, items };
 }

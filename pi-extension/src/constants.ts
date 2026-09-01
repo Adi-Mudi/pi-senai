@@ -84,6 +84,33 @@ export function getRunDir(cwd: string, runId: string): string {
   return path.join(getSenaiDir(cwd), RUNS_DIR, runId);
 }
 
+export const PRE_RUN_DISCUSSION_DIR = ".IDE_Plans/senai/discussions/pre-run";
+
+/** Absolute path to the pre-run discussion directory (used when no run is
+ *  active yet). */
+export function getPreRunDiscussionDir(cwd: string): string {
+  return path.join(cwd, PRE_RUN_DISCUSSION_DIR);
+}
+
+/** Absolute path to a run's discussion directory. Created on demand by the
+ *  discussion command; never created by /senai-plan. */
+export function getRunDiscussionsDir(cwd: string, runId: string): string {
+  return path.join(getRunDir(cwd, runId), "discussions");
+}
+
+/** Absolute path to the active run's mission-brief.md. Lives at the run
+ *  root (sibling of plan/, implement/, document/, deliver/, discussions/),
+ *  matching the spec-kit in-place integration. */
+export function getRunMissionBriefPath(cwd: string, runId: string): string {
+  return path.join(getRunDir(cwd, runId), "mission-brief.md");
+}
+
+/** Absolute path to a pre-run mission-brief.md (only one exists at a time —
+ *  a new discussion overwrites it after the previous one is approved). */
+export function getPreRunMissionBriefPath(cwd: string): string {
+  return path.join(getPreRunDiscussionDir(cwd), "mission-brief.md");
+}
+
 export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths {
   const runDir = getRunDir(cwd, runId);
   const planDir = path.join(runDir, "plan");

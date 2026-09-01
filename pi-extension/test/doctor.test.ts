@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
@@ -4208,6 +4208,126 @@ describe("doctor stray files and subagent extension", () => {
         "missing provider must be an error",
       );
     }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("doctor checkDiscussions", () => {
+  let tmpDir: string;
+
+  function makeRunDir(runId: string): string {
+    const runDir = path.join(tmpDir, ".IDE_Plans/senai/runs", runId);
+    fs.mkdirSync(runDir, { recursive: true });
+    return runDir;
+  }
+
+  function findSection(report: ReturnType<typeof runSenaiDiagnostic>, title: string) {
+    return report.sections.find((s) => s.title === title);
+  }
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-doctor-disc-"));
+  });
+
+  it("reports ok when there are no discussion artifacts", () => {
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Discussions");
+    assert.ok(section, "Discussions section must exist");
+    assert.ok(
+      section!.items.some(
+        (i) =>
+          i.status === "ok" &&
+          i.message.includes("No discussion artifacts to validate"),
+      ),
+    );
+  });
+
+  it("warns when a run has multiple active discussion folders", () => {
+    const runDir = makeRunDir("run-a");
+    const discDir = path.join(runDir, "discussions");
+    fs.mkdirSync(path.join(discDir, "discussion-aaa"), { recursive: true });
+    fs.mkdirSync(path.join(discDir, "discussion-bbb"), { recursive: true });
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Discussions");
+    assert.ok(section);
+    const warn = section!.items.find(
+      (i) => i.status === "warning" && i.message.includes("run-a"),
+    );
+    assert.ok(warn, "warning should name the run id");
+    assert.ok(warn!.details?.some((d) => d.includes("discussion-aaa")));
+    assert.ok(warn!.details?.some((d) => d.includes("discussion-bbb")));
+  });
+
+  it("warns when a run mission-brief.md is missing required sections", () => {
+    const runDir = makeRunDir("run-b");
+    fs.writeFileSync(
+      path.join(runDir, "mission-brief.md"),
+      "## Problem statement\nx\n",
+      "utf8",
+    );
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Discussions");
+    const warn = section!.items.find(
+      (i) => i.status === "warning" && i.message.includes("run-b"),
+    );
+    assert.ok(warn);
+    assert.ok(warn!.details?.some((d) => d.includes("## Mission type")));
+  });
+
+  it("info when pre-run transcripts exist but no brief", () => {
+    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    fs.writeFileSync(path.join(preDir, "discussion-01-x.md"), "t", "utf8");
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Discussions");
+    const info = section!.items.find(
+      (i) => i.status === "info" && i.message.includes("Pre-run discussions exist but no mission-brief.md"),
+    );
+    assert.ok(info, "info item about orphan transcripts must exist");
+  });
+
+  it("no warning when pre-run mission-brief.md is complete", () => {
+    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(preDir, "mission-brief.md"),
+      [
+        "## Problem statement\nx",
+        "## Mission type\nfeature",
+        "## Success criteria\n- ok",
+        "## Out-of-scope\n- n/a",
+        "## Open questions\n- none",
+        "## Refined mission\nm",
+      ].join("\n"),
+      "utf8",
+    );
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Discussions");
+    assert.ok(
+      !section!.items.some(
+        (i) => i.status === "warning" && i.message.includes("Pre-run mission brief is missing"),
+      ),
+      "complete brief must not warn",
+    );
+  });
+
+  it("setup-progress includes the optional /senai-discussion note", () => {
+    const report = runSenaiDiagnostic(tmpDir);
+    const setup = findSection(report, "Setup progress");
+    assert.ok(setup);
+    assert.ok(
+      setup!.items.some(
+        (i) => i.message.includes("8. Optional: /senai-discussion"),
+      ),
+      "setup progress must list the optional step 8",
+    );
+  });
+
+  afterEach(() => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
