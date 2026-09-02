@@ -69,7 +69,7 @@ import {
   validateBriefSections,
 } from "./mission-brief.js";
 import { atomicWriteFile } from "./atomic-write.js";
-import { withRunLock, describeHolder } from "./lock.js";
+import { withRunLock, describeHolder, forceStealLock, lockInfo } from "./lock.js";
 import {
   createDefaultArchitectInputsConfig,
   getSelectedInputPaths,
@@ -495,6 +495,44 @@ export function registerCommands(pi: ExtensionAPI) {
       if (!confirmed) return;
       resetState(ctx.cwd);
       ctx.ui.notify("Senai state reset.", "info");
+    },
+  });
+
+  // Lock inspection + recovery. /senai-doctor already shows a Lock state
+  // section, but these two commands are the single-purpose escape hatches
+  // when the user just wants to see or clear the lock without running the
+  // full diagnostic.
+  pi.registerCommand("senai-lock-info", {
+    description: "Show the current senai run lock holder, or report it as free",
+    handler: async (_args, ctx) => {
+      const holder = lockInfo(ctx.cwd);
+      if (!holder) {
+        ctx.ui.notify("Senai run lock: free (no holder).", "info");
+        return;
+      }
+      ctx.ui.notify(`Senai run lock: held by ${describeHolder(holder)}.`, "info");
+    },
+  });
+
+  pi.registerCommand("senai-lock-force", {
+    description:
+      "Force-take the senai run lock. Use only when /senai-doctor reports a stale lock.",
+    handler: async (_args, ctx) => {
+      const holder = lockInfo(ctx.cwd);
+      const lines: string[] = [];
+      if (holder) {
+        lines.push(`Current holder: ${describeHolder(holder)}`);
+      } else {
+        lines.push("Current lock: free (no holder).");
+      }
+      lines.push(
+        "Force-take overwrites the holder metadata with this process. " +
+          "Use only when the previous holder has truly exited.",
+      );
+      const confirmed = await runSimpleConfirm(ctx, "Force-take run lock", lines.join("\n"));
+      if (!confirmed) return;
+      const meta = forceStealLock(ctx.cwd);
+      ctx.ui.notify(`Lock force-taken. New holder: ${describeHolder(meta)}.`, "info");
     },
   });
 }

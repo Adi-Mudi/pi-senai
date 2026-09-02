@@ -171,6 +171,23 @@ describe("prompt", () => {
     assert.strictEqual(fs.readFileSync(missionPath, "utf8"), longMission);
   });
 
+  it("buildStagePrompt writes mission.md atomically — no .tmp-* leftover after success", () => {
+    const longMission = "B".repeat(2000);
+    const state = { ...makeState("planning", "run-atomic"), mission: longMission };
+
+    const { prompt } = buildStagePrompt(tmpDir, state, "plan");
+
+    const runDir = path.join(tmpDir, ".IDE_Plans/senai/runs/run-atomic");
+    const leftovers = fs.readdirSync(runDir).filter((n) => n.includes(".tmp"));
+    assert.deepStrictEqual(leftovers, [], "no temp files left after the atomic write");
+    // The atomic write creates mission.md; the prompt references it.
+    assert.ok(prompt.includes("mission.md"));
+    assert.strictEqual(
+      fs.readFileSync(path.join(runDir, "mission.md"), "utf8"),
+      longMission,
+    );
+  });
+
   it("buildStagePrompt keeps short missions inline and writes no mission.md", () => {
     const state = makeState("planning", "run-short");
 

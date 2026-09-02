@@ -41,22 +41,6 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
     console.log(`[pi-senai] Migrated legacy directories: ${migratedDirs.join(", ")}`);
   }
 
-  // Defensive recovery from a previous session that crashed while holding
-  // the run lock (e.g. SIGKILL between the heartbeat and the release). The
-  // recorded pid will be ours only if the OS reused it; in practice it
-  // never matches a fresh process, so this hook is a no-op in the happy
-  // path. Stale locks are also auto-stolen by the next acquireLock() call,
-  // so a missed cleanup here never wedges the run.
-  releaseStaleLockIfHeldByUs(process.cwd(), process.pid);
-
-  // Remove any `.tmp-*` files left over by a previous session that crashed
-  // between writing the temp file and the atomic rename. Cleanup walks the
-  // senai root and its immediate subdirectories.
-  const cleaned = cleanupTempFiles(getSenaiDir(process.cwd()));
-  if (cleaned > 0) {
-    console.log(`[pi-senai] Cleaned ${cleaned} orphan temp file(s) from a previous session.`);
-  }
-
   registerCommands(pi);
   registerDiscussionCommands(pi);
   registerAgentCommands(pi);
@@ -69,9 +53,20 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   registerDocsStructureCommand(pi);
   registerArchitectTools(pi);
 
-  // Surface the active run state in every session_start so the user can
-  // see whether a lock is held even before the first slash command.
+  // Per-project defensive recovery on every session_start:
+  //   1. Release any lock whose recorded pid is ours (process reuse edge case).
+  //   2. Remove orphan `.tmp-*` files left over by a previous session that
+  //      crashed between writing the temp file and the atomic rename.
+  //   3. Surface the current lock state to the user when a run is active.
+  // Runs against `ctx.cwd` so multi-project workspaces get the right cleanup.
   pi.on("session_start", async (_event, ctx) => {
+    releaseStaleLockIfHeldByUs(ctx.cwd, process.pid);
+    const cleaned = cleanupTempFiles(getSenaiDir(ctx.cwd));
+    if (cleaned > 0) {
+      console.log(
+        `[pi-senai] Cleaned ${cleaned} orphan temp file(s) from a previous session in ${ctx.cwd}.`,
+      );
+    }
     const state = loadState(ctx.cwd);
     if (state.currentStage === "none") return;
     const lines = [formatStageStatus(state)];

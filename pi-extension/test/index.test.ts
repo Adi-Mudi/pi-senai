@@ -147,6 +147,89 @@ describe("index", () => {
     delete process.env.PI_SUBAGENT_NAME;
   });
 
+  it("session_start cleans up orphan .tmp-* files inside the senai directory", async () => {
+    // Plant a fake orphan left over by a previous session that crashed
+    // between temp-file write and atomic rename. The cleanup walks the
+    // senai root and one level into immediate subdirectories (e.g.
+    // runs/<id>/).
+    const senaiDir = path.join(tmpDir, ".IDE_Plans/senai");
+    fs.mkdirSync(senaiDir, { recursive: true });
+    fs.writeFileSync(path.join(senaiDir, "state.json.tmp-9999-deadbeef"), "orphan");
+    fs.mkdirSync(path.join(senaiDir, "runs", "orphan-run"), { recursive: true });
+    fs.writeFileSync(path.join(senaiDir, "runs", "orphan-run", "plan.md.tmp-1234-aaaa"), "orphan");
+
+    const api = makeApi();
+    piSenaiExtension(api);
+    await eventHandlers["session_start"]({}, makeCtx());
+
+    // Root-level temp files are removed.
+    const leftovers = fs.readdirSync(senaiDir).filter((n) => n.includes(".tmp"));
+    assert.deepStrictEqual(leftovers, [], "root-level temp files cleaned");
+    // Real files (e.g. the runs/<id> directory itself) are kept.
+    assert.ok(fs.existsSync(path.join(senaiDir, "runs", "orphan-run")));
+  });
+
+  it("session_start surfaces lock info to the user when a run is active", async () => {
+    const api = makeApi();
+    piSenaiExtension(api);
+
+    // Plant an active run.
+    const state = {
+      version: 1,
+      mission: "Test",
+      runId: "run-lock-surf",
+      currentStage: "planning",
+      startedAt: "2026-09-02T10:00:00Z",
+      updatedAt: "2026-09-02T10:00:00Z",
+      stageResults: {},
+    };
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+
+    // Plant a lock holder whose pid is NOT ours — otherwise the
+    // session_start cleanup would release it before lockInfo runs.
+    const lockDir = path.join(tmpDir, ".IDE_Plans/senai/.lock");
+    fs.mkdirSync(lockDir, { recursive: true });
+    const now = new Date().toISOString();
+    fs.writeFileSync(
+      path.join(lockDir, "meta.json"),
+      JSON.stringify({
+        pid: 2_000_000_777,
+        host: "test-host",
+        command: "/senai-approve",
+        startedAt: now,
+        heartbeatAt: now,
+        mode: "approve",
+        runId: "run-lock-surf",
+      }),
+      "utf8",
+    );
+
+    const notifications: string[] = [];
+    const ctx = makeCtx();
+    ctx.ui.notify = (msg: string) => notifications.push(msg);
+    await eventHandlers["session_start"]({}, ctx);
+
+    const statusLine = notifications.find((m) => m.includes("Active stage: planning"));
+    assert.ok(statusLine, "status line emitted when a run is active");
+    const lockLine = notifications.find((m) => m.includes("Lock held by"));
+    assert.ok(lockLine, "lock state surfaced to the user");
+    assert.ok(lockLine!.includes("pid=2000000777"));
+    assert.ok(lockLine!.includes("test-host"));
+  });
+
+  it("session_start is silent when no run is active", async () => {
+    const api = makeApi();
+    piSenaiExtension(api);
+
+    const notifications: string[] = [];
+    const ctx = makeCtx();
+    ctx.ui.notify = (msg: string) => notifications.push(msg);
+    await eventHandlers["session_start"]({}, ctx);
+
+    assert.strictEqual(notifications.length, 0, "no notify when there is no active run");
+  });
+
   it("before_agent_start rejects when state.json is corrupted", async () => {
     const api = makeApi();
     piSenaiExtension(api);
