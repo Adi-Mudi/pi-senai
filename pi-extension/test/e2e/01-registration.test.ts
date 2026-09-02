@@ -7,7 +7,8 @@ import { makeMinimalProjectFiles, seedSenaiConfig } from "./helpers/fixtures.js"
 const SKIP_MESSAGE = "E2E tests require pi binary on PATH and RUN_E2E=1";
 
 // Verified against commands.ts (lines 126, 189, 220, 251, 282, 326, 437,
-// 463, 493, 796, 825, 927, 955, 1245, 1274, 1500, 1514, 1536, 1743, 2066).
+// 463, 493, 796, 825, 927, 955, 1245, 1274, 1500, 1514, 1536, 1743, 2066,
+// plus the lock helpers and cadence commands).
 const EXPECTED_COMMANDS = [
 	"senai-plan",
 	"senai-implement",
@@ -29,6 +30,10 @@ const EXPECTED_COMMANDS = [
 	"senai-configure-architect-inputs",
 	"senai-generate-architect",
 	"senai-generate-sub-agents",
+	"senai-lock-info",
+	"senai-lock-force",
+	"senai-cadence-status",
+	"senai-cadence-reset",
 ];
 
 describe("e2e/01-registration", () => {
