@@ -68,7 +68,7 @@ Use the `subagent` tool (provided by `pi-interactive-subagents`) with pi.dev bes
 
 ## 1. Parallel scouts
 
-Spawn four scouts in parallel, but STAGGER the spawns: launch one scout, wait for its `subagent` tool result to return, then launch the next. Never fire all four spawns in a single burst — 4 simultaneous sessions trigger provider 429 rate limits, and pi's default retry (3 attempts at 2/4/8s) is not enough. Each scout must write its own report.
+Read the **Spawn Cadence** block in your stage prompt — it tells you the current tier (A = parallel burst, B = staggered, C = batch-2, D = fully serial) and the exact dispatch rule for this run. The block is generated from `.IDE_Plans/senai/spawn-cadence.json` and demotes automatically on rate-limit errors. Each scout must write its own report.
 
 **429 playbook:** if a result says `Sub-agent "X" failed ... 429` (rate limit / provider overload):
 1. Wait about 60 seconds (e.g. `sleep 60` via bash) before retrying.
@@ -115,7 +115,7 @@ Spawn the plan-overview writer (agent `planner`) to read `<plan>` and `<discussi
 
 ## 7. Parallel reviewers
 
-Spawn three reviewers, staggered like the scouts: launch one, wait for the spawn result, launch the next. Each writes to its assigned path. On a `429` failure, apply the 429 playbook from section 1 (wait ~60s, then `subagent_resume`). Wait for all three to finish and confirm their files exist (non-empty) before the approval gate.
+Spawn three reviewers, using the dispatch rule from the **Spawn Cadence** block (same cadence as the scouts — the cadence applies to every parallel subagent burst in this stage). Each writes to its assigned path. On a rate-limit failure (429 / 5xx / stopReason:error), apply the 429 playbook from section 1 (wait ~60s, then `subagent_resume`). Wait for all three to finish and confirm their files exist (non-empty) before the approval gate.
 
 - **reviewer-correctness** → `<reviewCorrectness>`: Is the plan technically correct and complete?
 - **reviewer-security** → `<reviewSecurity>`: Security and privacy concerns?

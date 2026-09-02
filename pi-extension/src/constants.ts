@@ -5,6 +5,7 @@ export const STATE_FILE = "state.json";
 export const RUNS_DIR = "runs";
 export const ARCHITECT_STATE_DIR = ".pi/architect";
 export const ARCHITECT_MAP_DIR = ".IDE_Plans/architect-map";
+export const CADENCE_FILE = "spawn-cadence.json";
 
 /** Lock directory name under SENAI_DIR. Holds `meta.json` while a Senai
  *  command holds the run lock. The directory itself is the lock primitive
@@ -72,6 +73,13 @@ export interface StageArtifactPaths {
 
 export function getSenaiDir(cwd: string): string {
   return path.join(cwd, SENAI_DIR);
+}
+
+/** Absolute path to the adaptive spawn cadence state file. Lives next to
+ *  state.json; the cadence tracks which dispatch tier (A/B/C/D) the Plan
+ *  stage should use. */
+export function getCadencePath(cwd: string): string {
+  return path.join(getSenaiDir(cwd), CADENCE_FILE);
 }
 
 export function getLockDir(cwd: string): string {

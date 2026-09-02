@@ -9,6 +9,11 @@ import {
   type AgentFrontmatter,
 } from "./agent-discovery.js";
 import { lockInfo } from "./lock.js";
+import {
+  D_FLOOR_CLEAN,
+  PROMOTE_AFTER_CLEAN,
+  loadCadenceState,
+} from "./spawn-cadence.js";
 import { loadAgentConfig, resolveAgentName, type AgentConfig } from "./agent-config.js";
 import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { loadAgentsFilesConfig, type AgentsFilesConfig } from "./agents-files-config.js";
@@ -133,6 +138,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
 
   sections.push(checkSetupProgress(cwd));
   sections.push(checkLock(cwd));
+  sections.push(checkCadence(cwd));
   sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
   sections.push(checkDiscussions(cwd));
 
@@ -320,6 +326,84 @@ function checkLock(cwd: string): DiagnosticSection {
   }
 
   return { title: "Lock state", items };
+}
+
+/** Reports the adaptive spawn cadence for the Plan stage. Tells the user
+ *  which dispatch tier (A/B/C/D) is currently in effect, when the last
+ *  rate-limit error fired, and whether the floor (tier D) has been stuck
+ *  long enough to deserve a manual reset. */
+function checkCadence(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const state = loadCadenceState(cwd);
+
+  const tierLabel: Record<string, string> = {
+    A: "A (parallel burst)",
+    B: "B (staggered)",
+    C: "C (batch-2)",
+    D: "D (fully serial)",
+  };
+
+  items.push({
+    status: "ok",
+    message: `Cadence tier: ${tierLabel[state.tier] ?? state.tier}` +
+      (state.consecutiveCleanRuns > 0
+        ? ` (${state.consecutiveCleanRuns} clean run${state.consecutiveCleanRuns === 1 ? "" : "s"} since last 429)`
+        : " (fresh)"),
+  });
+
+  if (state.last429At) {
+    items.push({
+      status: "info",
+      message: `Last rate-limit error: ${state.last429At}`,
+    });
+  } else {
+    items.push({
+      status: "info",
+      message: "No rate-limit errors recorded for this project.",
+    });
+  }
+
+  if (state.tier === "A") {
+    items.push({
+      status: "info",
+      message: `Tier A is the ceiling. The Plan stage runs scouts in a single burst.`,
+    });
+  } else if (state.tier === "D") {
+    const cleanNote =
+      state.consecutiveCleanRuns >= D_FLOOR_CLEAN
+        ? ` — eligible to escape to C (run /senai-cadence-reset).`
+        : ` — ${D_FLOOR_CLEAN - state.consecutiveCleanRuns} more clean run(s) before escape is eligible.`;
+    items.push({
+      status: state.consecutiveCleanRuns >= D_FLOOR_CLEAN ? "warning" : "info",
+      message: `Tier D is the floor. The Plan stage runs scouts one at a time.${cleanNote}`,
+    });
+  } else {
+    items.push({
+      status: "info",
+      message: `Promotes to the next-faster tier after ${PROMOTE_AFTER_CLEAN} consecutive clean runs.`,
+    });
+  }
+
+  if (state.history.length > 0) {
+    const recent = state.history.slice(-5);
+    items.push({
+      status: "info",
+      message: `Recent history (last ${recent.length} of ${state.history.length}):`,
+    });
+    for (const entry of recent) {
+      items.push({
+        status: "info",
+        message: `  ${entry.ts}  ${entry.from} → ${entry.to}  (${entry.reason})`,
+      });
+    }
+  }
+
+  items.push({
+    status: "info",
+    message: "Use /senai-cadence-status for the full report, /senai-cadence-reset to escape tier D.",
+  });
+
+  return { title: "Spawn cadence", items };
 }
 
 function checkConfigFiles(

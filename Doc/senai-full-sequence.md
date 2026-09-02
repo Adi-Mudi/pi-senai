@@ -62,6 +62,9 @@ Other commands:
 - `/senai-reset` — clear the active run state (artifacts are preserved).
 - `/senai-discussion "<topic>"` — open a conversational mission-refinement pass (parent LLM only, no subagents). Invocable from any state. Writes a draft `mission-brief.md` and a transcript `discussions/discussion-NN-<slug>.md`.
 - `/senai-discussion-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Discussion — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/senai/discussions/pre-run/mission-brief.md`.
+- `/senai-cadence-status` — show the current Plan-stage spawn cadence tier (read-only).
+- `/senai-cadence-reset` — reset the spawn cadence to tier A (with confirm dialog).
+- `/senai-lock-info` and `/senai-lock-force` — inspect or force-take the project-wide run lock.
 
 ---
 
@@ -195,6 +198,17 @@ Auto-starts Implement
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
 - The main agent asks the user via the `AskUserQuestion` tool.
 - The main agent appends the user's answers to `discussion-notes.md`.
+
+### Spawn Cadence (adaptive)
+- The Plan stage runs four scouts in parallel and three reviewers in parallel. Burst-firing them all at once can trip provider 429 rate limits; firing them strictly serially is wasteful for users with healthy quotas.
+- An adaptive cadence module (`pi-extension/src/spawn-cadence.ts`) persists a per-project dispatch tier in `.IDE_Plans/senai/spawn-cadence.json`. The Plan-stage prompt injects a `Spawn Cadence (adaptive)` block with the current tier's exact dispatch rule. Four tiers, in order of decreasing speed:
+  - **A (parallel burst, default start)** — launch all N at once.
+  - **B (staggered)** — launch one, sleep 5s, launch the next.
+  - **C (batch-2)** — launch 2, sleep 10s, launch next 2.
+  - **D (fully serial, floor)** — launch one, wait for artifact, launch next.
+- Demotion triggers: a rate-limit-style error in any extension steer (429 / 5xx / `stopReason:error` from pi-interactive-subagents v3.7.2+). Other errors (auth, network, tool bugs, missing artifacts) do NOT trigger demotion — slower spawning will not fix those.
+- Promotion: 3 consecutive clean Plan-stage approvals (counted automatically by `/senai-approve`). Tier D is the floor and requires 7 clean runs + a manual `/senai-cadence-reset` to escape.
+- The Document / Implement / Deliver stages are unchanged by this feature.
 
 ### Approval Gate
 - If the plan and reviews look good → run `/senai-approve`. This marks the plan approved and automatically starts the Implement stage.

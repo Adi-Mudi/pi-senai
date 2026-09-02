@@ -71,6 +71,12 @@ import {
 import { atomicWriteFile } from "./atomic-write.js";
 import { withRunLock, describeHolder, forceStealLock, lockInfo } from "./lock.js";
 import {
+  buildCadenceBlock,
+  loadCadenceState,
+  recordCleanRun,
+  resetCadence,
+} from "./spawn-cadence.js";
+import {
   createDefaultArchitectInputsConfig,
   getSelectedInputPaths,
   loadArchitectInputsConfig,
@@ -406,6 +412,18 @@ export function registerCommands(pi: ExtensionAPI) {
             return { kind: "error" as const, message: firstAdvance.reason };
           }
 
+          // Adaptive spawn cadence: count a clean Plan-stage approval so the
+          // tier can promote after 3 consecutive clean runs. Other stages
+          // don't affect the cadence — only the Plan stage has scouts that
+          // need adaptive dispatch.
+          if (current === "planning") {
+            try {
+              recordCleanRun(ctx.cwd);
+            } catch {
+              // Best-effort: a cadence write failure must not block approval.
+            }
+          }
+
           const completedStage = expectedNext;
           const nextCommand = NEXT_COMMAND[completedStage];
           const nextWorkingStage = STAGE_COMMANDS[completedStage];
@@ -533,6 +551,51 @@ export function registerCommands(pi: ExtensionAPI) {
       if (!confirmed) return;
       const meta = forceStealLock(ctx.cwd);
       ctx.ui.notify(`Lock force-taken. New holder: ${describeHolder(meta)}.`, "info");
+    },
+  });
+
+  pi.registerCommand("senai-cadence-status", {
+    description:
+      "Show the current adaptive spawn cadence (Plan-stage dispatch tier). Read-only.",
+    handler: async (_args, ctx) => {
+      const state = loadCadenceState(ctx.cwd);
+      const lines: string[] = [
+        `Spawn cadence: tier ${state.tier}` +
+          (state.consecutiveCleanRuns > 0
+            ? ` (${state.consecutiveCleanRuns} clean run${state.consecutiveCleanRuns === 1 ? "" : "s"} since last 429)`
+            : " (fresh)"),
+        `Last rate-limit error: ${state.last429At ?? "none recorded"}`,
+        `Last promotion-eligible: ${state.lastPromotableAt ?? "n/a"}`,
+      ];
+      if (state.history.length > 0) {
+        lines.push("", "Recent history:");
+        for (const entry of state.history.slice(-5)) {
+          lines.push(`  ${entry.ts}  ${entry.from} → ${entry.to}  (${entry.reason})`);
+        }
+      }
+      lines.push("", buildCadenceBlock(state));
+      ctx.ui.notify(lines.join("\n"), "info");
+    },
+  });
+
+  pi.registerCommand("senai-cadence-reset", {
+    description:
+      "Reset the adaptive spawn cadence to tier A (parallel burst). Use when the provider has recovered after tier D.",
+    handler: async (_args, ctx) => {
+      const prev = loadCadenceState(ctx.cwd);
+      const lines = [
+        `Current tier: ${prev.tier}` +
+          (prev.consecutiveCleanRuns > 0
+            ? ` (${prev.consecutiveCleanRuns} clean run${prev.consecutiveCleanRuns === 1 ? "" : "s"} since last 429)`
+            : ""),
+        `Last rate-limit error: ${prev.last429At ?? "none"}`,
+        "",
+        "Reset sets tier = A and clears all counters. Future rate-limit errors will demote again.",
+      ];
+      const confirmed = await runSimpleConfirm(ctx, "Reset spawn cadence", lines.join("\n"));
+      if (!confirmed) return;
+      const fresh = resetCadence(ctx.cwd);
+      ctx.ui.notify(`Cadence reset. Now at tier ${fresh.tier}.`, "info");
     },
   });
 }

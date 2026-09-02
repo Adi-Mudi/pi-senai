@@ -16,6 +16,7 @@ import { loadState } from "./state.js";
 import { buildSenaiCompactionSummary } from "./compaction.js";
 import { guardSpawnCall } from "./spawn-guard.js";
 import { completionWarning, recordSpawnArtifacts } from "./completion-guard.js";
+import { isRateLimitError, record429 } from "./spawn-cadence.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
 import { migrateLegacyOrchestraDirs } from "./migrate.js";
@@ -114,8 +115,17 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   // written. Completion notices arrive as extension steer messages, which
   // pass through the input hook. When the recorded artifact is missing or
   // empty, append a resume instruction so the parent never stalls waiting.
+  // Also detect rate-limit-style errors in the same steer stream so the
+  // adaptive spawn cadence can demote for the rest of this run.
   pi.on("input", (event, ctx) => {
     if (event.source !== "extension") return;
+    if (isRateLimitError(event.text)) {
+      try {
+        record429(ctx.cwd);
+      } catch {
+        // Best-effort: a cadence write failure must not break the steer.
+      }
+    }
     const warning = completionWarning(event.text, ctx.cwd);
     if (!warning) return;
     return { action: "transform" as const, text: `${event.text}${warning}` };

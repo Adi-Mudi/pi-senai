@@ -13,6 +13,7 @@ import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
 import { buildDocSelectionBlock } from "./doc-selection.js";
 import { atomicWriteFile } from "./atomic-write.js";
+import { buildCadenceBlock, loadCadenceState } from "./spawn-cadence.js";
 import type { SenaiState } from "./state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -205,6 +206,7 @@ export function buildStagePrompt(
     registryBlock,
     ``,
     documentScopeBlock,
+    ...(stage === "planning" ? [``, buildCadenceBlock(loadCadenceState(cwd))] : []),
     ...(stage === "document" ? [``, buildDocSelectionBlock(cwd)] : []),
     ``,
     skill,
