@@ -284,3 +284,74 @@ If you prefer to control each stage manually, you can still run `/senai-implemen
 - **Each stage is user-driven.** The main agent pauses at each approval gate and waits for you.
 - **Artifacts are local.** Everything lives inside `.IDE_Plans/senai/` in this project directory.
 - **Subagents need a multiplexer.** Make sure you run Pi inside tmux, zellij, or another supported terminal multiplexer so `pi-interactive-subagents` can spawn subagents.
+
+---
+
+## Running E2E tests
+
+`pi-extension/test/e2e/` contains a Tier-1 end-to-end suite that spawns a real
+`pi --mode rpc` subprocess, drives the slash commands, and asserts the result.
+The suite catches integration regressions that the in-process unit tests miss:
+registration drift, prompt-injection drift, hook wiring, and the full
+Plan → Implement → Document → Deliver state machine.
+
+### Prerequisites
+
+1. `pi` must be on your `PATH`. The RPC harness calls `command -v pi` to
+   confirm. The default symlink at `~/.pi/agent/extensions/pi-orchestra`
+   (kept for backward compatibility) points at this checkout.
+2. `RUN_E2E=1` must be exported. Without it the suite skips every test with
+   the message `"E2E tests require pi binary on PATH and RUN_E2E=1"`.
+
+### Running
+
+```bash
+# unit tests only (fast; default; no prereqs)
+npm test
+
+# end-to-end tests
+RUN_E2E=1 npm run test:e2e
+
+# refresh golden prompts (writes __golden_prompts__/planning.b64)
+RUN_E2E=1 npm run test:e2e:update-snapshots
+```
+
+The suite creates a temporary HOME per test so it never touches your real
+`~/.pi/agent/extensions/` directory. Temp directories are removed on teardown
+even when assertions fail.
+
+### What the suite covers
+
+- `01-registration` — every slash command registered by `pi-senai` shows up
+  in the RPC `get_commands` response (20 commands; names listed in the test).
+- `02-full-lifecycle` — drives the state machine from `planning` to
+  `delivered` and asserts every artifact lands on disk.
+- `03-state-machine` — covers every forward transition in
+  `STAGE_TRANSITIONS` plus the warn-and-ask path when artifacts are missing.
+- `04-prompt-injection` — captures the plan-stage prompt from `get_messages`
+  and matches it against a base64-encoded golden; refresh with
+  `test:e2e:update-snapshots` when the prompt legitimately changes.
+- `05-compaction` — exercises `session_before_compact` and asserts the
+  deterministic summary.
+- `06-spawn-guard` — blocks an untyped `subagent` call and accepts one with
+  `agent: scout-1`.
+- `07-completion-guard` — drives a completion notice through the input
+  hook with a missing artifact and asserts the resume warning is appended.
+- `08-architect-tools` — covers `/senai-configure-architect-inputs` and the
+  warn-and-ask guard in `/senai-generate-architect`.
+- `09-discussion` — pins the pre-run `mission-brief.md` shape consumed by
+  `/senai-plan`.
+
+### Snapshot workflow
+
+The plan-stage golden lives at
+`pi-extension/test/e2e/__golden_prompts__/planning.b64`. It is base64-encoded
+so secrets never leak into git history. To refresh it:
+
+```bash
+RUN_E2E=1 npm run test:e2e:update-snapshots
+git add pi-extension/test/e2e/__golden_prompts__/planning.b64
+```
+
+Diff the change carefully — drift is usually a real prompt regression, not
+a flake.

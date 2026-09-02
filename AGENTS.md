@@ -264,6 +264,7 @@ Stage transitions are defined in `constants.ts` as `STAGE_TRANSITIONS`.
 - Each test file focuses on one module.
 - Tests use temporary directories created with `fs.mkdtempSync`.
 - When testing commands, build the handler map by calling `registerCommands` with a mock `ExtensionAPI`.
+- End-to-end tests (RPC harness against `pi --mode rpc`) live in `pi-extension/test/e2e/` and require `pi` on PATH plus `RUN_E2E=1`. Run with `RUN_E2E=1 npm run test:e2e`; default `npm test` skips them. See `Doc/step-by-step-guide.md` → "Running E2E tests" for the snapshot workflow.
 
 ## Extension loading
 
