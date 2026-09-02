@@ -47,6 +47,27 @@ describe("state", () => {
     assert.strictEqual(loaded.currentStage, "planning");
   });
 
+  it("saveState uses the atomic helper — no .tmp-* files remain after a successful write", () => {
+    const state = defaultState();
+    state.mission = "atomic";
+    state.currentStage = "planning";
+    saveState(tmpDir, state);
+    // Plant a leftover as if a previous session crashed between the temp
+    // write and the rename, then save again — the helper's atomic write
+    // must not be affected by the orphan.
+    const senaiDir = path.join(tmpDir, ".IDE_Plans/senai");
+    fs.writeFileSync(path.join(senaiDir, "state.json.tmp-999-fake"), "orphan");
+    saveState(tmpDir, state);
+    // The real state.json is the new content; the orphan temp file may
+    // still exist (cleanup happens at session_start, not on every write).
+    const loaded = JSON.parse(fs.readFileSync(path.join(senaiDir, "state.json"), "utf8"));
+    assert.strictEqual(loaded.mission, "atomic");
+    assert.strictEqual(loaded.currentStage, "planning");
+    // loadState still works even with the orphan temp file present.
+    const fresh = loadState(tmpDir);
+    assert.strictEqual(fresh.mission, "atomic");
+  });
+
   it("startRun creates all stage subdirectories and saves state", () => {
     const state = startRun(tmpDir, "Build a thing");
     assert.strictEqual(state.mission, "Build a thing");

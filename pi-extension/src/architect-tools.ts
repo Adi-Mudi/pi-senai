@@ -19,6 +19,7 @@ import {
 } from "./architect.js";
 import { getArchitectMapDir, getArchitectStateDir } from "./constants.js";
 import { loadAgentConfig } from "./agent-config.js";
+import { atomicWriteJson } from "./atomic-write.js";
 import {
   DOCUMENT_MANIFEST_FILE,
   mergeMapOutputs,
@@ -209,7 +210,7 @@ export function registerArchitectTools(pi: ExtensionAPI): void {
         }
         if (preserved > 0) {
           const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
-          fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+          atomicWriteJson(manifestPath, manifest);
         }
       }
 

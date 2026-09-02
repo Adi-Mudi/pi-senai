@@ -945,6 +945,58 @@ describe("commands", () => {
     assert.ok(notifications[0].message.includes("No active senai run"));
   });
 
+  it("senai-approve surfaces a busy lock without mutating state", async () => {
+    // Plant a fake lock held by a live pid (process.pid) so acquire blocks.
+    // Use a very short timeout via env to keep the test fast.
+    const previousTimeout = process.env.SENAI_LOCK_TIMEOUT_MS;
+    process.env.SENAI_LOCK_TIMEOUT_MS = "100";
+    try {
+      registerCommands(makeApi());
+      // Start a run so the command does not short-circuit on "no run".
+      await commandHandlers["senai-plan"]("Mission", makeCtx());
+      // Confirm flow: the first dialog answers true.
+      const ctx = makeCtx();
+      ctx.ui.confirm = async () => true;
+      // Plant the lock AFTER the user's confirm so the acquire is the step
+      // that fails.
+      const lockDir = path.join(tmpDir, ".IDE_Plans/senai/.lock");
+      fs.mkdirSync(lockDir, { recursive: true });
+      const now = new Date().toISOString();
+      fs.writeFileSync(
+        path.join(lockDir, "meta.json"),
+        JSON.stringify({
+          pid: process.pid, // live, fresh heartbeat → must block, not steal
+          host: "test",
+          command: "/senai-discussion-approve",
+          startedAt: now,
+          heartbeatAt: now,
+          mode: "discussion-approve",
+          runId: "other-run",
+        }),
+        "utf8",
+      );
+
+      const stateBefore = loadState(tmpDir);
+      notifications.length = 0;
+      await commandHandlers["senai-approve"]("", ctx);
+
+      // The command must surface a Lock busy error and not advance the stage.
+      const errorMsg = notifications.find((n) => n.type === "error");
+      assert.ok(errorMsg, "expected an error notification");
+      assert.match(errorMsg!.message, /Lock busy/);
+      assert.match(errorMsg!.message, /\/senai-discussion-approve/);
+      const stateAfter = loadState(tmpDir);
+      assert.strictEqual(stateAfter.currentStage, stateBefore.currentStage);
+      assert.strictEqual(stateAfter.stageResults["planning"], stateBefore.stageResults["planning"]);
+    } finally {
+      if (previousTimeout === undefined) delete process.env.SENAI_LOCK_TIMEOUT_MS;
+      else process.env.SENAI_LOCK_TIMEOUT_MS = previousTimeout;
+      // Clean up the planted lock dir so it does not leak between tests.
+      const lockDir = path.join(tmpDir, ".IDE_Plans/senai/.lock");
+      fs.rmSync(lockDir, { recursive: true, force: true });
+    }
+  });
+
   it("senai-implement rejects from planning stage", async () => {
     registerCommands(makeApi());
     await commandHandlers["senai-plan"]("Mission", makeCtx());
@@ -3386,5 +3438,45 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
       "declining the gaps override emits a Cancelled notify",
     );
     assert.ok((loadState(tmpDir).discussions ?? 0) === 0);
+  });
+
+  it("/senai-discussion-approve is idempotent — second call does not duplicate the event", async () => {
+    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    const briefPath = path.join(preDir, "mission-brief.md");
+    fs.writeFileSync(
+      briefPath,
+      [
+        "<!-- pi-senai mission-brief: draft -->",
+        "## Problem statement\nx",
+        "## Mission type\nfeature",
+        "## Success criteria\n- ok",
+        "## Out-of-scope\n- n/a",
+        "## Open questions\n- none",
+        "## Refined mission\nm",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(preDir, "discussion-01-once.md"), "t", "utf8");
+
+    registerDiscussionCommands(makeApi());
+    notifications.length = 0;
+
+    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+    const afterFirst = loadState(tmpDir);
+    assert.strictEqual(afterFirst.discussions, 1);
+
+    // Second call: marker is already gone, the most-recent event references
+    // this exact brief. The handler short-circuits with an info message and
+    // does NOT bump the counter.
+    notifications.length = 0;
+    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+    const afterSecond = loadState(tmpDir);
+    assert.strictEqual(afterSecond.discussions, 1, "second call must not bump the counter");
+    assert.strictEqual(afterSecond.discussionEvents?.length, 1, "no duplicate event appended");
+    assert.ok(
+      notifications.some((n) => n.message.includes("already finalized")),
+      "second call emits an already-finalized info",
+    );
   });
 });

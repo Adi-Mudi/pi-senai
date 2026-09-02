@@ -7,6 +7,7 @@ import {
   type SenaiRole,
   DEFAULT_AGENTS,
 } from "./agent-suggestions.js";
+import { atomicWriteJson } from "./atomic-write.js";
 
 export const CONFIG_DIR = ".pi/senai";
 export const CONFIG_FILE = "agents.json";
@@ -38,13 +39,7 @@ export function loadAgentConfig(cwd: string): AgentConfig | null {
 }
 
 export function saveAgentConfig(cwd: string, config: AgentConfig): void {
-  const configPath = getConfigPath(cwd);
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify({ _comment: CONFIG_COMMENT, ...config }, null, 2),
-    "utf8",
-  );
+  atomicWriteJson(getConfigPath(cwd), { _comment: CONFIG_COMMENT, ...config });
 }
 
 export function validateAgentConfig(config: AgentConfig): void {

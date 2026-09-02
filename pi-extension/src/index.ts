@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { formatStageStatus } from "./constants.js";
+import { formatStageStatus, getSenaiDir } from "./constants.js";
 import {
   registerAgentCommands,
   registerAgentGeneratorCommand,
@@ -19,6 +19,9 @@ import { completionWarning, recordSpawnArtifacts } from "./completion-guard.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
 import { migrateLegacyOrchestraDirs } from "./migrate.js";
+import { cleanupTempFiles } from "./atomic-write.js";
+import { releaseStaleLockIfHeldByUs, lockInfo } from "./lock.js";
+import { describeHolder } from "./lock.js";
 
 export default function piSenaiExtension(pi: ExtensionAPI) {
   // Do not load inside subagent processes to avoid recursive orchestration.
@@ -38,6 +41,22 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
     console.log(`[pi-senai] Migrated legacy directories: ${migratedDirs.join(", ")}`);
   }
 
+  // Defensive recovery from a previous session that crashed while holding
+  // the run lock (e.g. SIGKILL between the heartbeat and the release). The
+  // recorded pid will be ours only if the OS reused it; in practice it
+  // never matches a fresh process, so this hook is a no-op in the happy
+  // path. Stale locks are also auto-stolen by the next acquireLock() call,
+  // so a missed cleanup here never wedges the run.
+  releaseStaleLockIfHeldByUs(process.cwd(), process.pid);
+
+  // Remove any `.tmp-*` files left over by a previous session that crashed
+  // between writing the temp file and the atomic rename. Cleanup walks the
+  // senai root and its immediate subdirectories.
+  const cleaned = cleanupTempFiles(getSenaiDir(process.cwd()));
+  if (cleaned > 0) {
+    console.log(`[pi-senai] Cleaned ${cleaned} orphan temp file(s) from a previous session.`);
+  }
+
   registerCommands(pi);
   registerDiscussionCommands(pi);
   registerAgentCommands(pi);
@@ -49,6 +68,19 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   registerAgentGeneratorCommand(pi);
   registerDocsStructureCommand(pi);
   registerArchitectTools(pi);
+
+  // Surface the active run state in every session_start so the user can
+  // see whether a lock is held even before the first slash command.
+  pi.on("session_start", async (_event, ctx) => {
+    const state = loadState(ctx.cwd);
+    if (state.currentStage === "none") return;
+    const lines = [formatStageStatus(state)];
+    const holder = lockInfo(ctx.cwd);
+    if (holder) {
+      lines.push("", `Lock held by ${describeHolder(holder)}.`);
+    }
+    ctx.ui.notify(lines.join("\n"), "info");
+  });
 
   // Supply a deterministic compaction summary while a senai run is active,
   // so compaction costs no extra LLM call and run/artifact paths survive.

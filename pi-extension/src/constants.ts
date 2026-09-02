@@ -6,6 +6,12 @@ export const RUNS_DIR = "runs";
 export const ARCHITECT_STATE_DIR = ".pi/architect";
 export const ARCHITECT_MAP_DIR = ".IDE_Plans/architect-map";
 
+/** Lock directory name under SENAI_DIR. Holds `meta.json` while a Senai
+ *  command holds the run lock. The directory itself is the lock primitive
+ *  on POSIX (`mkdir` is atomic); the file inside carries holder metadata. */
+export const LOCK_DIR_NAME = ".lock";
+export const LOCK_FILE_NAME = "meta.json";
+
 export type Stage =
   | "none"
   | "planning"
@@ -66,6 +72,14 @@ export interface StageArtifactPaths {
 
 export function getSenaiDir(cwd: string): string {
   return path.join(cwd, SENAI_DIR);
+}
+
+export function getLockDir(cwd: string): string {
+  return path.join(getSenaiDir(cwd), LOCK_DIR_NAME);
+}
+
+export function getLockPath(cwd: string): string {
+  return path.join(getLockDir(cwd), LOCK_FILE_NAME);
 }
 
 export function getArchitectStateDir(cwd: string): string {

@@ -1,5 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { atomicWriteJson } from "./atomic-write.js";
 
 export const ARCHITECT_INPUTS_CONFIG_FILE = "architect-inputs.json";
 
@@ -56,13 +57,10 @@ export function saveArchitectInputsConfig(
   cwd: string,
   config: ArchitectInputsConfig,
 ): void {
-  const configPath = getArchitectInputsConfigPath(cwd);
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify({ _comment: ARCHITECT_INPUTS_CONFIG_COMMENT, ...config }, null, 2),
-    "utf8",
-  );
+  atomicWriteJson(getArchitectInputsConfigPath(cwd), {
+    _comment: ARCHITECT_INPUTS_CONFIG_COMMENT,
+    ...config,
+  });
 }
 
 export function validateArchitectInputsConfig(config: ArchitectInputsConfig): void {

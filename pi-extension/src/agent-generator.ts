@@ -10,6 +10,7 @@ import {
   type ArchitectReport,
 } from "./architect.js";
 import { getDocType, type DocTypeId } from "./doc-catalog.js";
+import { atomicWriteFile } from "./atomic-write.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -318,12 +319,12 @@ export function writeGeneratedAgents(
         keptDrifted.push(rel);
         continue;
       }
-      fs.writeFileSync(filePath, plan.content, "utf8");
+      atomicWriteFile(filePath, plan.content, "utf8");
       regenerated.push(rel);
       writtenAbsolute.push(filePath);
       continue;
     }
-    fs.writeFileSync(filePath, plan.content, "utf8");
+    atomicWriteFile(filePath, plan.content, "utf8");
     created.push(rel);
     writtenAbsolute.push(filePath);
   }

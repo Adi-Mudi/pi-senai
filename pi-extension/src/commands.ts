@@ -68,6 +68,8 @@ import {
   finalizeMissionBrief,
   validateBriefSections,
 } from "./mission-brief.js";
+import { atomicWriteFile } from "./atomic-write.js";
+import { withRunLock, describeHolder } from "./lock.js";
 import {
   createDefaultArchitectInputsConfig,
   getSelectedInputPaths,
@@ -349,66 +351,109 @@ export function registerCommands(pi: ExtensionAPI) {
       );
       if (!confirmed) return;
 
-      // Verify the completed stage actually produced its artifacts before
-      // advancing. Manual stage commands check artifacts at start; approve
-      // never did, which let a real run reach 'delivered' with an empty
-      // document/ folder. Missing artifacts warn and ask instead of blocking:
-      // some stages (document) may legitimately write outside the run dir.
-      const artifactStage = COMPLETED_STAGE_ARTIFACT[state.currentStage];
-      const missingArtifacts =
-        artifactStage && state.runId
-          ? listMissingStageArtifacts(ctx.cwd, state.runId, artifactStage)
-          : [];
-      if (missingArtifacts.length > 0) {
-        const proceed = await runSimpleConfirm(
-          ctx,
-          "Artifacts missing",
-          `Stage '${state.currentStage}' is missing artifact(s):\n${missingArtifacts.join("\n")}\n\nAdvance anyway?`,
-        );
-        if (!proceed) return;
-      }
+      // Acquire the project-wide run lock for the duration of the mutation.
+      // Two concurrent Pi sessions, or a double-click inside one session,
+      // will surface here as a busy lock with the holder info; the user
+      // can retry, run /senai-doctor, or wait for the holder to finish.
+      // The user-confirmation is intentionally outside the lock so a cancel
+      // never touches the lock directory.
+      const lockResult = await withRunLock(
+        { cwd: ctx.cwd, mode: "approve", command: "/senai-approve", runId: state.runId },
+        async () => {
+          // Re-read state under the lock so we see the freshest snapshot.
+          const fresh = loadState(ctx.cwd);
+          const current = fresh.currentStage;
+          if (current === "none" || current === "delivered") {
+            return { kind: "noop" as const, message: `Run is '${current}'.` };
+          }
+          const expectedNext = STAGE_TRANSITIONS[current][0];
+          if (!expectedNext) {
+            return { kind: "noop" as const, message: `No next stage from '${current}'.` };
+          }
 
-      // Advance from current working stage to completed stage, recording the
-      // outcome (approval time + artifact check) in state.stageResults.
-      const firstAdvance = advanceStage(
-        ctx.cwd,
-        state,
-        nextStage,
-        `approved ${new Date().toISOString()}; artifacts: ${
-          missingArtifacts.length === 0
-            ? "verified"
-            : `missing ${missingArtifacts.length} (user confirmed)`
-        }`,
+          // Verify the completed stage actually produced its artifacts before
+          // advancing. Missing artifacts warn and ask instead of blocking:
+          // some stages (document) may legitimately write outside the run dir.
+          const artifactStage = COMPLETED_STAGE_ARTIFACT[current];
+          const missingArtifacts =
+            artifactStage && fresh.runId
+              ? listMissingStageArtifacts(ctx.cwd, fresh.runId, artifactStage)
+              : [];
+          if (missingArtifacts.length > 0) {
+            const proceed = await runSimpleConfirm(
+              ctx,
+              "Artifacts missing",
+              `Stage '${current}' is missing artifact(s):\n${missingArtifacts.join("\n")}\n\nAdvance anyway?`,
+            );
+            if (!proceed) {
+              return { kind: "noop" as const, message: "Cancelled by user at artifact check." };
+            }
+          }
+
+          // Advance from current working stage to completed stage, recording the
+          // outcome (approval time + artifact check) in state.stageResults.
+          const firstAdvance = advanceStage(
+            ctx.cwd,
+            fresh,
+            expectedNext,
+            `approved ${new Date().toISOString()}; artifacts: ${
+              missingArtifacts.length === 0
+                ? "verified"
+                : `missing ${missingArtifacts.length} (user confirmed)`
+            }`,
+          );
+          if (!firstAdvance.ok) {
+            return { kind: "error" as const, message: firstAdvance.reason };
+          }
+
+          const completedStage = expectedNext;
+          const nextCommand = NEXT_COMMAND[completedStage];
+          const nextWorkingStage = STAGE_COMMANDS[completedStage];
+
+          if (!nextWorkingStage) {
+            return { kind: "final" as const, message: `Stage '${current}' approved. Advanced to '${completedStage}'.\nAll stages are complete.` };
+          }
+
+          // Auto-advance to the next working stage and run it.
+          const secondAdvance = advanceStage(ctx.cwd, firstAdvance.state, nextWorkingStage);
+          if (!secondAdvance.ok) {
+            return { kind: "error" as const, message: secondAdvance.reason };
+          }
+
+          return {
+            kind: "advance" as const,
+            fromStage: current,
+            completedStage,
+            nextCommand,
+            nextWorkingStage,
+            secondState: secondAdvance.state,
+          };
+        },
       );
-      if (!firstAdvance.ok) {
-        ctx.ui.notify(firstAdvance.reason, "error");
-        return;
-      }
 
-      const completedStage = nextStage;
-      const nextCommand = NEXT_COMMAND[completedStage];
-      const nextWorkingStage = STAGE_COMMANDS[completedStage];
-
-      if (!nextWorkingStage) {
-        // Final stage completed.
+      if (!lockResult.ok) {
         ctx.ui.notify(
-          `Stage '${state.currentStage}' approved. Advanced to '${completedStage}'.\n` +
-            `All stages are complete.`,
-          "info",
+          `Lock busy — could not acquire the run lock.\n${lockResult.reason}` +
+            (lockResult.holder ? `\nHolder: ${describeHolder(lockResult.holder)}` : "") +
+            `\nWait a moment, or run /senai-doctor to inspect the lock.`,
+          "error",
         );
         return;
       }
 
-      // Auto-advance to the next working stage and run it.
-      const secondAdvance = advanceStage(ctx.cwd, firstAdvance.state, nextWorkingStage);
-      if (!secondAdvance.ok) {
-        ctx.ui.notify(secondAdvance.reason, "error");
+      const result = lockResult.value;
+      if (result.kind === "noop" || result.kind === "error") {
+        ctx.ui.notify(result.message, "error");
         return;
       }
-
+      if (result.kind === "final") {
+        ctx.ui.notify(result.message, "info");
+        return;
+      }
+      // result.kind === "advance"
       ctx.ui.notify(
-        `Stage '${state.currentStage}' approved. Advanced to '${completedStage}'.\n` +
-          `Automatically running the next stage: ${nextCommand}`,
+        `Stage '${result.fromStage}' approved. Advanced to '${result.completedStage}'.\n` +
+          `Automatically running the next stage: ${result.nextCommand}`,
         "info",
       );
 
@@ -429,7 +474,7 @@ export function registerCommands(pi: ExtensionAPI) {
         });
       }
 
-      const { prompt } = buildStagePrompt(ctx.cwd, secondAdvance.state, STAGE_SKILL[nextWorkingStage]);
+      const { prompt } = buildStagePrompt(ctx.cwd, result.secondState, STAGE_SKILL[result.nextWorkingStage]);
       pi.sendUserMessage(prompt);
     },
   });
@@ -506,56 +551,145 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
         return;
       }
 
-      const raw = fs.readFileSync(briefPath, "utf8");
-      const missing = validateBriefSections(raw);
-      if (missing.length > 0) {
-        const proceed = await runSimpleConfirm(
-          ctx,
-          "Mission brief has gaps",
-          `The brief is missing required sections:\n${missing.join("\n")}\n\nFinalize anyway?`,
-        );
-        if (!proceed) {
-          ctx.ui.notify("Cancelled. Fill the missing sections, then re-run /senai-discussion-approve.", "info");
+      // Idempotency pre-check (cheap, outside the lock): if the brief is
+      // already finalized AND the most recent recorded event references this
+      // exact brief, the second call is a no-op and we never touch the lock.
+      const preRaw = fs.readFileSync(briefPath, "utf8");
+      if (!preRaw.startsWith("<!-- pi-senai mission-brief: draft -->")) {
+        const lastEvent = (state.discussionEvents ?? []).at(-1);
+        // lastEvent.briefPath is stored relative to ctx.cwd; resolve against
+        // ctx.cwd so the comparison is independent of the test process cwd.
+        const sameBrief =
+          lastEvent &&
+          path.resolve(ctx.cwd, lastEvent.briefPath) === path.resolve(briefPath);
+        if (sameBrief) {
+          ctx.ui.notify(
+            `Mission brief is already finalized. Discussions so far: ${state.discussions ?? 1}.`,
+            "info",
+          );
           return;
         }
       }
 
-      finalizeMissionBrief(briefPath);
+      const lockResult = await withRunLock(
+        {
+          cwd: ctx.cwd,
+          mode: "discussion-approve",
+          command: "/senai-discussion-approve",
+          runId: state.runId,
+        },
+        async () => {
+          // Re-read both state and brief under the lock so concurrent
+          // finalize calls cannot race.
+          const fresh = loadState(ctx.cwd);
+          const liveBriefPath = fresh.runId
+            ? getRunMissionBriefPath(ctx.cwd, fresh.runId)
+            : getPreRunMissionBriefPath(ctx.cwd);
+          if (!fs.existsSync(liveBriefPath)) {
+            return { kind: "missing" as const };
+          }
+          const raw = fs.readFileSync(liveBriefPath, "utf8");
 
-      // Log the event. We re-read the transcript directory to find the
-      // most recent transcript file (the parent just wrote one).
-      const transcriptsDir = state.runId
-        ? getRunDiscussionsDir(ctx.cwd, state.runId)
-        : getPreRunDiscussionDir(ctx.cwd);
-      let transcriptPath = "";
-      try {
-        const files = fs
-          .readdirSync(transcriptsDir)
-          .filter((n) => /^discussion-\d{2}-/.test(n))
-          .sort();
-        const last = files[files.length - 1];
-        if (last) transcriptPath = path.join(transcriptsDir, last);
-      } catch {
-        // Directory might not exist if the parent forgot to write a transcript.
-        transcriptPath = "";
-      }
+          // Idempotency under the lock too: re-check in case a sibling
+          // command finalized between the pre-check and now.
+          if (!raw.startsWith("<!-- pi-senai mission-brief: draft -->")) {
+            const lastEvent = (fresh.discussionEvents ?? []).at(-1);
+            const sameBrief =
+              lastEvent &&
+              path.resolve(ctx.cwd, lastEvent.briefPath) === path.resolve(liveBriefPath);
+            if (sameBrief) {
+              return { kind: "already" as const, count: fresh.discussions ?? 1 };
+            }
+          }
 
-      const event: DiscussionEvent = {
-        ts: new Date().toISOString(),
-        transcriptPath: path.relative(ctx.cwd, transcriptPath) || transcriptPath,
-        briefPath: path.relative(ctx.cwd, briefPath),
-        afterStage: state.runId ? state.currentStage : undefined,
-      };
+          const missing = validateBriefSections(raw);
+          if (missing.length > 0) {
+            const proceed = await runSimpleConfirm(
+              ctx,
+              "Mission brief has gaps",
+              `The brief is missing required sections:\n${missing.join("\n")}\n\nFinalize anyway?`,
+            );
+            if (!proceed) {
+              return { kind: "cancelled" as const };
+            }
+          }
 
-      const recorded = recordDiscussion(ctx.cwd, state, event);
-      if (!recorded.ok) {
-        ctx.ui.notify(recorded.reason, "error");
+          finalizeMissionBrief(liveBriefPath);
+
+          // Log the event. Re-read the transcript directory under the lock
+          // to find the most recent transcript file (the parent just wrote
+          // one). The directory may be missing if no transcript was written.
+          const transcriptsDir = fresh.runId
+            ? getRunDiscussionsDir(ctx.cwd, fresh.runId)
+            : getPreRunDiscussionDir(ctx.cwd);
+          let transcriptPath = "";
+          try {
+            const files = fs
+              .readdirSync(transcriptsDir)
+              .filter((n) => /^discussion-\d{2}-/.test(n))
+              .sort();
+            const last = files[files.length - 1];
+            if (last) transcriptPath = path.join(transcriptsDir, last);
+          } catch {
+            transcriptPath = "";
+          }
+
+          const event: DiscussionEvent = {
+            ts: new Date().toISOString(),
+            transcriptPath: path.relative(ctx.cwd, transcriptPath) || transcriptPath,
+            briefPath: path.relative(ctx.cwd, liveBriefPath),
+            afterStage: fresh.runId ? fresh.currentStage : undefined,
+          };
+
+          const recorded = recordDiscussion(ctx.cwd, fresh, event);
+          if (!recorded.ok) {
+            return { kind: "error" as const, message: recorded.reason };
+          }
+          return {
+            kind: "ok" as const,
+            state: recorded.state,
+            runId: fresh.runId,
+          };
+        },
+      );
+
+      if (!lockResult.ok) {
+        ctx.ui.notify(
+          `Lock busy — could not acquire the run lock.\n${lockResult.reason}` +
+            (lockResult.holder ? `\nHolder: ${describeHolder(lockResult.holder)}` : "") +
+            `\nWait a moment, or run /senai-doctor to inspect the lock.`,
+          "error",
+        );
         return;
       }
 
+      const outcome = lockResult.value;
+      if (outcome.kind === "missing") {
+        ctx.ui.notify("No mission-brief.md found. Run /senai-discussion first.", "warning");
+        return;
+      }
+      if (outcome.kind === "cancelled") {
+        ctx.ui.notify(
+          "Cancelled. Fill the missing sections, then re-run /senai-discussion-approve.",
+          "info",
+        );
+        return;
+      }
+      if (outcome.kind === "error") {
+        ctx.ui.notify(outcome.message, "error");
+        return;
+      }
+      if (outcome.kind === "already") {
+        ctx.ui.notify(
+          `Mission brief was finalized by a concurrent call. Discussions so far: ${outcome.count}.`,
+          "info",
+        );
+        return;
+      }
+      // outcome.kind === "ok"
       ctx.ui.notify(
-        `Mission brief finalized. Discussions so far: ${recorded.state.discussions ?? 1}.\n` +
-          (state.runId
+        `Mission brief finalized. Discussions so far: ${outcome.state.discussions ?? 1}.\n` +
+          (outcome.runId
             ? "Next: run /senai-plan again or /senai-approve to continue the run."
             : "Next: run /senai-plan <mission> to start a run that consumes this brief."),
         "info",
@@ -1504,7 +1638,7 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
       const text = formatDiagnosticReport(report);
       const reportPath = path.join(ctx.cwd, ".IDE_Plans", "senai", "doctor-report.md");
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-      fs.writeFileSync(reportPath, text, "utf8");
+      atomicWriteFile(reportPath, text, "utf8");
       pi.sendUserMessage(`${text}\n\nReport saved to .IDE_Plans/senai/doctor-report.md`);
     },
   });

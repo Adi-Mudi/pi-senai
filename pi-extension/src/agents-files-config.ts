@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { SENAI_ROLES, type SenaiRole } from "./agent-suggestions.js";
+import { atomicWriteJson } from "./atomic-write.js";
 
 export const AGENTS_FILES_CONFIG_FILE = "agents_files.json";
 
@@ -47,13 +48,11 @@ export function loadAgentsFilesConfig(cwd: string): AgentsFilesConfig | null {
 }
 
 export function saveAgentsFilesConfig(cwd: string, config: AgentsFilesConfig): void {
-  const configPath = getAgentsFilesConfigPath(cwd);
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify({ _comment: AGENTS_FILES_CONFIG_COMMENT, ...config, version: 2 }, null, 2),
-    "utf8",
-  );
+  atomicWriteJson(getAgentsFilesConfigPath(cwd), {
+    _comment: AGENTS_FILES_CONFIG_COMMENT,
+    ...config,
+    version: 2,
+  });
 }
 
 export function validateAgentsFilesConfig(config: AgentsFilesConfig): void {

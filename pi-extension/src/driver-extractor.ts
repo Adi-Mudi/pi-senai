@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { getArchitectStateDir } from "./constants.js";
+import { atomicWriteJson } from "./atomic-write.js";
 
 export const DRIVERS_FILE = "architectural-drivers.json";
 
@@ -172,9 +173,7 @@ export function normalizeDrivers(value: unknown): ArchitecturalDrivers | null {
 }
 
 export function saveDrivers(cwd: string, drivers: ArchitecturalDrivers): void {
-  const driversPath = getDriversPath(cwd);
-  fs.mkdirSync(path.dirname(driversPath), { recursive: true });
-  fs.writeFileSync(driversPath, JSON.stringify(drivers, null, 2), "utf8");
+  atomicWriteJson(getDriversPath(cwd), drivers);
 }
 
 export function validateDrivers(drivers: ArchitecturalDrivers): void {

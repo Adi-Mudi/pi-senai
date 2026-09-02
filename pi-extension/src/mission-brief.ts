@@ -6,6 +6,7 @@ import {
   getRunDiscussionsDir,
   getRunMissionBriefPath,
 } from "./constants.js";
+import { atomicWriteFile } from "./atomic-write.js";
 
 /** Marker written at the top of mission-brief.md while a brief is still
  *  being shaped — the /senai-discussion-approve command removes it. The
@@ -97,10 +98,12 @@ export function recordDiscussion(input: RecordDiscussionInput): DiscussionLocati
     `discussion-${sequence}-${slugifyLabel(input.label)}.md`,
   );
 
-  fs.writeFileSync(transcriptPath, input.transcript, "utf8");
+  atomicWriteFile(transcriptPath, input.transcript, "utf8");
 
   // Append (or create) the brief. The draft marker stays on top while the
-  // brief is unfinalized; appendDiscussionSection is idempotent on marker.
+  // brief is unfinalized; the append is implemented as read-then-rewrite
+  // through atomicWriteFile so a crash mid-append never leaves a truncated
+  // brief. appendFileSync is not atomic.
   const stamp = slugifyStamp();
   const sectionHeader = `## Discussion — ${stamp} (${sequence})\n\n`;
   const sectionBody = `${sectionHeader}${input.discussionSection.trim()}\n\n`;
@@ -112,27 +115,40 @@ export function recordDiscussion(input: RecordDiscussionInput): DiscussionLocati
       "\n---\n\n## Discussions\n\n",
       sectionBody,
     ].join("\n");
-    fs.writeFileSync(briefPath, skeleton, "utf8");
+    atomicWriteFile(briefPath, skeleton, "utf8");
   } else {
     const current = fs.readFileSync(briefPath, "utf8");
     if (!current.includes("## Discussions")) {
-      fs.appendFileSync(briefPath, `\n---\n\n## Discussions\n\n${sectionBody}`, "utf8");
+      atomicWriteFile(briefPath, `${current}\n---\n\n## Discussions\n\n${sectionBody}`, "utf8");
     } else {
-      fs.appendFileSync(briefPath, sectionBody, "utf8");
+      atomicWriteFile(briefPath, `${current}${sectionBody}`, "utf8");
     }
   }
 
   return { transcriptPath, briefPath, sequence };
 }
 
-/** Clear the draft marker (first line) of mission-brief.md, leaving the
- *  rest intact. Called by /senai-discussion-approve. */
+/**
+ * Clear the draft marker (first line) of mission-brief.md, leaving the
+ * rest intact. Called by /senai-discussion-approve.
+ *
+ * Idempotent: if the marker is already gone (the brief was finalized on a
+ * previous call), this is a no-op. Before rewriting, the function copies
+ * the unfinalized brief to `<briefPath>.bak` so a corrupted finalization
+ * (or an interrupted write) can be recovered by hand. Writes go through
+ * the atomic helper.
+ */
 export function finalizeMissionBrief(briefPath: string): void {
   if (!fs.existsSync(briefPath)) return;
   const current = fs.readFileSync(briefPath, "utf8");
-  if (current.startsWith(BRIEF_DRAFT_MARKER)) {
-    fs.writeFileSync(briefPath, current.slice(BRIEF_DRAFT_MARKER.length), "utf8");
+  if (!current.startsWith(BRIEF_DRAFT_MARKER)) return;
+  // Keep a .bak of the pre-finalize brief so the user can recover if needed.
+  try {
+    fs.copyFileSync(briefPath, `${briefPath}.bak`);
+  } catch {
+    // Best-effort; do not block finalize when copy fails.
   }
+  atomicWriteFile(briefPath, current.slice(BRIEF_DRAFT_MARKER.length));
 }
 
 /** Cross-out old bullet text and append a replacement, preserving the

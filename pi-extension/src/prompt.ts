@@ -12,6 +12,7 @@ import {
 import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
 import { buildDocSelectionBlock } from "./doc-selection.js";
+import { atomicWriteFile } from "./atomic-write.js";
 import type { SenaiState } from "./state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -143,7 +144,7 @@ function missionLine(state: SenaiState, artifacts: StageArtifactPaths): string {
   const missionPath = path.join(artifacts.runDir, "mission.md");
   if (!fs.existsSync(missionPath)) {
     fs.mkdirSync(artifacts.runDir, { recursive: true });
-    fs.writeFileSync(missionPath, mission, "utf8");
+    atomicWriteFile(missionPath, mission, "utf8");
   }
   return (
     `Mission (preview): ${mission.slice(0, MISSION_PREVIEW_CHARS)}…\n` +

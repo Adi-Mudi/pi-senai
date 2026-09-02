@@ -1,5 +1,4 @@
 import * as fs from "node:fs";
-import * as path from "node:path";
 import {
   getArtifactPaths,
   getStatePath,
@@ -8,6 +7,7 @@ import {
   STAGE_TRANSITIONS,
   type Stage,
 } from "./constants.js";
+import { atomicWriteJson } from "./atomic-write.js";
 
 /** One recorded /senai-discussion event. `afterStage` is the stage that
  *  was active when the discussion ran; undefined for discussions recorded
@@ -74,10 +74,17 @@ export function loadState(cwd: string): SenaiState {
   }
 }
 
+/**
+ * Persist the run state to `.IDE_Plans/senai/state.json`.
+ *
+ * Lock contract: every caller that mutates `state.json` (advanceStage,
+ * recordDiscussion, setMissionBriefPath, plus any future helper) must run
+ * inside `withRunLock()` at the call site. The lock prevents two concurrent
+ * Pi sessions from racing on this file. `saveState` itself only guarantees
+ * atomicity against process crashes (temp file + rename).
+ */
 export function saveState(cwd: string, state: SenaiState): void {
-  const statePath = getStatePath(cwd);
-  fs.mkdirSync(path.dirname(statePath), { recursive: true });
-  fs.writeFileSync(statePath, JSON.stringify(state, null, 2), "utf8");
+  atomicWriteJson(getStatePath(cwd), state);
 }
 
 export function startRun(cwd: string, mission: string): SenaiState {

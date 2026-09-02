@@ -8,6 +8,7 @@ import {
   parseAgentFileFull,
   type AgentFrontmatter,
 } from "./agent-discovery.js";
+import { lockInfo } from "./lock.js";
 import { loadAgentConfig, resolveAgentName, type AgentConfig } from "./agent-config.js";
 import { loadFilesConfig, type FilesConfig } from "./files-config.js";
 import { loadAgentsFilesConfig, type AgentsFilesConfig } from "./agents-files-config.js";
@@ -131,6 +132,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   }
 
   sections.push(checkSetupProgress(cwd));
+  sections.push(checkLock(cwd));
   sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
   sections.push(checkDiscussions(cwd));
 
@@ -270,6 +272,54 @@ function checkSetupProgress(cwd: string): DiagnosticSection {
   }
 
   return { title: "Setup progress", items };
+}
+
+/**
+ * Report the project-wide run lock state. The lock is held by
+ * `/senai-approve` and `/senai-discussion-approve` for the duration of
+ * their mutation. A held lock with a live pid means another Pi session is
+ * mid-flight; a held lock with a dead pid or stale heartbeat is recovered
+ * automatically by the next acquire call.
+ */
+function checkLock(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const meta = lockInfo(cwd);
+  if (!meta) {
+    items.push({ status: "ok", message: "Lock state: free (no holder)." });
+    return { title: "Lock state", items };
+  }
+
+  const ageSec = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(meta.heartbeatAt)) / 1000),
+  );
+  const ageStartSec = Math.max(
+    0,
+    Math.floor((Date.now() - Date.parse(meta.startedAt)) / 1000),
+  );
+  const staleMs = Number.parseInt(process.env.SENAI_LOCK_STALE_MS ?? "60000", 10);
+  const isStale = ageSec * 1000 > staleMs;
+
+  items.push({ status: isStale ? "warning" : "info", message: `Lock state: held by ${meta.command} (mode=${meta.mode}).` });
+  items.push({ status: "info", message: `  pid=${meta.pid}, host=${meta.host}, runId=${meta.runId ?? "(none)"}` });
+  items.push({
+    status: "info",
+    message: `  startedAt=${meta.startedAt} (${ageStartSec}s ago), heartbeatAt=${meta.heartbeatAt} (${ageSec}s ago)`,
+  });
+  if (isStale) {
+    items.push({
+      status: "warning",
+      message: `Heartbeat is older than ${staleMs}ms — the next /senai-approve or /senai-discussion-approve will auto-steal this lock.`,
+    });
+  } else {
+    items.push({
+      status: "info",
+      message:
+        "Another Senai command is in flight. Wait a moment or run /senai-doctor again. The lock is released automatically when the holder finishes.",
+    });
+  }
+
+  return { title: "Lock state", items };
 }
 
 function checkConfigFiles(

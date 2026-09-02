@@ -95,6 +95,34 @@ describe("mission-brief", () => {
     assert.doesNotThrow(() => finalizeMissionBrief(path.join(cwd, "missing.md")));
   });
 
+  it("finalizeMissionBrief writes a .bak of the pre-finalize brief", () => {
+    const briefPath = path.join(cwd, "mission-brief.md");
+    fs.writeFileSync(briefPath, `${BRIEF_DRAFT_MARKER}body`, "utf8");
+    finalizeMissionBrief(briefPath);
+    const bak = fs.readFileSync(`${briefPath}.bak`, "utf8");
+    // .bak preserves the draft marker — that is the point: it is the
+    // pre-finalize snapshot, so the user can recover if the final form is
+    // wrong.
+    assert.ok(bak.startsWith(BRIEF_DRAFT_MARKER));
+    assert.ok(bak.endsWith("body"));
+  });
+
+  it("finalizeMissionBrief is idempotent (second call is a no-op)", () => {
+    const briefPath = path.join(cwd, "mission-brief.md");
+    fs.writeFileSync(briefPath, `${BRIEF_DRAFT_MARKER}body`, "utf8");
+    finalizeMissionBrief(briefPath);
+    const firstAfter = fs.readFileSync(briefPath, "utf8");
+    finalizeMissionBrief(briefPath);
+    const secondAfter = fs.readFileSync(briefPath, "utf8");
+    assert.strictEqual(firstAfter, secondAfter, "second finalize must not modify the file");
+    // .bak is rewritten on every fresh finalize; idempotent re-finalize
+    // does not overwrite the existing .bak either.
+    const bakStat = fs.statSync(`${briefPath}.bak`);
+    const bakAfter = fs.readFileSync(`${briefPath}.bak`, "utf8");
+    assert.ok(bakStat.size > 0);
+    assert.ok(bakAfter.startsWith(BRIEF_DRAFT_MARKER));
+  });
+
   it("amendBullet crosses out the first matching bullet and appends a replacement", () => {
     const brief = "## Success criteria\n- ship feature\n- keep tests green\n";
     const amended = amendBullet(brief, "ship feature", "ship feature, with tests");

@@ -1,6 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { looksLikeTestPath } from "./files-discovery.js";
+import { atomicWriteJson } from "./atomic-write.js";
 
 export const FILES_CONFIG_FILE = "files.json";
 
@@ -58,13 +59,7 @@ export function loadFilesConfig(cwd: string): FilesConfig | null {
 }
 
 export function saveFilesConfig(cwd: string, config: FilesConfig): void {
-  const configPath = getFilesConfigPath(cwd);
-  fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(
-    configPath,
-    JSON.stringify({ _comment: FILES_CONFIG_COMMENT, ...config }, null, 2),
-    "utf8",
-  );
+  atomicWriteJson(getFilesConfigPath(cwd), { _comment: FILES_CONFIG_COMMENT, ...config });
 }
 
 export function validateFilesConfig(config: FilesConfig): void {

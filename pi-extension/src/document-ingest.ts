@@ -16,6 +16,7 @@ import {
   normalizeQualityAttributeItem,
   normalizeConstraintItem,
 } from "./driver-extractor.js";
+import { atomicWriteJson } from "./atomic-write.js";
 import { getArchitectMapDir } from "./constants.js";
 
 export const DOCUMENT_MANIFEST_FILE = "architect-documents.json";
@@ -67,9 +68,7 @@ export function buildIngestBatches<T>(items: T[], batchSize: number): T[][] {
 }
 
 export function saveDocumentManifest(cwd: string, manifest: DocumentManifest): void {
-  const manifestPath = getDocumentManifestPath(cwd);
-  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  atomicWriteJson(getDocumentManifestPath(cwd), manifest);
 }
 
 export function loadDocumentManifest(cwd: string): DocumentManifest | null {

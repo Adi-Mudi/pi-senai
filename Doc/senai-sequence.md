@@ -42,6 +42,8 @@ Pi Senai is a stage-gated agent orchestration extension for Pi. Each stage is a 
 
 Use `/senai-approve` to approve a finished stage and automatically run the next stage. Manual stage commands (`/senai-implement`, `/senai-document`, `/senai-deliver`) can still be used, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
 
+`/senai-approve` and `/senai-discussion-approve` share a project-wide run lock at `.IDE_Plans/senai/.lock/meta.json` (PID + heartbeat). They mutually exclude each other so a double-click inside one session or two Pi sessions in the same project cannot race-write `state.json`. Stale locks (dead pid or heartbeat older than `SENAI_LOCK_STALE_MS`, default 60s) are auto-stolen by the next acquire. The full environment contract: `SENAI_LOCK_TIMEOUT_MS` (default 5000), `SENAI_LOCK_STALE_MS` (default 60000), `SENAI_LOCK_HEARTBEAT_MS` (default 5000). `/senai-discussion-approve` is also idempotent: a second call on the same already-finalized brief short-circuits with "already finalized" instead of bumping the `discussions` counter.
+
 Configuration commands:
 
 - `/senai-configure-agents` — interactively map Senai roles to subagent names and save `.pi/senai/agents.json`.

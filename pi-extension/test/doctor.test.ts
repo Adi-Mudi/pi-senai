@@ -14,6 +14,7 @@ import { createEmptyDrivers, saveDrivers } from "../src/driver-extractor.js";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import { defaultState, saveState } from "../src/state.js";
 import { generateDocsStructure } from "../src/doc-selection.js";
+import { getLockDir, getLockPath } from "../src/constants.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -4325,6 +4326,94 @@ describe("doctor checkDiscussions", () => {
       ),
       "setup progress must list the optional step 8",
     );
+  });
+
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("doctor lock state", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = makeTmpDir("doctor-lock-");
+  });
+
+  function findLockSection(report: ReturnType<typeof runSenaiDiagnostic>) {
+    return report.sections.find((s) => s.title === "Lock state");
+  }
+
+  it("reports Lock state: free when no holder is present", () => {
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findLockSection(report);
+    assert.ok(section, "Lock state section should always be present");
+    const okItem = section!.items.find((i) => i.message.includes("Lock state: free"));
+    assert.ok(okItem, "should report a free lock");
+    assert.strictEqual(okItem!.status, "ok");
+  });
+
+  it("reports the current holder when a lock file is present", () => {
+    fs.mkdirSync(getLockDir(tmpDir), { recursive: true });
+    const now = new Date().toISOString();
+    fs.writeFileSync(
+      getLockPath(tmpDir),
+      JSON.stringify({
+        pid: process.pid,
+        host: "host-doctor-test",
+        command: "/senai-approve",
+        startedAt: now,
+        heartbeatAt: now,
+        mode: "approve",
+        runId: "lock-test-run",
+      }),
+      "utf8",
+    );
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findLockSection(report);
+    assert.ok(section);
+    const heldItem = section!.items.find((i) => i.message.includes("Lock state: held"));
+    assert.ok(heldItem, "should report a held lock");
+    assert.strictEqual(heldItem!.status, "info");
+    assert.ok(
+      section!.items.some((i) => i.message.includes("pid=" + process.pid)),
+      "section should include pid",
+    );
+    assert.ok(
+      section!.items.some((i) => i.message.includes("host-doctor-test")),
+      "section should include host",
+    );
+    assert.ok(
+      section!.items.some((i) => i.message.includes("runId=lock-test-run")),
+      "section should include runId",
+    );
+  });
+
+  it("warns when the heartbeat is older than SENAI_LOCK_STALE_MS", () => {
+    fs.mkdirSync(getLockDir(tmpDir), { recursive: true });
+    const longAgo = new Date(Date.now() - 5 * 60_000).toISOString();
+    fs.writeFileSync(
+      getLockPath(tmpDir),
+      JSON.stringify({
+        pid: process.pid,
+        host: "host",
+        command: "/senai-discussion-approve",
+        startedAt: longAgo,
+        heartbeatAt: longAgo,
+        mode: "discussion-approve",
+      }),
+      "utf8",
+    );
+
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findLockSection(report);
+    assert.ok(section);
+    const warningItem = section!.items.find(
+      (i) => i.status === "warning" && i.message.includes("auto-steal"),
+    );
+    assert.ok(warningItem, "stale heartbeat must produce a warning item about auto-steal");
+    assert.match(warningItem!.message, /auto-steal/);
   });
 
   afterEach(() => {

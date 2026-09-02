@@ -8,6 +8,7 @@ import { getDriversPath, type ArchitecturalDrivers } from "./driver-extractor.js
 import { getArchitectStateDir } from "./constants.js";
 import { loadAgentConfig, resolveAgentName, saveAgentConfig } from "./agent-config.js";
 import { DEFAULT_AGENTS, type SenaiRole } from "./agent-suggestions.js";
+import { atomicWriteFile, atomicWriteJson } from "./atomic-write.js";
 
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
 export const ARCHITECT_REPORT_FILE = "architect-report.json";
@@ -156,9 +157,7 @@ export function loadArchitectProfile(cwd: string): ArchitectProfile | null {
 }
 
 export function saveArchitectProfile(cwd: string, profile: ArchitectProfile): void {
-  const profilePath = getArchitectProfilePath(cwd);
-  fs.mkdirSync(path.dirname(profilePath), { recursive: true });
-  fs.writeFileSync(profilePath, JSON.stringify(profile, null, 2), "utf8");
+  atomicWriteJson(getArchitectProfilePath(cwd), profile);
 }
 
 export function loadArchitectReport(cwd: string): ArchitectReport | null {
@@ -246,8 +245,7 @@ export function writeGeneratedManifest(cwd: string, files: string[]): GeneratedM
     manifest.files[path.relative(cwd, filePath)] = hash;
   }
   const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
-  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  atomicWriteJson(manifestPath, manifest);
   return manifest;
 }
 
@@ -278,15 +276,12 @@ export function addToGeneratedManifest(cwd: string, files: string[]): GeneratedM
   }
   manifest.generatedAt = new Date().toISOString();
   const manifestPath = path.join(getArchitectStateDir(cwd), GENERATED_MANIFEST_FILE);
-  fs.mkdirSync(path.dirname(manifestPath), { recursive: true });
-  fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+  atomicWriteJson(manifestPath, manifest);
   return manifest;
 }
 
 export function saveArchitectReport(cwd: string, report: ArchitectReport): void {
-  const reportPath = getArchitectReportPath(cwd);
-  fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-  fs.writeFileSync(reportPath, JSON.stringify(report, null, 2), "utf8");
+  atomicWriteJson(getArchitectReportPath(cwd), report);
 }
 
 export function migrateLegacyArchitectState(cwd: string): string[] {
@@ -420,7 +415,7 @@ export function generateAgentFiles(
     const filePath = path.join(agentsDir, `${agentName}.md`);
 
     const content = buildAgentMarkdown(agentName, role, profile, architecture, rules, archId);
-    fs.writeFileSync(filePath, content, "utf8");
+    atomicWriteFile(filePath, content, "utf8");
     created.push(filePath);
   }
 
@@ -473,7 +468,7 @@ export function generateSkillFiles(
     const filePath = path.join(skillDir, "SKILL.md");
 
     const content = buildSkillMarkdown(skillName, stage, profile, architecture);
-    fs.writeFileSync(filePath, content, "utf8");
+    atomicWriteFile(filePath, content, "utf8");
     created.push(filePath);
   }
 
@@ -564,7 +559,7 @@ export function generateArchitectureDocs(
   const created: string[] = [];
 
   const architecturePath = path.join(docsDir, "architecture.md");
-  fs.writeFileSync(architecturePath, buildArchitectureMarkdown(profile, report), "utf8");
+  atomicWriteFile(architecturePath, buildArchitectureMarkdown(profile, report), "utf8");
   created.push(architecturePath);
 
   // Regeneration replaces the ADR set: remove old ADRs so the folder always
@@ -581,7 +576,7 @@ export function generateArchitectureDocs(
   for (const adr of report.adrs) {
     const adrFileName = `${adr.id}-${slugify(adr.title)}.md`;
     const adrPath = path.join(adrsDir, adrFileName);
-    fs.writeFileSync(adrPath, buildAdrMarkdown(adr), "utf8");
+    atomicWriteFile(adrPath, buildAdrMarkdown(adr), "utf8");
     created.push(adrPath);
   }
 
