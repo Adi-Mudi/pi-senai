@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { RpcClient } from "./helpers/rpc-client.js";
-import { makeTestHome, shouldRunE2E, type TestHome } from "./helpers/test-home.js";
+import { makeTestHome, shouldRunE2E, hasRealLlmKey, type TestHome } from "./helpers/test-home.js";
 import { makeMinimalProjectFiles, seedSenaiConfig } from "./helpers/fixtures.js";
 
 const SKIP_MESSAGE = "E2E tests require pi binary on PATH and RUN_E2E=1";
@@ -26,6 +26,7 @@ describe("e2e/09-discussion", () => {
 
 	it("pre-run /senai-discussion creates a draft mission-brief.md", { timeout: 60_000 }, async (t) => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
+		if (!hasRealLlmKey()) return t.skip("this test needs a real LLM API key (no dummy/local key found)");
 		assert.ok(client && home, "test setup missing");
 
 		// /senai-discussion is conversational; in E2E we simulate the parent

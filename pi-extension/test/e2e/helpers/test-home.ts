@@ -37,6 +37,44 @@ export function shouldRunE2E(): boolean {
 	}
 }
 
+/** Recognized provider keys (matches Doc/test-plan.md). */
+const PROVIDER_KEY_VARS = [
+	"ANTHROPIC_API_KEY",
+	"OPENAI_API_KEY",
+	"GOOGLE_API_KEY",
+	"MISTRAL_API_KEY",
+	"KIMI_API_KEY",
+	"KIMI_CODE_HOME",
+];
+
+/** The dummy key the CI workflow injects. Treated as "no real key" so
+ *  tests that need a real LLM skip locally and on CI alike. */
+const DUMMY_KEYS = new Set([
+	"sk-ant-e2e-dummy-not-used",
+	"",
+]);
+
+/** Returns true if a recognized provider key is set to a non-dummy value
+ *  in the environment. Tests that exercise real LLM calls should gate
+ *  on this and skip cleanly when false. */
+export function hasRealLlmKey(): boolean {
+	for (const k of PROVIDER_KEY_VARS) {
+		const v = process.env[k];
+		if (v && v.length > 0 && !DUMMY_KEYS.has(v)) return true;
+	}
+	return false;
+}
+
+/** Returns true when Tier 2 (real-LLM) E2E should run. Stricter than
+ *  `shouldRunE2E`: requires both the gate flag and a recognized provider
+ *  API key in the environment. Without a key the test would crash on
+ *  the first model call. */
+export function shouldRunLLME2E(): boolean {
+	if (!shouldRunE2E()) return false;
+	if (process.env.RUN_LLM_E2E !== "1") return false;
+	return hasRealLlmKey();
+}
+
 /** Walk up from this helper file until we find a package.json with name
  *  "pi-senai". Returns the absolute path to that project root, or null. */
 function findProjectRoot(start: string): string | null {

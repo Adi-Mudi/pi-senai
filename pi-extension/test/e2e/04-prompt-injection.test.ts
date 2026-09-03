@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { RpcClient, isPiRpcPromptBug } from "./helpers/rpc-client.js";
-import { makeTestHome, shouldRunE2E, type TestHome } from "./helpers/test-home.js";
+import { makeTestHome, shouldRunE2E, hasRealLlmKey, type TestHome } from "./helpers/test-home.js";
 import { makeMinimalProjectFiles, seedSenaiConfig } from "./helpers/fixtures.js";
 
 const SKIP_MESSAGE = "E2E tests require pi binary on PATH and RUN_E2E=1";
@@ -29,6 +29,13 @@ const REQUIRED_SUBSTRINGS = [
 	"plan/scouts/scout-angle_1.md",
 	"plan/reviews/review-correctness.md",
 	"deliver/security-report.md",
+	// Adaptive spawn cadence — added in commit ebd54ac. The cadence
+	// block is injected between the Document Scope block and the skill
+	// text. If it ever drops out, the Plan stage silently reverts to the
+	// old static stagger rule, so we pin both the section header and a
+	// tier-specific dispatch phrase.
+	"## Spawn Cadence (adaptive)",
+	"parallel burst",
 ];
 
 describe("e2e/04-prompt-injection", () => {
@@ -49,6 +56,7 @@ describe("e2e/04-prompt-injection", () => {
 
 	it("/senai-plan injects the expected plan-stage prompt", { timeout: 60_000 }, async (t) => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
+		if (!hasRealLlmKey()) return t.skip("this test needs a real LLM API key (no dummy/local key found)");
 		assert.ok(client, "test setup missing");
 		try {
 			await client.request("prompt", { text: "/senai-plan check prompt injection" });

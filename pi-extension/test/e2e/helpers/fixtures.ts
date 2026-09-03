@@ -109,3 +109,31 @@ export async function approveUntilStage(client: RpcClient, target: string): Prom
 		await client.waitForIdle();
 	}
 }
+
+/** Write a seeded adaptive spawn cadence state file at
+ *  `.IDE_Plans/senai/spawn-cadence.json`. Matches the v1 schema the
+ *  extension expects. `state` lets the caller override tier, counters,
+ *  and history; defaults give the canonical fresh-project state. */
+export function seedCadenceState(
+	cwd: string,
+	state: {
+		tier?: "A" | "B" | "C" | "D";
+		consecutiveCleanRuns?: number;
+		last429At?: string | null;
+		lastPromotableAt?: string | null;
+		history?: Array<{ ts: string; from: string; to: string; reason: string }>;
+	} = {},
+): void {
+	const cadencePath = path.join(cwd, ".IDE_Plans", "senai", "spawn-cadence.json");
+	fs.mkdirSync(path.dirname(cadencePath), { recursive: true });
+	const value = {
+		_comment: "Seeded by E2E fixture.",
+		version: 1,
+		tier: state.tier ?? "A",
+		consecutiveCleanRuns: state.consecutiveCleanRuns ?? 0,
+		last429At: state.last429At ?? null,
+		lastPromotableAt: state.lastPromotableAt ?? null,
+		history: state.history ?? [],
+	};
+	fs.writeFileSync(cadencePath, JSON.stringify(value, null, 2) + "\n", "utf8");
+}

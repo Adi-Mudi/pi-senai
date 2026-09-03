@@ -51,6 +51,9 @@ export class RpcClient {
 	private isClosed = false;
 	private defaultTimeoutMs: number;
 	public stderr = "";
+	/** True after at least one prompt call. Exposed via the hasSentPrompt
+	 *  getter so tests can verify the prompt path was exercised. */
+	private promptSent = false;
 
 	constructor(options: RpcClientOptions = {}) {
 		const args = options.args ?? ["--mode", "rpc", "--no-session"];
@@ -134,14 +137,12 @@ export class RpcClient {
 		try { this.child.stdin.destroy(); } catch { /* ignore */ }
 	}
 
-	request<T = any>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
-		const id = randomUUID();
-		const msg: RpcRequest = { id, type, ...payload };
+	private async sendAndAwait<T = any>(id: string, msg: RpcRequest): Promise<T> {
 		return new Promise<T>((resolve, reject) => {
 			const timer = setTimeout(() => {
 				if (this.pending.has(id)) {
 					this.pending.delete(id);
-					reject(new Error(`RPC timeout after ${this.defaultTimeoutMs}ms for type=${type}`));
+					reject(new Error(`RPC timeout after ${this.defaultTimeoutMs}ms for type=${msg.type}`));
 				}
 			}, this.defaultTimeoutMs);
 			this.pending.set(id, { resolve, reject, timer });
@@ -149,16 +150,63 @@ export class RpcClient {
 		});
 	}
 
+	async request<T = any>(type: string, payload: Record<string, unknown> = {}): Promise<T> {
+		// pi's `prompt` RPC expects a `message` field (per the official docs).
+		// Calling it with `text` instead makes pi respond with:
+		//   { success: false, error: "Cannot read properties of undefined
+		//   (reading 'startsWith')" }
+		// (logged in earendil-works/pi issue #2461 as a "first prompt
+		// fails" bug, but it's actually a missing-field bug that fires on
+		// every prompt). Normalize: rename `text` to `message` here so
+		// every test can pass either shape without thinking about it.
+		const fixedPayload: Record<string, unknown> = { ...payload };
+		if (type === "prompt") {
+			this.promptSent = true;
+			if ("text" in fixedPayload && !("message" in fixedPayload)) {
+				fixedPayload.message = fixedPayload.text;
+				delete fixedPayload.text;
+			}
+		}
+		const id = randomUUID();
+		const msg: RpcRequest = { id, type, ...fixedPayload };
+		return await this.sendAndAwait<T>(id, msg);
+	}
+
 	onEvent(listener: (event: RpcEvent) => void): () => void {
 		this.listeners.add(listener);
 		return () => { this.listeners.delete(listener); };
 	}
 
-	/** Resolves on the next `agent_settled` event. Throws if the child exits first. */
-	waitForIdle(): Promise<void> {
+	/** True after at least one prompt has been sent through this client.
+	 *  Kept for test introspection — proves the request() normalization
+	 *  fired (the message/text rename only matters for prompt calls). */
+	get hasSentPrompt(): boolean {
+		return this.promptSent;
+	}
+
+	/** Resolves on the next `agent_settled` event (or any response if
+	 *  one is already queued in idleResolvers). Times out after
+	 *  `timeoutMs` (default 15s) — pi 0.84.3 with a dummy LLM key never
+	 *  fires agent_settled, so without a timeout the call hangs forever.
+	 *  Throws TimeoutError on timeout; throws if the child exits first. */
+	waitForIdle(timeoutMs = 15_000): Promise<void> {
 		return new Promise<void>((resolve, reject) => {
 			if (this.isClosed) return reject(new Error("RPC client already closed"));
-			this.idleResolvers.push(resolve);
+			let settled = false;
+			const timer = setTimeout(() => {
+				if (settled) return;
+				settled = true;
+				const idx = this.idleResolvers.indexOf(wrapped);
+				if (idx >= 0) this.idleResolvers.splice(idx, 1);
+				reject(new Error(`waitForIdle timed out after ${timeoutMs}ms — pi never emitted agent_settled (likely the LLM call failed with the dummy API key)`));
+			}, timeoutMs);
+			const wrapped = () => {
+				if (settled) return;
+				settled = true;
+				clearTimeout(timer);
+				resolve();
+			};
+			this.idleResolvers.push(wrapped);
 		});
 	}
 

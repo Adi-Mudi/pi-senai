@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { RpcClient, isPiRpcPromptBug } from "./helpers/rpc-client.js";
-import { makeTestHome, shouldRunE2E, type TestHome } from "./helpers/test-home.js";
+import { makeTestHome, shouldRunE2E, hasRealLlmKey, type TestHome } from "./helpers/test-home.js";
 import { makeMinimalProjectFiles, seedSenaiConfig } from "./helpers/fixtures.js";
 
 const SKIP_MESSAGE = "E2E tests require pi binary on PATH and RUN_E2E=1";
@@ -48,6 +48,7 @@ describe("e2e/08-architect-tools", () => {
 
 	it("/senai-generate-architect without inputs surfaces the warn-and-ask and exits", { timeout: 60_000 }, async (t) => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
+		if (!hasRealLlmKey()) return t.skip("this test needs a real LLM API key (no dummy/local key found)");
 		assert.ok(client && home, "test setup missing");
 		try {
 			// No architect-inputs.json written: the command must notify the user

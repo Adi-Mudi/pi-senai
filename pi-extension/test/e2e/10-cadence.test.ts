@@ -65,23 +65,26 @@ describe("e2e/10-cadence", () => {
 		assert.strictEqual(back.history[0].reason, "demote:rate_limit");
 	});
 
-	it("/senai-cadence-status reports tier A on a fresh project (skips on pi 0.84.3 prompt bug)", { timeout: 60_000 }, async (t) => {
+	it("/senai-cadence-status reports tier A on a fresh project", { timeout: 60_000 }, async (t) => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		try {
-			await client.request("prompt", { text: "/senai-cadence-status" });
-			await client.waitForIdle();
-			// We can't observe the notify() text from RPC because notify is
-			// fire-and-forget over the extension UI sub-protocol. Instead,
-			// verify the cadence file the command writes was either freshly
-			// created at A or remained untouched at A.
+			// Wipe any cadence file the previous test left behind so we
+			// exercise the truly fresh-project branch.
 			const cadencePath = path.join(home.cwd, ".IDE_Plans", "senai", "spawn-cadence.json");
+			try {
+				fs.unlinkSync(cadencePath);
+			} catch {
+				// Already absent.
+			}
+			// /senai-cadence-status is a pure extension command (no agent
+			// turn), so we don't wait for agent_settled — that event never
+			// fires for extension commands and would hang the test.
+			await client.request("prompt", { text: "/senai-cadence-status" });
 			if (fs.existsSync(cadencePath)) {
 				const state = JSON.parse(fs.readFileSync(cadencePath, "utf8"));
 				assert.strictEqual(state.tier, "A", "fresh project should report tier A");
 			}
-			// If the file wasn't written, the command was a no-op (status is
-			// read-only), which is also acceptable.
 		} catch (err) {
 			if (isPiRpcPromptBug(err)) {
 				return t.skip(`pi RPC prompt handler is broken on this version (${(err as Error).message.slice(0, 80)}); install a working pi binary to enable this test`);
@@ -90,7 +93,7 @@ describe("e2e/10-cadence", () => {
 		}
 	});
 
-	it("/senai-cadence-reset moves a tier-D state back to tier A (skips on pi 0.84.3 prompt bug)", { timeout: 60_000 }, async (t) => {
+	it("/senai-cadence-reset moves a tier-D state back to tier A", { timeout: 60_000 }, async (t) => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		// Seed a tier-D state with 7 clean runs so the floor-escape warning
@@ -114,21 +117,39 @@ describe("e2e/10-cadence", () => {
 		);
 
 		try {
-			// /senai-cadence-reset pops a confirm dialog. pi 0.84.3 may
-			// auto-cancel the dialog depending on the prompt-bug branch.
-			await client.request("prompt", { text: "/senai-cadence-reset" });
-			await client.waitForIdle();
+			// Subscribe to extension UI requests so we can auto-confirm
+			// the dialog /senai-cadence-reset pops.
+			const off = client.onEvent((event: any) => {
+				if (
+					event.type === "extension_ui_request" &&
+					event.method === "confirm" &&
+					event.title === "Reset spawn cadence"
+				) {
+					// Send the confirm response back via stdin.
+					(client as any).child.stdin.write(
+						JSON.stringify({
+							type: "extension_ui_response",
+							id: event.id,
+							confirmed: true,
+						}) + "\n",
+					);
+				}
+			});
+
+			try {
+				// /senai-cadence-reset pops a confirm dialog. No agent turn,
+				// so we don't waitForIdle — that would hang waiting for an
+				// agent_settled event that never comes.
+				await client.request("prompt", { text: "/senai-cadence-reset" });
+			} finally {
+				off();
+			}
 
 			const after = JSON.parse(fs.readFileSync(cadencePath, "utf8"));
-			// Whether the user confirmed or cancelled, the file shape must
-			// still be a valid cadence state. Tier stays D on cancel, goes
-			// to A on confirm.
-			assert.ok(["A", "D"].includes(after.tier), `unexpected tier after reset: ${after.tier}`);
-			if (after.tier === "A") {
-				assert.strictEqual(after.consecutiveCleanRuns, 0);
-				const last = after.history[after.history.length - 1];
-				assert.strictEqual(last.reason, "reset:manual");
-			}
+			assert.strictEqual(after.tier, "A", "tier should be A after a confirmed reset");
+			assert.strictEqual(after.consecutiveCleanRuns, 0);
+			const last = after.history[after.history.length - 1];
+			assert.strictEqual(last.reason, "reset:manual");
 		} catch (err) {
 			if (isPiRpcPromptBug(err)) {
 				return t.skip(`pi RPC prompt handler is broken on this version (${(err as Error).message.slice(0, 80)}); install a working pi binary to enable this test`);
