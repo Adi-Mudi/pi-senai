@@ -39,7 +39,7 @@ import {
   type ArchitectReport,
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
-import { getArchitectStateDir, getArtifactPaths } from "./constants.js";
+import { getArchitectStateDir, getArtifactPaths, getSenaiDir, getPreRunDiscussionDir } from "./constants.js";
 import { cacheSize, oldestCacheTimestamp } from "./scouts/community-research.js";
 import { loadState, type SenaiState } from "./state.js";
 import {
@@ -277,6 +277,21 @@ function checkSetupProgress(cwd: string): DiagnosticSection {
   } else {
     const next = steps.find((s) => !s.done)!;
     items.push({ status: "info", message: `Setup progress: ${completed}/5 checks complete. Next: run ${next.command}.` });
+  }
+
+  // Old artifact root (.IDE_Plans/senai/) renamed to .IDE_Plans/pi-senai/.
+  // Warn once if the old directory still exists; user can move or delete it.
+  const oldSenaiDir = path.join(cwd, ".IDE_Plans/senai");
+  if (fs.existsSync(oldSenaiDir)) {
+    const newSenaiDir = path.join(cwd, ".IDE_Plans/pi-senai");
+    items.push({
+      status: "warning",
+      message: "Old `.IDE_Plans/senai/` directory found. Pi-senai now uses `.IDE_Plans/pi-senai/`.",
+      details: [
+        `Move: mv "${oldSenaiDir}" "${newSenaiDir}"`,
+        "Or delete it if the artifacts are disposable.",
+      ],
+    });
   }
 
   return { title: "Setup progress", items };
@@ -1320,7 +1335,7 @@ function checkStrayFiles(cwd: string): DiagnosticSection {
     /* unreadable root — nothing to report */
   }
 
-  const runsDir = path.join(cwd, ".IDE_Plans", "senai", "runs");
+  const runsDir = path.join(cwd, ".IDE_Plans", "pi-senai", "runs");
   const walk = (dir: string, rel: string, depth: number): void => {
     if (depth > 4) return;
     let entries: fs.Dirent[];
@@ -1334,7 +1349,7 @@ function checkStrayFiles(cwd: string): DiagnosticSection {
       if (entry.isDirectory()) {
         walk(path.join(dir, entry.name), entryRel, depth + 1);
       } else if (isStray(entry.name)) {
-        stray.push(path.join(".IDE_Plans", "senai", "runs", entryRel).replace(/\\/g, "/"));
+        stray.push(path.join(".IDE_Plans", "pi-senai", "runs", entryRel).replace(/\\/g, "/"));
       }
     }
   };
@@ -2414,7 +2429,7 @@ function checkCommunityResearchCache(cwd: string): DiagnosticSection {
 
   items.push({
     status: "info",
-    message: `Community research cache: ${size} file(s) under .IDE_Plans/senai/.cache/community-research/.`,
+    message: `Community research cache: ${size} file(s) under .IDE_Plans/pi-senai/.cache/community-research/.`,
   });
   if (oldest) {
     items.push({
@@ -2480,7 +2495,7 @@ function checkDiscussions(cwd: string): DiagnosticSection {
   const items: DiagnosticItem[] = [];
 
   // Per-run folders
-  const runsRoot = path.join(cwd, ".IDE_Plans/senai/runs");
+  const runsRoot = path.join(getSenaiDir(cwd), "runs");
   let runDirs: string[] = [];
   try {
     runDirs = fs.readdirSync(runsRoot, { withFileTypes: true })
@@ -2528,7 +2543,7 @@ function checkDiscussions(cwd: string): DiagnosticSection {
   }
 
   // Pre-run folder
-  const preRunDir = path.join(cwd, ".IDE_Plans/senai/discussions/pre-run");
+  const preRunDir = getPreRunDiscussionDir(cwd);
   let preRunEntries: string[] = [];
   try {
     preRunEntries = fs.readdirSync(preRunDir);

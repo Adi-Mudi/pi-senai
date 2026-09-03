@@ -18,8 +18,8 @@ import {
 describe("constants", () => {
   const cwd = "/fake/project";
 
-  it("getSenaiDir returns .IDE_Plans/senai under cwd", () => {
-    assert.strictEqual(getSenaiDir(cwd), path.join(cwd, ".IDE_Plans/senai"));
+  it("getSenaiDir returns .IDE_Plans/pi-senai under cwd", () => {
+    assert.strictEqual(getSenaiDir(cwd), path.join(cwd, ".IDE_Plans/pi-senai"));
   });
 
   it("getArchitectStateDir returns .pi/architect under cwd", () => {
@@ -33,67 +33,67 @@ describe("constants", () => {
   it("getStatePath returns state.json under senai dir", () => {
     assert.strictEqual(
       getStatePath(cwd),
-      path.join(cwd, ".IDE_Plans/senai/state.json"),
+      path.join(cwd, ".IDE_Plans/pi-senai/state.json"),
     );
   });
 
   it("getRunDir returns run-specific directory", () => {
     assert.strictEqual(
       getRunDir(cwd, "2026-06-12-hello"),
-      path.join(cwd, ".IDE_Plans/senai/runs/2026-06-12-hello"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/2026-06-12-hello"),
     );
   });
 
   it("getArtifactPaths returns all artifact paths for a run", () => {
     const artifacts = getArtifactPaths(cwd, "run-1");
 
-    assert.strictEqual(artifacts.runDir, path.join(cwd, ".IDE_Plans/senai/runs/run-1"));
-    assert.strictEqual(artifacts.planDir, path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan"));
+    assert.strictEqual(artifacts.runDir, path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1"));
+    assert.strictEqual(artifacts.planDir, path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan"));
     assert.strictEqual(
       artifacts.planScoutsDir,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/scouts"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/scouts"),
     );
     assert.strictEqual(
       artifacts.planReviewsDir,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/reviews"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/reviews"),
     );
     assert.strictEqual(
       artifacts.implementDir,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/implement"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/implement"),
     );
     assert.strictEqual(
       artifacts.documentDir,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/document"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/document"),
     );
     assert.strictEqual(
       artifacts.deliverDir,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/deliver"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/deliver"),
     );
 
-    assert.strictEqual(artifacts.plan, path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/plan.md"));
+    assert.strictEqual(artifacts.plan, path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/plan.md"));
     assert.strictEqual(
       artifacts.planOverview,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/plan-overview.md"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/plan-overview.md"),
     );
     assert.strictEqual(
       artifacts.discussionNotes,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/discussion-notes.md"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/discussion-notes.md"),
     );
     assert.strictEqual(
       artifacts.scoutAngle1,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_1.md"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/scouts/scout-angle_1.md"),
     );
     assert.strictEqual(
       artifacts.scoutAngle4,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_4.md"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/scouts/scout-angle_4.md"),
     );
     assert.strictEqual(
       artifacts.reviewCorrectness,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/plan/reviews/review-correctness.md"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/plan/reviews/review-correctness.md"),
     );
     assert.strictEqual(
       artifacts.securityReport,
-      path.join(cwd, ".IDE_Plans/senai/runs/run-1/deliver/security-report.md"),
+      path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1/deliver/security-report.md"),
     );
   });
 
@@ -245,7 +245,7 @@ describe("constants", () => {
       "scoutAngle4",
       "securityReport",
     ]);
-    const runDir = path.join(cwd, ".IDE_Plans/senai/runs/run-1");
+    const runDir = path.join(cwd, ".IDE_Plans/pi-senai/runs/run-1");
     assert.strictEqual(artifacts.scoutAngle2, path.join(runDir, "plan/scouts/scout-angle_2.md"));
     assert.strictEqual(artifacts.scoutAngle3, path.join(runDir, "plan/scouts/scout-angle_3.md"));
     assert.strictEqual(artifacts.reviewSecurity, path.join(runDir, "plan/reviews/review-security.md"));

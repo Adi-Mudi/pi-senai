@@ -60,7 +60,7 @@ describe("e2e/23-real-llm-discussion", () => {
 				}
 			}
 			// A transcript or draft brief should have been written.
-			const transcriptDir = path.join(home.cwd, ".IDE_Plans/senai/discussions/pre-run");
+			const transcriptDir = path.join(home.cwd, ".IDE_Plans/pi-senai/discussions/pre-run");
 			const hasTranscript = fs.existsSync(transcriptDir) &&
 				fs.readdirSync(transcriptDir).some((f) => f.startsWith("discussion-"));
 			assert.ok(hasTranscript, "discussion transcript should be written");

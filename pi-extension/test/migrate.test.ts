@@ -12,9 +12,9 @@ describe("migrateLegacyOrchestraDirs", () => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-migrate-test-"));
   });
 
-  it("migrates .IDE_Plans/orchestra to .IDE_Plans/senai", () => {
+  it("migrates .IDE_Plans/orchestra to .IDE_Plans/pi-senai", () => {
     const legacyDir = path.join(tmpDir, ".IDE_Plans", "orchestra");
-    const targetDir = path.join(tmpDir, ".IDE_Plans", "senai");
+    const targetDir = path.join(tmpDir, ".IDE_Plans", "pi-senai");
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, "state.json"), JSON.stringify({ version: 1 }));
 
@@ -41,13 +41,13 @@ describe("migrateLegacyOrchestraDirs", () => {
   it("does nothing when no legacy directories exist", () => {
     const moved = migrateLegacyOrchestraDirs(tmpDir);
     assert.deepStrictEqual(moved, []);
-    assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans", "senai")));
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans", "pi-senai")));
     assert.ok(!fs.existsSync(path.join(tmpDir, ".pi", "senai")));
   });
 
   it("skips migration when the new directory already exists", () => {
     const legacyDir = path.join(tmpDir, ".IDE_Plans", "orchestra");
-    const targetDir = path.join(tmpDir, ".IDE_Plans", "senai");
+    const targetDir = path.join(tmpDir, ".IDE_Plans", "pi-senai");
     fs.mkdirSync(legacyDir, { recursive: true });
     fs.mkdirSync(targetDir, { recursive: true });
     fs.writeFileSync(path.join(legacyDir, "state.json"), JSON.stringify({ version: 1 }));
@@ -76,7 +76,7 @@ describe("migrateLegacyOrchestraDirs", () => {
     assert.strictEqual(moved.length, 2);
     assert.ok(!fs.existsSync(legacyIde));
     assert.ok(!fs.existsSync(legacyPi));
-    assert.ok(fs.existsSync(path.join(tmpDir, ".IDE_Plans", "senai", "state.json")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".IDE_Plans", "pi-senai", "state.json")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai", "agents.json")));
   });
 
@@ -88,7 +88,7 @@ describe("migrateLegacyOrchestraDirs", () => {
 
     migrateLegacyOrchestraDirs(tmpDir);
 
-    const movedFile = path.join(tmpDir, ".IDE_Plans", "senai", "runs", "2026-01-01-test", "plan", "scouts", "scout-angle_1.md");
+    const movedFile = path.join(tmpDir, ".IDE_Plans", "pi-senai", "runs", "2026-01-01-test", "plan", "scouts", "scout-angle_1.md");
     assert.ok(fs.existsSync(movedFile));
     assert.strictEqual(fs.readFileSync(movedFile, "utf8"), "# scout notes");
   });
@@ -101,11 +101,11 @@ describe("migrateLegacyOrchestraDirs", () => {
 
     assert.deepStrictEqual(moved, [".pi/senai"]);
     assert.ok(!fs.existsSync(legacyPi));
-    assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans", "senai")), "IDE senai dir should not be created");
+    assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans", "pi-senai")), "IDE senai dir should not be created");
   });
 
   it("does nothing when only the target directories exist", () => {
-    const targetIde = path.join(tmpDir, ".IDE_Plans", "senai");
+    const targetIde = path.join(tmpDir, ".IDE_Plans", "pi-senai");
     const targetPi = path.join(tmpDir, ".pi", "senai");
     fs.mkdirSync(targetIde, { recursive: true });
     fs.mkdirSync(targetPi, { recursive: true });
@@ -128,8 +128,8 @@ describe("migrateLegacyOrchestraDirs", () => {
 
     const moved = migrateLegacyOrchestraDirs(tmpDir);
 
-    assert.deepStrictEqual(moved, [".IDE_Plans/senai"]);
-    const target = path.join(tmpDir, ".IDE_Plans", "senai");
+    assert.deepStrictEqual(moved, [".IDE_Plans/pi-senai"]);
+    const target = path.join(tmpDir, ".IDE_Plans", "pi-senai");
     assert.ok(fs.statSync(target).isFile());
     assert.strictEqual(fs.readFileSync(target, "utf8"), "not a directory");
   });

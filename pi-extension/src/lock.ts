@@ -15,7 +15,7 @@ import { atomicWriteJson } from "./atomic-write.js";
  * acquire attempt so a crashed previous session never wedges the run.
  *
  * Layout on disk:
- *   .IDE_Plans/senai/.lock/
+ *   .IDE_Plans/pi-senai/.lock/
  *     meta.json      # { pid, host, command, startedAt, heartbeatAt, mode, runId }
  *
  * Algorithm:
@@ -165,7 +165,7 @@ function tryAcquire(opts: {
 }): { acquired: boolean; holder: LockMeta | null } {
   // Atomic mkdir: success means we are the holder. Failure means someone
   // else holds it (or held it a moment ago — race window is microseconds).
-  // recursive: true so the parent .IDE_Plans/senai/ chain is created on
+  // recursive: true so the parent .IDE_Plans/pi-senai/ chain is created on
   // first use; the .lock directory itself is still atomic on POSIX (mkdir
   // either creates it or errors with EEXIST).
   try {

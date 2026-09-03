@@ -77,7 +77,7 @@ describe("smoke", () => {
 
   function getRunDir(): string {
     const state = loadState(tmpDir);
-    return path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId);
+    return path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId);
   }
 
   it("full Plan → Implement → Document → Deliver lifecycle", async () => {

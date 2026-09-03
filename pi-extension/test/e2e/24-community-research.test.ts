@@ -93,13 +93,13 @@ describe("e2e/24-community-research", () => {
 		}
 	});
 
-	it("purge-cache command removes cache files under .IDE_Plans/senai/.cache/", { timeout: 60_000 }, async (t) => {
+	it("purge-cache command removes cache files under .IDE_Plans/pi-senai/.cache/", { timeout: 60_000 }, async (t) => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		if (!hasRealLlmKey()) return t.skip("this test needs a real LLM API key (no dummy/local key found)");
 		assert.ok(client && home, "test setup missing");
 		try {
 			// Pre-populate cache with two dummy files.
-			const cacheDir = path.join(home.cwd, ".IDE_Plans/senai/.cache/community-research");
+			const cacheDir = path.join(home.cwd, ".IDE_Plans/pi-senai/.cache/community-research");
 			fs.mkdirSync(cacheDir, { recursive: true });
 			fs.writeFileSync(path.join(cacheDir, "h1.json"), "{}", "utf8");
 			fs.writeFileSync(path.join(cacheDir, "h2.json"), "{}", "utf8");

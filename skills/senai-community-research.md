@@ -42,14 +42,14 @@ The user picks ONE source. The scout runs once with that source.
 - **Never auto-fire** without user source pick.
 - **Never fire on every discussion** — only when a trigger path matches.
 - **Never retry more than once** on empty result.
-- **Never write outside `.IDE_Plans/senai/`**.
+- **Never write outside `.IDE_Plans/pi-senai/`**.
 - **Never include license as a filter** — quality (working + trusted) wins.
 - **Never write to `mission-brief.md` directly** — go through the scout, which appends `## External references` once.
 
 ## Cache short-circuit (hidden from user)
 
 Before firing the scout, check the cache:
-- Cache lives at `.IDE_Plans/senai/.cache/community-research/<hash>.json`
+- Cache lives at `.IDE_Plans/pi-senai/.cache/community-research/<hash>.json`
 - Key = sha256 of `(topic + projectKeywords + source + UTC day)` truncated to 32 chars
 - TTL = 24h
 - Hit → notify "Cache hit — reusing research from <time>", return cached output, skip the source picker
@@ -111,10 +111,10 @@ Failed entries are dropped from user-facing output but logged in the transcript.
 
 1. **Transcript**: `<discussions-dir>/discussion-NN-community-research.md`
    - Run-scoped: `<runDir>/discussions/discussion-NN-community-research.md`
-   - Pre-run: `.IDE_Plans/senai/discussions/pre-run/discussion-NN-community-research.md`
+   - Pre-run: `.IDE_Plans/pi-senai/discussions/pre-run/discussion-NN-community-research.md`
 2. **Brief section**: appended to `mission-brief.md` as `## External references`
    - Idempotent: if section already exists, skip the append
-3. **Cache**: `.IDE_Plans/senai/.cache/community-research/<hash>.json`
+3. **Cache**: `.IDE_Plans/pi-senai/.cache/community-research/<hash>.json`
 
 ## Token + wall-clock caps
 

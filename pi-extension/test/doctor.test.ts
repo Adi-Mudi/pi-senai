@@ -736,6 +736,35 @@ describe("doctor", () => {
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  it("warns when the old .IDE_Plans/senai/ directory exists", () => {
+    const tmpDir = makeTmpDir("doctor-old-dir-");
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
+    const report = runSenaiDiagnostic(tmpDir);
+    const setup = report.sections.find((s) => s.title === "Setup progress");
+    assert.ok(setup, "Setup progress section must exist");
+    const warn = setup.items.find(
+      (i) => i.status === "warning" && i.message.includes(".IDE_Plans/senai/"),
+    );
+    assert.ok(warn, "doctor must warn about the old .IDE_Plans/senai/ directory");
+    assert.ok(
+      warn.details?.some((d) => d.includes("mv") && d.includes(".IDE_Plans/pi-senai")),
+      "warning must include the mv command hint",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("does not warn about .IDE_Plans/senai/ when it is absent", () => {
+    const tmpDir = makeTmpDir("doctor-no-old-dir-");
+    const report = runSenaiDiagnostic(tmpDir);
+    const setup = report.sections.find((s) => s.title === "Setup progress");
+    assert.ok(setup, "Setup progress section must exist");
+    const warn = setup.items.find(
+      (i) => i.status === "warning" && i.message.includes(".IDE_Plans/senai/"),
+    );
+    assert.strictEqual(warn, undefined, "doctor must not warn when the old directory is absent");
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });
 
 describe("doctor architecture validation", () => {
@@ -3643,7 +3672,7 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
   function writeAllPlanArtifacts(tmpDir: string, runId: string, except?: string): void {
     for (const rel of PLAN_ARTIFACTS) {
       if (rel === except) continue;
-      writeFile(tmpDir, `.IDE_Plans/senai/runs/${runId}/${rel}`, "content");
+      writeFile(tmpDir, `.IDE_Plans/pi-senai/runs/${runId}/${rel}`, "content");
     }
   }
 
@@ -3727,7 +3756,7 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     const tmpDir = makeTmpDir("doctor-audit-empty-");
     saveState(tmpDir, { ...defaultState(), currentStage: "implementing", runId: "r1" });
     writeAllPlanArtifacts(tmpDir, "r1");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/plan/plan-overview.md", "");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/plan/plan-overview.md", "");
     const report = runSenaiDiagnostic(tmpDir);
     const section = report.sections.find((s) => s.title === "Run artifacts");
     const warning = section?.items.find((i) => i.status === "warning");
@@ -3756,7 +3785,7 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     const tmpDir = makeTmpDir("doctor-audit-deliver-");
     saveState(tmpDir, { ...defaultState(), currentStage: "delivered", runId: "r1" });
     writeAllPlanArtifacts(tmpDir, "r1");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/security-report.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/security-report.md", "content");
     const report = runSenaiDiagnostic(tmpDir);
     const section = report.sections.find((s) => s.title === "Run artifacts");
     // A delivered run without its artifacts is an inconsistency — reported
@@ -3774,7 +3803,7 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
 
   it("reports corrupted state.json as skipped without crashing", () => {
     const tmpDir = makeTmpDir("doctor-audit-corrupt-");
-    writeFile(tmpDir, ".IDE_Plans/senai/state.json", "{not valid json");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/state.json", "{not valid json");
     const report = runSenaiDiagnostic(tmpDir);
     const section = report.sections.find((s) => s.title === "Run artifacts");
     assert.ok(
@@ -3801,8 +3830,8 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     const tmpDir = makeTmpDir("doctor-audit-full-");
     saveState(tmpDir, { ...defaultState(), currentStage: "delivered", runId: "r1" });
     writeAllPlanArtifacts(tmpDir, "r1");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/security-report.md", "content");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/deliver-summary.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/security-report.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/deliver-summary.md", "content");
     const report = runSenaiDiagnostic(tmpDir);
     const section = report.sections.find((s) => s.title === "Run artifacts");
     const oks = section?.items.filter((i) => i.status === "ok") ?? [];
@@ -3863,7 +3892,7 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     const tmpDir = makeTmpDir("doctor-audit-garbage-");
     writeFile(
       tmpDir,
-      ".IDE_Plans/senai/state.json",
+      ".IDE_Plans/pi-senai/state.json",
       JSON.stringify({ version: 1, mission: "m", runId: "r1", currentStage: "bogus", startedAt: "", updatedAt: "", stageResults: {} }),
     );
     const report = runSenaiDiagnostic(tmpDir);
@@ -3896,9 +3925,9 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     const tmpDir = makeTmpDir("doctor-audit-docdir-");
     saveState(tmpDir, { ...defaultState(), currentStage: "delivered", runId: "r1" });
     writeAllPlanArtifacts(tmpDir, "r1");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/security-report.md", "content");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/deliver-summary.md", "content");
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai/runs/r1/document"), { recursive: true });
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/security-report.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/deliver-summary.md", "content");
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai/runs/r1/document"), { recursive: true });
     const report = runSenaiDiagnostic(tmpDir);
     const section = report.sections.find((s) => s.title === "Run artifacts");
     const finding = section?.items.find(
@@ -3912,10 +3941,10 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     const tmpDir = makeTmpDir("doctor-audit-misplaced-");
     saveState(tmpDir, { ...defaultState(), currentStage: "delivered", runId: "r1" });
     writeAllPlanArtifacts(tmpDir, "r1");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/security-report.md", "content");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/deliver-summary.md", "content");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/lint-report.md", "misplaced");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/document/README.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/security-report.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/deliver-summary.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/lint-report.md", "misplaced");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/document/README.md", "content");
     const report = runSenaiDiagnostic(tmpDir);
     const section = report.sections.find((s) => s.title === "Run artifacts");
     const finding = section?.items.find(
@@ -3929,12 +3958,12 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     const tmpDir = makeTmpDir("doctor-audit-plansize-");
     saveState(tmpDir, { ...defaultState(), currentStage: "delivered", runId: "r1" });
     writeAllPlanArtifacts(tmpDir, "r1");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/security-report.md", "content");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/deliver/deliver-summary.md", "content");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/document/README.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/security-report.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/deliver/deliver-summary.md", "content");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/document/README.md", "content");
 
     // 51KB -> warning.
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/plan/plan.md", "x".repeat(51 * 1024));
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/plan/plan.md", "x".repeat(51 * 1024));
     let section = runSenaiDiagnostic(tmpDir).sections.find((s) => s.title === "Run artifacts");
     let sizeWarning = section?.items.find(
       (i) => i.status === "warning" && i.message.includes("plan.md is 51KB"),
@@ -3942,7 +3971,7 @@ describe("doctor strictness — collision warning and run artifact audit", () =>
     assert.ok(sizeWarning, "51KB plan.md must warn");
 
     // Exactly 50KB (the check is strictly greater) -> no size warning.
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/plan/plan.md", "x".repeat(50 * 1024));
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/plan/plan.md", "x".repeat(50 * 1024));
     section = runSenaiDiagnostic(tmpDir).sections.find((s) => s.title === "Run artifacts");
     sizeWarning = section?.items.find((i) => i.message.includes("token bloat"));
     assert.ok(!sizeWarning, "exactly 50KB plan.md must not warn");
@@ -4141,7 +4170,7 @@ describe("doctor stray files and subagent extension", () => {
   it("warns on stray tmp_* files in the project root and run directories", () => {
     const tmpDir = makeTmpDir("doctor-stray-");
     writeFile(tmpDir, "tmp_fix.sh", "#!/bin/sh\n");
-    writeFile(tmpDir, ".IDE_Plans/senai/runs/r1/tmp_x.ts", "// helper");
+    writeFile(tmpDir, ".IDE_Plans/pi-senai/runs/r1/tmp_x.ts", "// helper");
 
     const section = findSectionOpt(runSenaiDiagnostic(tmpDir), "Stray files");
     const warning = section.items.find(
@@ -4150,7 +4179,7 @@ describe("doctor stray files and subagent extension", () => {
     assert.ok(warning, "stray warning expected");
     assert.ok(warning.details?.some((d) => d === "tmp_fix.sh"), "root stray named");
     assert.ok(
-      warning.details?.some((d) => d === ".IDE_Plans/senai/runs/r1/tmp_x.ts"),
+      warning.details?.some((d) => d === ".IDE_Plans/pi-senai/runs/r1/tmp_x.ts"),
       "run-dir stray named with forward slashes",
     );
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -4217,7 +4246,7 @@ describe("doctor checkDiscussions", () => {
   let tmpDir: string;
 
   function makeRunDir(runId: string): string {
-    const runDir = path.join(tmpDir, ".IDE_Plans/senai/runs", runId);
+    const runDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", runId);
     fs.mkdirSync(runDir, { recursive: true });
     return runDir;
   }
@@ -4278,7 +4307,7 @@ describe("doctor checkDiscussions", () => {
   });
 
   it("info when pre-run transcripts exist but no brief", () => {
-    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     fs.writeFileSync(path.join(preDir, "discussion-01-x.md"), "t", "utf8");
 
@@ -4291,7 +4320,7 @@ describe("doctor checkDiscussions", () => {
   });
 
   it("no warning when pre-run mission-brief.md is complete", () => {
-    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     fs.writeFileSync(
       path.join(preDir, "mission-brief.md"),

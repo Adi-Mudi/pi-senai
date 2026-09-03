@@ -10,7 +10,7 @@ export function migrateLegacyOrchestraDirs(cwd: string): string[] {
   const moved: string[] = [];
 
   const migrations: Array<{ legacy: string[]; target: string[] }> = [
-    { legacy: [".IDE_Plans", "orchestra"], target: [".IDE_Plans", "senai"] },
+    { legacy: [".IDE_Plans", "orchestra"], target: [".IDE_Plans", "pi-senai"] },
     { legacy: [".pi", "orchestra"], target: [".pi", "senai"] },
   ];
 

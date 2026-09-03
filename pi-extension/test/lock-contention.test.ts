@@ -163,7 +163,7 @@ describe("lock cross-process contention", () => {
 
 		// Make staleness cheap for this test: overwrite the recorded
 		// heartbeat to be 5 seconds in the past.
-		const lockPath = path.join(cwd, ".IDE_Plans/senai/.lock/meta.json");
+		const lockPath = path.join(cwd, ".IDE_Plans/pi-senai/.lock/meta.json");
 		const raw = JSON.parse(fs.readFileSync(lockPath, "utf8")) as Record<string, unknown>;
 		raw.heartbeatAt = new Date(Date.now() - 5_000).toISOString();
 		fs.writeFileSync(lockPath, JSON.stringify(raw), "utf8");

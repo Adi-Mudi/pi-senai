@@ -425,7 +425,7 @@ describe("commands", () => {
   });
 
   function writePlanArtifacts(cwd: string, runId: string): void {
-    const runDir = path.join(cwd, ".IDE_Plans", "senai", "runs", runId);
+    const runDir = path.join(cwd, ".IDE_Plans", "pi-senai", "runs", runId);
     fs.writeFileSync(path.join(runDir, "plan", "plan.md"), "# plan\n", "utf8");
     for (let i = 1; i <= 4; i++) {
       fs.writeFileSync(path.join(runDir, "plan", "scouts", `scout-angle_${i}.md`), "scout\n", "utf8");
@@ -490,7 +490,7 @@ describe("commands", () => {
     registerCommands(makeApi());
     await commandHandlers["senai-plan"]("Mission", makeCtx());
     const runId = loadState(tmpDir).runId;
-    const runDir = path.join(tmpDir, ".IDE_Plans", "senai", "runs", runId);
+    const runDir = path.join(tmpDir, ".IDE_Plans", "pi-senai", "runs", runId);
 
     // plan: plan.md + 4 scouts required.
     assert.strictEqual(listMissingStageArtifacts(tmpDir, runId, "plan").length, 5);
@@ -602,12 +602,12 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create the required plan artifacts for implement to proceed.
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -644,8 +644,8 @@ describe("commands", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -663,8 +663,8 @@ describe("commands", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -685,7 +685,7 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "implemented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     notifications.length = 0;
@@ -704,7 +704,7 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "documented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     notifications.length = 0;
@@ -723,14 +723,14 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create plan and implement artifacts so only the stage restriction is tested.
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
@@ -750,11 +750,11 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -780,14 +780,14 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "implemented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
 
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
@@ -809,14 +809,14 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "documented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
@@ -841,7 +841,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
 
@@ -863,7 +863,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
 
@@ -881,7 +881,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "planned");
     state = advanceTo(tmpDir, state, "implementing");
 
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Notes\n");
 
@@ -897,7 +897,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "implemented");
     state = advanceTo(tmpDir, state, "documenting");
 
-    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
@@ -915,7 +915,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
@@ -959,7 +959,7 @@ describe("commands", () => {
       ctx.ui.confirm = async () => true;
       // Plant the lock AFTER the user's confirm so the acquire is the step
       // that fails.
-      const lockDir = path.join(tmpDir, ".IDE_Plans/senai/.lock");
+      const lockDir = path.join(tmpDir, ".IDE_Plans/pi-senai/.lock");
       fs.mkdirSync(lockDir, { recursive: true });
       const now = new Date().toISOString();
       fs.writeFileSync(
@@ -992,7 +992,7 @@ describe("commands", () => {
       if (previousTimeout === undefined) delete process.env.SENAI_LOCK_TIMEOUT_MS;
       else process.env.SENAI_LOCK_TIMEOUT_MS = previousTimeout;
       // Clean up the planted lock dir so it does not leak between tests.
-      const lockDir = path.join(tmpDir, ".IDE_Plans/senai/.lock");
+      const lockDir = path.join(tmpDir, ".IDE_Plans/pi-senai/.lock");
       fs.rmSync(lockDir, { recursive: true, force: true });
     }
   });
@@ -2006,11 +2006,11 @@ describe("commands", () => {
   it("senai-doctor writes the report artifact", async () => {
     registerDoctorCommand(makeApi());
     await commandHandlers["senai-doctor"]("", makeCtx());
-    const reportPath = path.join(tmpDir, ".IDE_Plans", "senai", "doctor-report.md");
+    const reportPath = path.join(tmpDir, ".IDE_Plans", "pi-senai", "doctor-report.md");
     assert.ok(fs.existsSync(reportPath), "report artifact should be written");
     const content = fs.readFileSync(reportPath, "utf8");
     assert.ok(content.includes("Pi Senai Diagnostic Report"));
-    assert.ok(sentMessages.some((m) => m.includes("Report saved to .IDE_Plans/senai/doctor-report.md")));
+    assert.ok(sentMessages.some((m) => m.includes("Report saved to .IDE_Plans/pi-senai/doctor-report.md")));
   });
 
   it("senai-generate-agents is not registered after the rename", async () => {
@@ -2077,7 +2077,7 @@ describe("commands", () => {
     (ctx.ui as any).confirm = async () => false;
     await commandHandlers["senai-reset"]("", ctx);
 
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     assert.ok(fs.existsSync(statePath), "state file must still exist");
     assert.strictEqual(loadState(tmpDir).currentStage, "planning");
   });
@@ -2091,7 +2091,7 @@ describe("commands", () => {
   });
 
   it("senai-status omits the artifacts section when the run ID is empty", async () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -2121,11 +2121,11 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create implement artifacts so only the stage restriction is tested.
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
@@ -2144,7 +2144,7 @@ describe("commands", () => {
 
     const state = loadState(tmpDir);
     // Create document artifacts so only the stage restriction is tested.
-    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
@@ -2427,7 +2427,7 @@ describe("commands", () => {
     advanceStage(tmpDir, state, "planning");
 
     // dirHasFiles counts any entry, so a lone subdirectory is enough.
-    const nestedDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "nested");
+    const nestedDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "nested");
     fs.mkdirSync(nestedDir, { recursive: true });
 
     const result = checkStageArtifact(loadState(tmpDir), "implement", makeCtx());
@@ -2555,13 +2555,13 @@ describe("coverage audit gaps", () => {
     const state = loadState(tmpDir);
     state.currentStage = stage;
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
     return state;
   }
 
   function writePlanArtifacts(state: SenaiState): void {
-    const planDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan");
+    const planDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan");
     const scoutsDir = path.join(planDir, "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(path.join(planDir, "plan.md"), "# Plan\n");
@@ -3010,7 +3010,7 @@ describe("coverage audit gaps", () => {
   });
 
   it("checkStageArtifact treats a missing implement directory as no artifacts", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -3180,7 +3180,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
   }
 
   function writePlanArtifacts(cwd: string, runId: string): void {
-    const runDir = path.join(cwd, ".IDE_Plans", "senai", "runs", runId);
+    const runDir = path.join(cwd, ".IDE_Plans", "pi-senai", "runs", runId);
     fs.writeFileSync(path.join(runDir, "plan", "plan.md"), "# plan\n", "utf8");
     for (let i = 1; i <= 4; i++) {
       fs.writeFileSync(path.join(runDir, "plan", "scouts", `scout-angle_${i}.md`), "scout\n", "utf8");
@@ -3198,7 +3198,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
 
     // Write implement output, approve → documenting.
-    const runDir = path.join(tmpDir, ".IDE_Plans", "senai", "runs", runId);
+    const runDir = path.join(tmpDir, ".IDE_Plans", "pi-senai", "runs", runId);
     fs.writeFileSync(path.join(runDir, "implement", "notes.md"), "done\n", "utf8");
     await commandHandlers["senai-approve"]("", makeCtx());
     assert.strictEqual(loadState(tmpDir).currentStage, "documenting");
@@ -3339,7 +3339,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
   });
 
   it("/senai-plan consumes a pre-run mission-brief.md and stores missionBriefPath", async () => {
-    const briefRel = ".IDE_Plans/senai/discussions/pre-run/mission-brief.md";
+    const briefRel = ".IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md";
     fs.mkdirSync(path.dirname(path.join(tmpDir, briefRel)), { recursive: true });
     fs.writeFileSync(path.join(tmpDir, briefRel), "## Refined mission\nfoo\n", "utf8");
 
@@ -3378,7 +3378,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
   it("/senai-discussion-approve finalizes a brief and appends a discussionEvents entry", async () => {
     // Pre-create a brief AND a transcript file under pre-run, so the
     // approve command has something to record against.
-    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     const briefPath = path.join(preDir, "mission-brief.md");
     fs.writeFileSync(
@@ -3405,13 +3405,13 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     const state = loadState(tmpDir);
     assert.strictEqual(state.discussions, 1);
     assert.strictEqual(state.discussionEvents?.length, 1);
-    assert.strictEqual(state.discussionEvents?.[0].transcriptPath, ".IDE_Plans/senai/discussions/pre-run/discussion-01-refine.md");
+    assert.strictEqual(state.discussionEvents?.[0].transcriptPath, ".IDE_Plans/pi-senai/discussions/pre-run/discussion-01-refine.md");
     assert.strictEqual(state.discussionEvents?.[0].afterStage, undefined, "pre-run has no afterStage");
     assert.ok(notifications[0].message.includes("Mission brief finalized"));
   });
 
   it("/senai-discussion-approve warns before finalizing a brief with missing sections", async () => {
-    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     const briefPath = path.join(preDir, "mission-brief.md");
     fs.writeFileSync(
@@ -3441,7 +3441,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
   });
 
   it("/senai-discussion-approve is idempotent — second call does not duplicate the event", async () => {
-    const preDir = path.join(tmpDir, ".IDE_Plans/senai/discussions/pre-run");
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     const briefPath = path.join(preDir, "mission-brief.md");
     fs.writeFileSync(

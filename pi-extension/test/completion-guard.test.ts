@@ -24,12 +24,12 @@ const COMPLETED = 'Sub-agent "scout-2" completed (1m 12s).\n\nDone.';
 describe("extractArtifactPaths", () => {
   it("pulls run-dir paths out of a task string and dedupes them", () => {
     const task =
-      "Write to .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md. " +
-      "Read .IDE_Plans/senai/runs/r1/plan/plan.md and .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md.";
+      "Write to .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md. " +
+      "Read .IDE_Plans/pi-senai/runs/r1/plan/plan.md and .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md.";
     const paths = extractArtifactPaths(task, "r1");
     assert.deepStrictEqual(paths, [
-      ".IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md",
-      ".IDE_Plans/senai/runs/r1/plan/plan.md",
+      ".IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md",
+      ".IDE_Plans/pi-senai/runs/r1/plan/plan.md",
     ]);
   });
 
@@ -46,7 +46,7 @@ describe("recordSpawnArtifacts", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "write",
-      { file_path: ".IDE_Plans/senai/runs/r1/plan/plan.md" },
+      { file_path: ".IDE_Plans/pi-senai/runs/r1/plan/plan.md" },
       cwd,
     );
     assert.strictEqual(completionWarning(COMPLETED, cwd), undefined);
@@ -56,7 +56,7 @@ describe("recordSpawnArtifacts", () => {
     const cwd = makeTmp();
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
     assert.strictEqual(completionWarning(COMPLETED, cwd), undefined);
@@ -77,7 +77,7 @@ describe("completionWarning", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
     assert.strictEqual(
@@ -91,10 +91,10 @@ describe("completionWarning", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
-    const artifact = path.join(cwd, ".IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md");
+    const artifact = path.join(cwd, ".IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md");
     fs.mkdirSync(path.dirname(artifact), { recursive: true });
     fs.writeFileSync(artifact, "# report\n", "utf8");
     assert.strictEqual(completionWarning(COMPLETED, cwd), undefined);
@@ -105,7 +105,7 @@ describe("completionWarning", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
     const warning = completionWarning(COMPLETED, cwd);
@@ -119,10 +119,10 @@ describe("completionWarning", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
-    const artifact = path.join(cwd, ".IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md");
+    const artifact = path.join(cwd, ".IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md");
     fs.mkdirSync(path.dirname(artifact), { recursive: true });
     fs.writeFileSync(artifact, "", "utf8");
     assert.ok(completionWarning(COMPLETED, cwd), "empty file counts as missing");
@@ -139,9 +139,9 @@ describe("completionWarning", () => {
 
   it("never throws on corrupt state", () => {
     const cwd = makeTmp();
-    fs.mkdirSync(path.join(cwd, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(cwd, ".IDE_Plans/senai/state.json"), "{not json", "utf8");
-    recordSpawnArtifacts("subagent", { name: "x", task: ".IDE_Plans/senai/runs/r1/plan/plan.md" }, cwd);
+    fs.mkdirSync(path.join(cwd, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".IDE_Plans/pi-senai/state.json"), "{not json", "utf8");
+    recordSpawnArtifacts("subagent", { name: "x", task: ".IDE_Plans/pi-senai/runs/r1/plan/plan.md" }, cwd);
     assert.strictEqual(completionWarning(COMPLETED, cwd), undefined);
   });
 });
@@ -154,7 +154,7 @@ describe("recordSpawnArtifacts edge cases", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "subagent_resume",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
     const warning = completionWarning(COMPLETED, cwd);
@@ -167,7 +167,7 @@ describe("recordSpawnArtifacts edge cases", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "subagent",
-      { name: "", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
     assert.strictEqual(completionWarning(COMPLETED, cwd), undefined);
@@ -186,7 +186,7 @@ describe("recordSpawnArtifacts edge cases", () => {
     saveState(cwd, { ...defaultState(), currentStage: "delivered", runId: "r1" });
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
     assert.strictEqual(completionWarning(COMPLETED, cwd), undefined);
@@ -200,12 +200,12 @@ describe("recordSpawnArtifacts edge cases", () => {
       {
         name: "scout-2",
         task:
-          "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md " +
-          "and .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_3.md",
+          "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md " +
+          "and .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_3.md",
       },
       cwd,
     );
-    const written = path.join(cwd, ".IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md");
+    const written = path.join(cwd, ".IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md");
     fs.mkdirSync(path.dirname(written), { recursive: true });
     fs.writeFileSync(written, "# report\n", "utf8");
     const warning = completionWarning(COMPLETED, cwd);
@@ -219,16 +219,16 @@ describe("recordSpawnArtifacts edge cases", () => {
     setupActiveRun(cwd);
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md" },
       cwd,
     );
     recordSpawnArtifacts(
       "subagent",
-      { name: "scout-2", task: "Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_3.md" },
+      { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_3.md" },
       cwd,
     );
     // The old path is written; only the re-recorded path is missing.
-    const oldArtifact = path.join(cwd, ".IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_2.md");
+    const oldArtifact = path.join(cwd, ".IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_2.md");
     fs.mkdirSync(path.dirname(oldArtifact), { recursive: true });
     fs.writeFileSync(oldArtifact, "# old\n", "utf8");
     const warning = completionWarning(COMPLETED, cwd);
@@ -241,13 +241,13 @@ describe("recordSpawnArtifacts edge cases", () => {
 describe("extractArtifactPaths edge cases", () => {
   it("handles a runId containing regex characters", () => {
     const runId = "r1.x+";
-    const task = "Write .IDE_Plans/senai/runs/r1.x+/plan/plan.md now.";
+    const task = "Write .IDE_Plans/pi-senai/runs/r1.x+/plan/plan.md now.";
     assert.deepStrictEqual(extractArtifactPaths(task, runId), [
-      ".IDE_Plans/senai/runs/r1.x+/plan/plan.md",
+      ".IDE_Plans/pi-senai/runs/r1.x+/plan/plan.md",
     ]);
     // A lookalike path that an unescaped `.`/`+` pattern would also match is
     // NOT extracted — proves the run dir is regex-escaped.
-    const lookalike = "Write .IDE_Plans/senai/runs/r1Xx+/plan/plan.md now.";
+    const lookalike = "Write .IDE_Plans/pi-senai/runs/r1Xx+/plan/plan.md now.";
     assert.deepStrictEqual(extractArtifactPaths(lookalike, runId), []);
   });
 
@@ -257,12 +257,12 @@ describe("extractArtifactPaths edge cases", () => {
   it("extracts forward-slash task paths with a regex-char runId", () => {
     const runId = "r1.x+";
     const paths = extractArtifactPaths(
-      "Read .IDE_Plans/senai/runs/r1.x+/plan/plan.md and write .IDE_Plans/senai/runs/r1.x+/plan/plan-overview.md.",
+      "Read .IDE_Plans/pi-senai/runs/r1.x+/plan/plan.md and write .IDE_Plans/pi-senai/runs/r1.x+/plan/plan-overview.md.",
       runId,
     );
     assert.deepStrictEqual(paths, [
-      ".IDE_Plans/senai/runs/r1.x+/plan/plan.md",
-      ".IDE_Plans/senai/runs/r1.x+/plan/plan-overview.md",
+      ".IDE_Plans/pi-senai/runs/r1.x+/plan/plan.md",
+      ".IDE_Plans/pi-senai/runs/r1.x+/plan/plan-overview.md",
     ]);
   });
 });

@@ -38,7 +38,7 @@ describe("e2e/07-completion-guard", () => {
 			// Plant a partial artifacts dir: scouts + reviews, but NO plan.md.
 			// The completion notice for `subagent("scout-1")` must trigger the
 			// guard because the artifact path listed in the spawn task is missing.
-			const runDir = path.join(home.cwd, ".IDE_Plans/senai/runs", runId);
+			const runDir = path.join(home.cwd, ".IDE_Plans/pi-senai/runs", runId);
 			fs.mkdirSync(path.join(runDir, "plan/scouts"), { recursive: true });
 			fs.mkdirSync(path.join(runDir, "plan/reviews"), { recursive: true });
 			fs.writeFileSync(path.join(runDir, "plan/scouts/scout-angle_1.md"), "# Scout 1\n");

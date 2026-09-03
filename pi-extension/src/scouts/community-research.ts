@@ -10,7 +10,7 @@
  * Design rules (locked from plan v1.0):
  *   - 4 user-pickable sources: "web" | "official" | "community" | "similar"
  *   - 1 hidden short-circuit: cache (24h TTL, content-hash keyed, project-local)
- *   - Cache lives at .IDE_Plans/senai/.cache/community-research/<hash>.json
+ *   - Cache lives at .IDE_Plans/pi-senai/.cache/community-research/<hash>.json
  *   - Hard caps: 5 per category, 1500 tokens output, 30s wall-clock
  *   - Retry once with new keywords on empty result
  *   - Working-result check: HTTP 2xx, body matches topic, <=2yr for version-sensitive

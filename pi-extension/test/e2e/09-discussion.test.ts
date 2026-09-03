@@ -33,7 +33,7 @@ describe("e2e/09-discussion", () => {
 		// LLM's writes by injecting the draft directly. The registration test
 		// already proved the command exists; here we cover the file-shape
 		// contract that the mission-brief module enforces.
-		const briefPath = path.join(home.cwd, ".IDE_Plans/senai/discussions/pre-run/mission-brief.md");
+		const briefPath = path.join(home.cwd, ".IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md");
 		fs.mkdirSync(path.dirname(briefPath), { recursive: true });
 		fs.writeFileSync(
 			briefPath,

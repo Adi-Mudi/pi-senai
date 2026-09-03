@@ -58,7 +58,7 @@ export function writePlanArtifacts(
 	runId: string,
 	kind: "plan" | "implement" | "document" | "deliver",
 ): void {
-	const runDir = path.join(cwd, ".IDE_Plans/senai/runs", runId);
+	const runDir = path.join(cwd, ".IDE_Plans/pi-senai/runs", runId);
 	const planDir = path.join(runDir, "plan");
 	const implementDir = path.join(runDir, "implement");
 	const documentDir = path.join(runDir, "document");
@@ -111,7 +111,7 @@ export async function approveUntilStage(client: RpcClient, target: string): Prom
 }
 
 /** Write a seeded adaptive spawn cadence state file at
- *  `.IDE_Plans/senai/spawn-cadence.json`. Matches the v1 schema the
+ *  `.IDE_Plans/pi-senai/spawn-cadence.json`. Matches the v1 schema the
  *  extension expects. `state` lets the caller override tier, counters,
  *  and history; defaults give the canonical fresh-project state. */
 export function seedCadenceState(
@@ -124,7 +124,7 @@ export function seedCadenceState(
 		history?: Array<{ ts: string; from: string; to: string; reason: string }>;
 	} = {},
 ): void {
-	const cadencePath = path.join(cwd, ".IDE_Plans", "senai", "spawn-cadence.json");
+	const cadencePath = path.join(cwd, ".IDE_Plans", "pi-senai", "spawn-cadence.json");
 	fs.mkdirSync(path.dirname(cadencePath), { recursive: true });
 	const value = {
 		_comment: "Seeded by E2E fixture.",

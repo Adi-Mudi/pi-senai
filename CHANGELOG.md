@@ -45,6 +45,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All four stage skills gained an artifact-verification playbook (a "completed" notice is not proof — verify with `test -s` and resume instead of stalling or asking the user), staggered spawns with a 429 resume playbook (wait ~60s, then `subagent_resume`), real-tool-only discipline, the AskUserQuestion 12-char header rule, and an explainer for the subagent pane's "N denied" counter.
 - The Plan stage skill now caps plan.md at ~15KB and requires a `## Verification` section; the Deliver stage runs that section as a blocking gate before the security gate and records its outcome in the deliver summary.
 - `/senai-doctor` run audit: a delivered run missing deliver artifacts is now an error (was a warning), delivered-with-empty-`document/` and implement-stage files found in `deliver/` are errors, and plan.md over 50KB gets a token-bloat warning.
+- Renamed artifact root directory from `.IDE_Plans/senai/` to `.IDE_Plans/pi-senai/` for naming consistency with the project. No auto-migration: existing artifacts stay in the old directory; doctor emits a single warning when the old directory still exists so the user can `mv` or delete it. The single source of truth is `SENAI_DIR` in `pi-extension/src/constants.ts`; all path helpers (`getSenaiDir`, `getRunDir`, `getLockDir`, `getCommunityResearchCacheDir`, etc.) now resolve to the new root.
 
 ### Added
 

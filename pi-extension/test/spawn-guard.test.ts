@@ -99,8 +99,8 @@ describe("guardSpawnCall", () => {
 
   it("steps aside on corrupted state.json or missing agents.json", () => {
     const cwd = makeTmp();
-    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "senai"), { recursive: true });
-    fs.writeFileSync(path.join(cwd, ".IDE_Plans", "senai", "state.json"), "{not json", "utf8");
+    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".IDE_Plans", "pi-senai", "state.json"), "{not json", "utf8");
     assert.strictEqual(guardSpawnCall("subagent", { agent: "planner" }, cwd), undefined);
 
     const cwd2 = makeTmp();

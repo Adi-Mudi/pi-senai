@@ -68,7 +68,7 @@ describe("e2e/02-full-lifecycle", () => {
 			assert.strictEqual(state.currentStage, "delivered");
 
 			// Every artifact the doctor run-audit looks for is on disk.
-			const runDir = path.join(home.cwd, ".IDE_Plans/senai/runs", runId);
+			const runDir = path.join(home.cwd, ".IDE_Plans/pi-senai/runs", runId);
 			const required = [
 				"plan/plan.md",
 				"plan/plan-overview.md",

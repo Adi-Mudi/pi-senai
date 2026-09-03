@@ -55,7 +55,7 @@ describe("state", () => {
     // Plant a leftover as if a previous session crashed between the temp
     // write and the rename, then save again — the helper's atomic write
     // must not be affected by the orphan.
-    const senaiDir = path.join(tmpDir, ".IDE_Plans/senai");
+    const senaiDir = path.join(tmpDir, ".IDE_Plans/pi-senai");
     fs.writeFileSync(path.join(senaiDir, "state.json.tmp-999-fake"), "orphan");
     saveState(tmpDir, state);
     // The real state.json is the new content; the orphan temp file may
@@ -74,7 +74,7 @@ describe("state", () => {
     assert.strictEqual(state.currentStage, "none");
     assert.ok(state.runId.length > 0);
 
-    const runDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId);
+    const runDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId);
     assert.ok(fs.existsSync(runDir));
     assert.ok(fs.existsSync(path.join(runDir, "plan/scouts")));
     assert.ok(fs.existsSync(path.join(runDir, "plan/reviews")));
@@ -183,7 +183,7 @@ describe("state", () => {
   });
 
   it("loadState migrates old state versions", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -205,7 +205,7 @@ describe("state", () => {
   });
 
   it("loadState throws on corrupted JSON", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, "{ not valid json");
 
@@ -213,7 +213,7 @@ describe("state", () => {
   });
 
   it("loadState migrates partial legacy state safely", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, JSON.stringify({ version: 0, mission: "partial" }));
 
@@ -228,7 +228,7 @@ describe("state", () => {
   });
 
   it("loadState migrates a non-numeric version safely", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, JSON.stringify({ version: "old", mission: "legacy" }));
 
@@ -248,7 +248,7 @@ describe("state", () => {
   });
 
   it("loadState returns a version 1 state with missing fields as-is, but resets an invalid stage", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, JSON.stringify({ version: 1 }));
 
@@ -262,7 +262,7 @@ describe("state", () => {
   });
 
   it("loadState throws when the JSON body is null", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, "null");
 
@@ -273,7 +273,7 @@ describe("state", () => {
   });
 
   it("loadState migrates a JSON array body to the default state", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(statePath, JSON.stringify(["planning", "run-1"]));
 
@@ -284,7 +284,7 @@ describe("state", () => {
   });
 
   it("loadState throws when the state path is a directory", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(statePath, { recursive: true });
 
     assert.throws(
@@ -294,7 +294,7 @@ describe("state", () => {
   });
 
   it("advanceStage throws a TypeError for a garbage currentStage", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -338,7 +338,7 @@ describe("state", () => {
       // Root ignores file permission bits, so this case cannot be tested.
       return;
     }
-    const senaiDir = path.join(tmpDir, ".IDE_Plans/senai");
+    const senaiDir = path.join(tmpDir, ".IDE_Plans/pi-senai");
     fs.mkdirSync(senaiDir, { recursive: true });
     fs.chmodSync(senaiDir, 0o444);
     try {
@@ -352,7 +352,7 @@ describe("state", () => {
   });
 
   it("resetState throws when the state path is a directory", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(statePath, { recursive: true });
 
     assert.throws(
@@ -370,7 +370,7 @@ describe("coverage audit gaps", () => {
   });
 
   it("migrateState carries over legacy timestamps and stage results, and resets an unknown stage", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -439,16 +439,16 @@ describe("state — discussion fields", () => {
 
   it("setMissionBriefPath persists the brief path", () => {
     const state = startRun(tmpDir, "Mission");
-    setMissionBriefPath(tmpDir, state, ".IDE_Plans/senai/discussions/pre-run/mission-brief.md");
+    setMissionBriefPath(tmpDir, state, ".IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md");
     const reloaded = loadState(tmpDir);
     assert.strictEqual(
       reloaded.missionBriefPath,
-      ".IDE_Plans/senai/discussions/pre-run/mission-brief.md",
+      ".IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md",
     );
   });
 
   it("loadState leaves missing discussion fields on a v1 state (matches legacy behavior)", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,

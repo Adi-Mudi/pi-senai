@@ -11,7 +11,7 @@ import { atomicWriteJson } from "./atomic-write.js";
 
 /** One recorded /senai-discussion event. `afterStage` is the stage that
  *  was active when the discussion ran; undefined for discussions recorded
- *  before any run started (pre-run / .IDE_Plans/senai/discussions/pre-run/). */
+ *  before any run started (pre-run / .IDE_Plans/pi-senai/discussions/pre-run/). */
 export interface DiscussionEvent {
   ts: string;
   transcriptPath: string;
@@ -75,7 +75,7 @@ export function loadState(cwd: string): SenaiState {
 }
 
 /**
- * Persist the run state to `.IDE_Plans/senai/state.json`.
+ * Persist the run state to `.IDE_Plans/pi-senai/state.json`.
  *
  * Lock contract: every caller that mutates `state.json` (advanceStage,
  * recordDiscussion, setMissionBriefPath, plus any future helper) must run

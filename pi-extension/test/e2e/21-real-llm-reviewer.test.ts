@@ -46,7 +46,7 @@ describe("e2e/21-real-llm-reviewer", () => {
 			// In practice, the parent LLM will run the full sequence; we
 			// simply wait for the review files to appear, with a long timeout.
 			writePlanArtifacts(home.cwd, runId, "plan");
-			const reviewDir = path.join(home.cwd, ".IDE_Plans/senai/runs", runId, "plan/reviews");
+			const reviewDir = path.join(home.cwd, ".IDE_Plans/pi-senai/runs", runId, "plan/reviews");
 			const deadline = Date.now() + 120_000;
 			while (Date.now() < deadline) {
 				if (fs.existsSync(reviewDir)) {

@@ -73,7 +73,7 @@ describe("e2e/13-state-machine-edges", () => {
 
 			// Write a known artifact so we can prove it survives the reset.
 			writePlanArtifacts(home.cwd, runId, "plan");
-			const planPath = path.join(home.cwd, ".IDE_Plans/senai/runs", runId, "plan/plan.md");
+			const planPath = path.join(home.cwd, ".IDE_Plans/pi-senai/runs", runId, "plan/plan.md");
 			assert.ok(fs.existsSync(planPath), "artifact should exist before reset");
 
 			await client.request("prompt", { text: "/senai-reset" });
@@ -86,7 +86,7 @@ describe("e2e/13-state-machine-edges", () => {
 			// Artifact on disk survives the reset.
 			assert.ok(fs.existsSync(planPath), "artifact should survive /senai-reset");
 			assert.ok(
-				fs.existsSync(path.join(home.cwd, ".IDE_Plans/senai/runs", runId)),
+				fs.existsSync(path.join(home.cwd, ".IDE_Plans/pi-senai/runs", runId)),
 				`runs/${runId}/ directory should survive`,
 			);
 		} catch (err) {
@@ -136,11 +136,11 @@ describe("e2e/13-state-machine-edges", () => {
 			assert.ok(run2, "second runId should exist");
 			assert.notStrictEqual(run2, run1, "run ids must differ across reset");
 			assert.ok(
-				fs.existsSync(path.join(home.cwd, ".IDE_Plans/senai/runs", run1)),
+				fs.existsSync(path.join(home.cwd, ".IDE_Plans/pi-senai/runs", run1)),
 				"first run's artifacts must survive the reset",
 			);
 			assert.ok(
-				fs.existsSync(path.join(home.cwd, ".IDE_Plans/senai/runs", run2)),
+				fs.existsSync(path.join(home.cwd, ".IDE_Plans/pi-senai/runs", run2)),
 				"second run directory must be created",
 			);
 		} catch (err) {

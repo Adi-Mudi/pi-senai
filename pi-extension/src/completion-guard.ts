@@ -16,7 +16,7 @@ const expectedArtifacts = new Map<string, string[]>();
 /** Extract run-dir artifact paths from a task string. */
 export function extractArtifactPaths(taskText: string, runId: string): string[] {
   const runDirRel = path
-    .join(".IDE_Plans", "senai", "runs", runId)
+    .join(".IDE_Plans", "pi-senai", "runs", runId)
     .replace(/\\/g, "/");
   const escaped = runDirRel.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`[\\w./-]*${escaped}[\\w./-]*`, "g");

@@ -65,8 +65,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },
@@ -103,8 +103,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },
@@ -128,8 +128,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "base prompt" },
@@ -152,7 +152,7 @@ describe("index", () => {
     // between temp-file write and atomic rename. The cleanup walks the
     // senai root and one level into immediate subdirectories (e.g.
     // runs/<id>/).
-    const senaiDir = path.join(tmpDir, ".IDE_Plans/senai");
+    const senaiDir = path.join(tmpDir, ".IDE_Plans/pi-senai");
     fs.mkdirSync(senaiDir, { recursive: true });
     fs.writeFileSync(path.join(senaiDir, "state.json.tmp-9999-deadbeef"), "orphan");
     fs.mkdirSync(path.join(senaiDir, "runs", "orphan-run"), { recursive: true });
@@ -183,12 +183,12 @@ describe("index", () => {
       updatedAt: "2026-09-02T10:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), JSON.stringify(state));
 
     // Plant a lock holder whose pid is NOT ours — otherwise the
     // session_start cleanup would release it before lockInfo runs.
-    const lockDir = path.join(tmpDir, ".IDE_Plans/senai/.lock");
+    const lockDir = path.join(tmpDir, ".IDE_Plans/pi-senai/.lock");
     fs.mkdirSync(lockDir, { recursive: true });
     const now = new Date().toISOString();
     fs.writeFileSync(
@@ -234,8 +234,8 @@ describe("index", () => {
     const api = makeApi();
     piSenaiExtension(api);
 
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), "{ not valid json");
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), "{ not valid json");
 
     await assert.rejects(
       () => eventHandlers["before_agent_start"]({ systemPrompt: "base prompt" }, makeCtx()),
@@ -256,8 +256,8 @@ describe("index", () => {
       updatedAt: "2026-06-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["before_agent_start"](
       { systemPrompt: "" },
@@ -296,8 +296,8 @@ describe("index", () => {
       updatedAt: "2026-08-12T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), JSON.stringify(state));
 
     const result = await eventHandlers["session_before_compact"](
       { preparation: { firstKeptEntryId: "id-1", tokensBefore: 4321 } },
@@ -372,7 +372,7 @@ describe("coverage audit gaps", () => {
       logs.some((l) => l.includes("Migrated legacy directories:")),
       `expected the orchestra dir migration log line, got: ${logs.join(" | ")}`,
     );
-    assert.ok(fs.existsSync(path.join(tmpDir, ".IDE_Plans", "senai")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".IDE_Plans", "pi-senai")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai")));
     assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "architect", "architect-report.json")));
     assert.ok(!fs.existsSync(path.join(tmpDir, ".IDE_Plans", "orchestra")));
@@ -441,8 +441,8 @@ describe("completion-guard hook wiring", () => {
       updatedAt: "2026-08-28T00:00:00Z",
       stageResults: {},
     };
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/senai/state.json"), JSON.stringify(state));
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans/pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans/pi-senai/state.json"), JSON.stringify(state));
   }
 
   it("input hook appends the artifact warning to an extension-source completion with a missing artifact", async () => {
@@ -453,7 +453,7 @@ describe("completion-guard hook wiring", () => {
     eventHandlers["tool_call"](
       {
         toolName: "subagent",
-        input: { name: "scout-2", task: "Write .IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_2.md" },
+        input: { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/run-1/plan/scouts/scout-angle_2.md" },
       },
       makeCtx(),
     );
@@ -476,7 +476,7 @@ describe("completion-guard hook wiring", () => {
     eventHandlers["tool_call"](
       {
         toolName: "subagent",
-        input: { name: "scout-2", task: "Write .IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_2.md" },
+        input: { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/run-1/plan/scouts/scout-angle_2.md" },
       },
       makeCtx(),
     );
@@ -510,7 +510,7 @@ describe("completion-guard hook wiring", () => {
     eventHandlers["tool_call"](
       {
         toolName: "subagent_resume",
-        input: { name: "scout-2", task: "Write .IDE_Plans/senai/runs/run-1/plan/scouts/scout-angle_2.md" },
+        input: { name: "scout-2", task: "Write .IDE_Plans/pi-senai/runs/run-1/plan/scouts/scout-angle_2.md" },
       },
       makeCtx(),
     );

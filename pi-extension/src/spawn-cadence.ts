@@ -24,7 +24,7 @@ import { getCadencePath } from "./constants.js";
  * Promotion triggers: 3 consecutive clean Plan-stage approvals (B→A, C→B).
  * Tier D is the floor and requires manual `/senai-cadence-reset` to escape.
  *
- * State lives at `.IDE_Plans/senai/spawn-cadence.json`. Writes go through
+ * State lives at `.IDE_Plans/pi-senai/spawn-cadence.json`. Writes go through
  * atomic-write so a crashed session never leaves a half-written file.
  */
 

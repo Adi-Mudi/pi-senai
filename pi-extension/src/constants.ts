@@ -1,6 +1,6 @@
 import * as path from "node:path";
 
-export const SENAI_DIR = ".IDE_Plans/senai";
+export const SENAI_DIR = ".IDE_Plans/pi-senai";
 export const STATE_FILE = "state.json";
 export const RUNS_DIR = "runs";
 export const ARCHITECT_STATE_DIR = ".pi/architect";
@@ -106,7 +106,7 @@ export function getRunDir(cwd: string, runId: string): string {
   return path.join(getSenaiDir(cwd), RUNS_DIR, runId);
 }
 
-export const PRE_RUN_DISCUSSION_DIR = ".IDE_Plans/senai/discussions/pre-run";
+export const PRE_RUN_DISCUSSION_DIR = ".IDE_Plans/pi-senai/discussions/pre-run";
 
 /** Absolute path to the pre-run discussion directory (used when no run is
  *  active yet). */
@@ -201,7 +201,7 @@ export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths
 }
 
 export function getDefaultArtifactPaths(): StageArtifactPaths {
-  const runDir = ".IDE_Plans/senai/runs/<run-id>";
+  const runDir = ".IDE_Plans/pi-senai/runs/<run-id>";
   const planDir = path.join(runDir, "plan");
   const planScoutsDir = path.join(planDir, "scouts");
   const planReviewsDir = path.join(planDir, "reviews");

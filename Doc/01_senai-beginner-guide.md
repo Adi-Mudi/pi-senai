@@ -76,7 +76,7 @@ This assigns truth documents and comparison documents to each role. The picker s
 /senai-doctor
 ```
 
-This checks all config files, mapped agents, file scopes, and runtime setup. The report opens with a **Setup progress** section that shows which steps are done and names the one next command — so you can run `/senai-doctor` after every step and follow the arrow. It saves a full report to `.IDE_Plans/senai/doctor-report.md`.
+This checks all config files, mapped agents, file scopes, and runtime setup. The report opens with a **Setup progress** section that shows which steps are done and names the one next command — so you can run `/senai-doctor` after every step and follow the arrow. It saves a full report to `.IDE_Plans/pi-senai/doctor-report.md`.
 
 ### Optional: manual agent mapping
 
@@ -175,7 +175,7 @@ Clears the current run state so you can begin a new mission.
 Each run creates a folder under:
 
 ```text
-.IDE_Plans/senai/runs/<run-id>/
+.IDE_Plans/pi-senai/runs/<run-id>/
 ```
 
 Inside you will find:
@@ -194,4 +194,4 @@ deliver/
   deliver-summary.md
 ```
 
-Run state is stored in `.IDE_Plans/senai/state.json`.
+Run state is stored in `.IDE_Plans/pi-senai/state.json`.

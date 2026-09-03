@@ -40,10 +40,10 @@ describe("e2e/10-cadence", () => {
 		assert.ok(names.includes("senai-lock-force"), "/senai-lock-force not registered");
 	});
 
-	it("cadence state file at .IDE_Plans/senai/spawn-cadence.json round-trips through load/save", () => {
+	it("cadence state file at .IDE_Plans/pi-senai/spawn-cadence.json round-trips through load/save", () => {
 		if (!shouldRunE2E()) return; // setup-only — no RPC needed
 		assert.ok(home, "test setup missing");
-		const cadencePath = path.join(home.cwd, ".IDE_Plans", "senai", "spawn-cadence.json");
+		const cadencePath = path.join(home.cwd, ".IDE_Plans", "pi-senai", "spawn-cadence.json");
 		const state = {
 			_comment: "Adaptive spawn cadence for the Plan stage.",
 			version: 1,
@@ -71,7 +71,7 @@ describe("e2e/10-cadence", () => {
 		try {
 			// Wipe any cadence file the previous test left behind so we
 			// exercise the truly fresh-project branch.
-			const cadencePath = path.join(home.cwd, ".IDE_Plans", "senai", "spawn-cadence.json");
+			const cadencePath = path.join(home.cwd, ".IDE_Plans", "pi-senai", "spawn-cadence.json");
 			try {
 				fs.unlinkSync(cadencePath);
 			} catch {
@@ -98,7 +98,7 @@ describe("e2e/10-cadence", () => {
 		assert.ok(client && home, "test setup missing");
 		// Seed a tier-D state with 7 clean runs so the floor-escape warning
 		// is meaningful, then ask the reset command to clear it.
-		const cadencePath = path.join(home.cwd, ".IDE_Plans", "senai", "spawn-cadence.json");
+		const cadencePath = path.join(home.cwd, ".IDE_Plans", "pi-senai", "spawn-cadence.json");
 		fs.mkdirSync(path.dirname(cadencePath), { recursive: true });
 		fs.writeFileSync(
 			cadencePath,

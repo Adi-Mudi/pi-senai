@@ -356,7 +356,7 @@ Suite total after this round: **978 tests, 0 fail**.
 
 ### Known issue — FIXED (2026-08-20)
 
-- ~~A corrupted `.IDE_Plans/senai/state.json` makes `loadState` throw, and the
+- ~~A corrupted `.IDE_Plans/pi-senai/state.json` makes `loadState` throw, and the
   throw propagates through `buildSenaiCompactionSummary` into pi's compaction
   pipeline.~~ Fixed: `buildSenaiCompactionSummary` now catches the throw and
   returns null, so pi's default compaction applies and the pipeline never
@@ -390,7 +390,7 @@ Suite total after closing: **999 tests, 0 fail**.
 ## 15. Senai-fix + doc-factory coverage round (2026-08-28)
 
 Scope: unit + stress coverage for the features shipped by
-`.IDE_Plans/senai-fix_plan_20260827_1415_v1.1.md` (completion guard,
+`.IDE_Plans/pi-senai-fix_plan_20260827_1415_v1.1.md` (completion guard,
 approve-time artifact verification, `stageResults` recording, run-id
 sanitization, doctor subagent-extension and stray-files checks) and
 `.IDE_Plans/doc-factory_plan_20260828_v1.0.md` (doc catalog, doc selection,

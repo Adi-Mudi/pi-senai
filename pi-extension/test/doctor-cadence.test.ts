@@ -102,8 +102,8 @@ describe("doctor — Spawn cadence section", () => {
   });
 
   it("does not lose data when the on-disk file is corrupt", () => {
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "senai", "spawn-cadence.json"), "not json", "utf8");
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "pi-senai", "spawn-cadence.json"), "not json", "utf8");
     const report = runSenaiDiagnostic(tmpDir);
     const section = findSection(report, "Spawn cadence")!;
     assert.ok(section.items.some((i) => i.message.includes("A (parallel burst)")));

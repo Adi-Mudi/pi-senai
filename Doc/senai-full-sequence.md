@@ -36,7 +36,7 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
 
 | Stage | Command | Purpose | Output |
 |-------|---------|---------|--------|
-| 1. Plan | `/senai-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` + user-facing `plan-overview.md` |
+| 1. Plan | `/senai-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/pi-senai/runs/<run-id>/plan/plan.md` + user-facing `plan-overview.md` |
 | 2. Implement | `/senai-implement` | Build and test the approved plan | Working, tested code |
 | 3. Document | `/senai-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
 | 4. Deliver | `/senai-deliver` | Security audit and package | `security-report.md` + `deliver-summary.md` |
@@ -61,7 +61,7 @@ Other commands:
 - `/senai-status` — show current stage, mission, run ID, artifacts, and next command.
 - `/senai-reset` — clear the active run state (artifacts are preserved).
 - `/senai-discussion "<topic>"` — open a conversational mission-refinement pass (parent LLM only, no subagents). Invocable from any state. Writes a draft `mission-brief.md` and a transcript `discussions/discussion-NN-<slug>.md`.
-- `/senai-discussion-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Discussion — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/senai/discussions/pre-run/mission-brief.md`.
+- `/senai-discussion-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Discussion — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md`.
 - `/senai-cadence-status` — show the current Plan-stage spawn cadence tier (read-only).
 - `/senai-cadence-reset` — reset the spawn cadence to tier A (with confirm dialog).
 - `/senai-lock-info` and `/senai-lock-force` — inspect or force-take the project-wide run lock.
@@ -182,17 +182,17 @@ Auto-starts Implement
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
-| 1 | scout-1 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_1.md` |
-| 1 | scout-2 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_2.md` |
-| 1 | scout-3 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_3.md` |
-| 1 | scout-4 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_4.md` |
+| 1 | scout-1 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_1.md` |
+| 1 | scout-2 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_2.md` |
+| 1 | scout-3 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_3.md` |
+| 1 | scout-4 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_4.md` |
 | 2 | discussion | lineage-only | Drafts interview questions for the user |
 | 3 | parent + user | main session | User answers via `AskUserQuestion` |
-| 4 | planner | lineage-only | `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` |
-| 5 | plan-overview | lineage-only | `.IDE_Plans/senai/runs/<run-id>/plan/plan-overview.md` |
-| 6 | reviewer-correctness | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-correctness.md` |
-| 6 | reviewer-security | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-security.md` |
-| 6 | reviewer-tests | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-tests.md` |
+| 4 | planner | lineage-only | `.IDE_Plans/pi-senai/runs/<run-id>/plan/plan.md` |
+| 5 | plan-overview | lineage-only | `.IDE_Plans/pi-senai/runs/<run-id>/plan/plan-overview.md` |
+| 6 | reviewer-correctness | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/review-correctness.md` |
+| 6 | reviewer-security | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/review-security.md` |
+| 6 | reviewer-tests | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/review-tests.md` |
 
 ### Interview Step
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
@@ -201,7 +201,7 @@ Auto-starts Implement
 
 ### Spawn Cadence (adaptive)
 - The Plan stage runs four scouts in parallel and three reviewers in parallel. Burst-firing them all at once can trip provider 429 rate limits; firing them strictly serially is wasteful for users with healthy quotas.
-- An adaptive cadence module (`pi-extension/src/spawn-cadence.ts`) persists a per-project dispatch tier in `.IDE_Plans/senai/spawn-cadence.json`. The Plan-stage prompt injects a `Spawn Cadence (adaptive)` block with the current tier's exact dispatch rule. Four tiers, in order of decreasing speed:
+- An adaptive cadence module (`pi-extension/src/spawn-cadence.ts`) persists a per-project dispatch tier in `.IDE_Plans/pi-senai/spawn-cadence.json`. The Plan-stage prompt injects a `Spawn Cadence (adaptive)` block with the current tier's exact dispatch rule. Four tiers, in order of decreasing speed:
   - **A (parallel burst, default start)** — launch all N at once.
   - **B (staggered)** — launch one, sleep 5s, launch the next.
   - **C (batch-2)** — launch 2, sleep 10s, launch next 2.
@@ -343,8 +343,8 @@ Run marked delivered
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
 | 0 | mission verification (parent, blocking) | — | Runs every step of the plan's `## Verification` section via bash; any failure stops the stage before the security gate |
-| 1 | security-gate | fresh | `.IDE_Plans/senai/runs/<run-id>/deliver/security-report.md` |
-| 2 | archive | lineage-only | `.IDE_Plans/senai/runs/<run-id>/deliver/deliver-summary.md` (includes the verification outcome) + archive artifact |
+| 1 | security-gate | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/deliver/security-report.md` |
+| 2 | archive | lineage-only | `.IDE_Plans/pi-senai/runs/<run-id>/deliver/deliver-summary.md` (includes the verification outcome) + archive artifact |
 
 ### Approval Gate
 - If verification and the security gate pass → run `/senai-approve` to finish the run.
@@ -355,10 +355,10 @@ Run marked delivered
 
 ## 8. Runtime Artifacts
 
-All auto-generated files go into `.IDE_Plans/senai/runs/<run-id>/`:
+All auto-generated files go into `.IDE_Plans/pi-senai/runs/<run-id>/`:
 
 ```text
-.IDE_Plans/senai/
+.IDE_Plans/pi-senai/
 ├── state.json
 └── runs/<run-id>/
     ├── plan/

@@ -804,7 +804,7 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 
   pi.registerCommand("senai-purge-community-cache", {
     description:
-      "Clear all community-research cache entries (.IDE_Plans/senai/.cache/community-research/).",
+      "Clear all community-research cache entries (.IDE_Plans/pi-senai/.cache/community-research/).",
     handler: async (_args, ctx) => {
       const state = loadState(ctx.cwd);
       const lockResult = await withRunLock(
@@ -1775,10 +1775,10 @@ export function registerDoctorCommand(pi: ExtensionAPI) {
     handler: async (_args, ctx) => {
       const report = runSenaiDiagnostic(ctx.cwd);
       const text = formatDiagnosticReport(report);
-      const reportPath = path.join(ctx.cwd, ".IDE_Plans", "senai", "doctor-report.md");
+      const reportPath = path.join(ctx.cwd, ".IDE_Plans", "pi-senai", "doctor-report.md");
       fs.mkdirSync(path.dirname(reportPath), { recursive: true });
       atomicWriteFile(reportPath, text, "utf8");
-      pi.sendUserMessage(`${text}\n\nReport saved to .IDE_Plans/senai/doctor-report.md`);
+      pi.sendUserMessage(`${text}\n\nReport saved to .IDE_Plans/pi-senai/doctor-report.md`);
     },
   });
 }

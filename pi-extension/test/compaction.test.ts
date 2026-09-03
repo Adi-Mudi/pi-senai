@@ -83,8 +83,8 @@ describe("compaction", () => {
     // compaction pipeline — the hook returns null so pi's default compaction
     // applies. The corruption error still surfaces on explicit /senai-* commands.
     const tmpDir = makeTmpDir("pi-senai-compaction-corrupt-");
-    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "senai"), { recursive: true });
-    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "senai", "state.json"), "{ not valid json");
+    fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "pi-senai", "state.json"), "{ not valid json");
 
     assert.strictEqual(buildSenaiCompactionSummary(tmpDir), null);
     fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -141,6 +141,6 @@ function writeState(
     updatedAt: "2026-08-12T00:00:00Z",
     stageResults: {},
   };
-  fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "senai"), { recursive: true });
-  fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "senai", "state.json"), JSON.stringify(state));
+  fs.mkdirSync(path.join(tmpDir, ".IDE_Plans", "pi-senai"), { recursive: true });
+  fs.writeFileSync(path.join(tmpDir, ".IDE_Plans", "pi-senai", "state.json"), JSON.stringify(state));
 }

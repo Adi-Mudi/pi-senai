@@ -90,7 +90,7 @@ Check the current settings anytime with `/senai-agents`, `/senai-files`, and `/s
 
 What happens:
 
-1. The extension creates `.IDE_Plans/senai/state.json` with the mission and a run ID.
+1. The extension creates `.IDE_Plans/pi-senai/state.json` with the mission and a run ID.
 2. It sets the current stage to `planning`.
 3. It sends the Plan stage skill prompt to the main agent.
 4. The main agent spawns four scouts in parallel:
@@ -102,10 +102,10 @@ What happens:
 6. The main agent asks you those questions live using the **AskUserQuestion** tool.
 7. You answer the questions.
 8. The main agent writes your answers into `discussion-notes.md`.
-9. The planner writes `plan.md` under `.IDE_Plans/senai/runs/<run-id>/plan/`.
-10. The planner also writes `plan-overview.md` under `.IDE_Plans/senai/runs/<run-id>/plan/` for user-friendly reading.
-11. Scout reports are saved under `.IDE_Plans/senai/runs/<run-id>/plan/scouts/`.
-12. Review reports are saved under `.IDE_Plans/senai/runs/<run-id>/plan/reviews/`.
+9. The planner writes `plan.md` under `.IDE_Plans/pi-senai/runs/<run-id>/plan/`.
+10. The planner also writes `plan-overview.md` under `.IDE_Plans/pi-senai/runs/<run-id>/plan/` for user-friendly reading.
+11. Scout reports are saved under `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/`.
+12. Review reports are saved under `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/`.
 
 ### Approve the plan
 
@@ -253,7 +253,7 @@ If you want to start over:
 /senai-reset
 ```
 
-This deletes `.IDE_Plans/senai/state.json`. Artifacts under `.IDE_Plans/senai/runs/<run-id>/` are preserved.
+This deletes `.IDE_Plans/pi-senai/state.json`. Artifacts under `.IDE_Plans/pi-senai/runs/<run-id>/` are preserved.
 
 ---
 
@@ -282,12 +282,12 @@ If you prefer to control each stage manually, you can still run `/senai-implemen
 - **Use `/senai-approve` to move forward.** It approves the current stage and automatically runs the next one.
 - **Manual stage commands still work.** `/senai-implement`, `/senai-document`, and `/senai-deliver` are available as overrides.
 - **Each stage is user-driven.** The main agent pauses at each approval gate and waits for you.
-- **Artifacts are local.** Everything lives inside `.IDE_Plans/senai/` in this project directory.
+- **Artifacts are local.** Everything lives inside `.IDE_Plans/pi-senai/` in this project directory.
 - **Subagents need a multiplexer.** Make sure you run Pi inside tmux, zellij, or another supported terminal multiplexer so `pi-interactive-subagents` can spawn subagents.
 
 ## Run lock and atomic writes
 
-`/senai-approve` and `/senai-discussion-approve` are guarded by a project-wide advisory lock at `.IDE_Plans/senai/.lock/meta.json`. Two Pi sessions in the same project — or a double-click in one session — surface as a clear "Lock busy" error with the holder pid, host, command, and heartbeat age; the second caller waits up to `SENAI_LOCK_TIMEOUT_MS` (default 5000) before failing. A holder whose pid is dead, or whose heartbeat is older than `SENAI_LOCK_STALE_MS` (default 60000), is auto-stolen on the next acquire. Every config and state file the extension writes goes through an atomic helper (temp file + `fsync` + atomic `rename`), so a crash mid-write never leaves a half-written file. `/senai-discussion-approve` is also idempotent: a second call on the same already-finalized brief short-circuits with "already finalized" instead of bumping the `discussions` counter.
+`/senai-approve` and `/senai-discussion-approve` are guarded by a project-wide advisory lock at `.IDE_Plans/pi-senai/.lock/meta.json`. Two Pi sessions in the same project — or a double-click in one session — surface as a clear "Lock busy" error with the holder pid, host, command, and heartbeat age; the second caller waits up to `SENAI_LOCK_TIMEOUT_MS` (default 5000) before failing. A holder whose pid is dead, or whose heartbeat is older than `SENAI_LOCK_STALE_MS` (default 60000), is auto-stolen on the next acquire. Every config and state file the extension writes goes through an atomic helper (temp file + `fsync` + atomic `rename`), so a crash mid-write never leaves a half-written file. `/senai-discussion-approve` is also idempotent: a second call on the same already-finalized brief short-circuits with "already finalized" instead of bumping the `discussions` counter.
 
 `/senai-doctor` shows a "Lock state" section that reports the current holder and warns when the heartbeat is older than the stale threshold. Run it any time you suspect a stuck lock.
 

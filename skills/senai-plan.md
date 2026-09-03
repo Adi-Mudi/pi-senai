@@ -68,7 +68,7 @@ Use the `subagent` tool (provided by `pi-interactive-subagents`) with pi.dev bes
 
 ## 1. Parallel scouts
 
-Read the **Spawn Cadence** block in your stage prompt — it tells you the current tier (A = parallel burst, B = staggered, C = batch-2, D = fully serial) and the exact dispatch rule for this run. The block is generated from `.IDE_Plans/senai/spawn-cadence.json` and demotes automatically on rate-limit errors. Each scout must write its own report.
+Read the **Spawn Cadence** block in your stage prompt — it tells you the current tier (A = parallel burst, B = staggered, C = batch-2, D = fully serial) and the exact dispatch rule for this run. The block is generated from `.IDE_Plans/pi-senai/spawn-cadence.json` and demotes automatically on rate-limit errors. Each scout must write its own report.
 
 **429 playbook:** if a result says `Sub-agent "X" failed ... 429` (rate limit / provider overload):
 1. Wait about 60 seconds (e.g. `sleep 60` via bash) before retrying.

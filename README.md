@@ -13,7 +13,7 @@ Stage-gated agent orchestration extension for Pi — **Plan → Implement → Do
 
 ## What it does
 
-Pi Senai splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/senai/runs/<run-id>/`, and requires user approval before the next stage starts.
+Pi Senai splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/pi-senai/runs/<run-id>/`, and requires user approval before the next stage starts.
 
 - **Plan** — Spawn four scout agents, interview the user, write an approved `plan.md` (capped at ~15KB and ending with a `## Verification` section that proves the mission).
 - **Implement** — Build and test the feature according to the plan.
@@ -87,7 +87,7 @@ Once an architecture is generated, doctor also validates it: the seven architect
 
 Doctor is the final authority on your setup. Every report opens with a **Setup progress** section that shows which of the 7 setup steps are done and names the one next command — run `/senai-doctor` after every step and follow the arrow. Beyond the basics it also checks: generated team agents (mandate and technology craft present), technology resources (valid frontmatter, `generic` fallback present), every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), document misassignments (artifact-driven roles carrying truth/comparison documents, a truth document that contradicts the role's expected document type, or a document that does not match the agent's mandate — all errors, with an explicit warning when an assignment cannot be verified), and secrets accidentally committed in agent, skill, or config files. It also audits the subagent extension setup (pi-interactive-subagents present and up to date, no competing subagent providers, no dead package entries), flags stray `tmp_*` helper files left by subagent workarounds, recommends retry/compaction settings for long runs, and treats a run whose stage state disagrees with its artifacts (delivered but missing reports, empty `document/`, implement files in `deliver/`, oversized plan.md) as an error. When a docs skeleton was generated, doctor also validates it: missing stubs warn, filled docs must contain their template's required sections and stay within the length cap, and stray non-stub files in factory docs folders are reported as info.
 
-Every run saves the full report to `.IDE_Plans/senai/doctor-report.md` (overwritten each run).
+Every run saves the full report to `.IDE_Plans/pi-senai/doctor-report.md` (overwritten each run).
 
 ## Usage
 
@@ -272,7 +272,7 @@ To add a technology: copy `resources/technologies/_template.md` to `<technology>
 ## Artifact layout
 
 ```
-.IDE_Plans/senai/
+.IDE_Plans/pi-senai/
   state.json
   runs/
     YYYY-MM-DD-HH-MM-<mission-slug>/

@@ -41,7 +41,7 @@ describe("e2e/20-real-llm-scout", () => {
 
 			// Wait up to 120s for all 4 scouts to finish. The Plan stage
 			// skill file requires all 4 scout files before continuing.
-			const scoutDir = path.join(home.cwd, ".IDE_Plans/senai/runs", runId, "plan/scouts");
+			const scoutDir = path.join(home.cwd, ".IDE_Plans/pi-senai/runs", runId, "plan/scouts");
 			const deadline = Date.now() + 120_000;
 			while (Date.now() < deadline) {
 				if (fs.existsSync(scoutDir)) {

@@ -82,7 +82,7 @@ content — supersede it.
 
 Each discussion produces one transcript: `discussions/discussion-NN-<slug>.md`
 (under the run directory if a run is active, otherwise under
-`.IDE_Plans/senai/discussions/pre-run/`). The transcript is append-only:
+`.IDE_Plans/pi-senai/discussions/pre-run/`). The transcript is append-only:
 append questions and answers as they happen. The file is never overwritten
 within a discussion and is never deleted by `/senai-discussion-approve`.
 
@@ -113,6 +113,6 @@ When a `/senai-discussion` reveals the existing plan needs replacement:
 - No subagents. The parent asks, the parent writes.
 - Do not edit source code in any branch.
 - Do not mutate `state.json.stage`. Discussions are a side-channel.
-- If a run is active, the brief lives under `.IDE_Plans/senai/runs/<run-id>/mission-brief.md`.
-- If no run is active, the brief lives under `.IDE_Plans/senai/discussions/pre-run/mission-brief.md`
+- If a run is active, the brief lives under `.IDE_Plans/pi-senai/runs/<run-id>/mission-brief.md`.
+- If no run is active, the brief lives under `.IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md`
   and `/senai-plan <mission>` consumes it on the next start.

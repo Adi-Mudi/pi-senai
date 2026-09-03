@@ -154,9 +154,9 @@ describe("guardSpawnCall stress", () => {
 
   it("1,000 calls with corrupt state.json step aside every time and never throw", () => {
     const cwd = makeTmp("stress-guard-corrupt-");
-    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "senai"), { recursive: true });
+    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "pi-senai"), { recursive: true });
     fs.writeFileSync(
-      path.join(cwd, ".IDE_Plans", "senai", "state.json"),
+      path.join(cwd, ".IDE_Plans", "pi-senai", "state.json"),
       "{not json",
       "utf8",
     );
@@ -190,7 +190,7 @@ describe("doctor run-audit stress", () => {
     const cwd = makeTmp("stress-doctor-repeat-");
     saveState(cwd, { ...defaultState(), currentStage: "planning", runId: "r1" });
     for (const rel of PLAN_ARTIFACTS) {
-      writeFile(cwd, `.IDE_Plans/senai/runs/r1/${rel}`, "content");
+      writeFile(cwd, `.IDE_Plans/pi-senai/runs/r1/${rel}`, "content");
     }
 
     const start = performance.now();
@@ -214,11 +214,11 @@ describe("doctor run-audit stress", () => {
   it("100 old run folders on disk do not slow or confuse the audit", () => {
     const cwd = makeTmp("stress-doctor-manyruns-");
     for (let i = 0; i < 100; i++) {
-      writeFile(cwd, `.IDE_Plans/senai/runs/old-run-${i}/plan/plan.md`, "stale");
+      writeFile(cwd, `.IDE_Plans/pi-senai/runs/old-run-${i}/plan/plan.md`, "stale");
     }
     saveState(cwd, { ...defaultState(), currentStage: "implementing", runId: "active-run" });
     for (const rel of PLAN_ARTIFACTS) {
-      writeFile(cwd, `.IDE_Plans/senai/runs/active-run/${rel}`, "content");
+      writeFile(cwd, `.IDE_Plans/pi-senai/runs/active-run/${rel}`, "content");
     }
 
     const start = performance.now();
@@ -248,7 +248,7 @@ describe("doctor run-audit stress", () => {
     saveState(cwd, { ...defaultState(), currentStage: "delivered", runId: "r1" });
     // 5 plan artifacts with content, 5 zero-byte, deliver artifacts missing.
     PLAN_ARTIFACTS.forEach((rel, i) => {
-      writeFile(cwd, `.IDE_Plans/senai/runs/r1/${rel}`, i < 5 ? "content" : "");
+      writeFile(cwd, `.IDE_Plans/pi-senai/runs/r1/${rel}`, i < 5 ? "content" : "");
     });
 
     let first: string | undefined;
@@ -285,7 +285,7 @@ describe("completion-guard stress", () => {
     const start = performance.now();
     for (let i = 0; i < 2_000; i++) {
       const name = `agent-${i}`;
-      const rel = `.IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_${i}.md`;
+      const rel = `.IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_${i}.md`;
       recordSpawnArtifacts("subagent", { name, task: `Write ${rel}` }, cwd);
       if (i % 2 === 0) {
         writeFile(cwd, rel, "content"); // even i: artifact written
@@ -311,14 +311,14 @@ describe("completion-guard stress", () => {
   it("1,000 cycles with corrupt state.json never throw and always step aside", () => {
     const cwd = makeTmp("stress-cguard-corrupt-");
     resetCompletionGuard();
-    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "senai"), { recursive: true });
-    fs.writeFileSync(path.join(cwd, ".IDE_Plans", "senai", "state.json"), "{not json", "utf8");
+    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".IDE_Plans", "pi-senai", "state.json"), "{not json", "utf8");
 
     const start = performance.now();
     for (let i = 0; i < 1_000; i++) {
       recordSpawnArtifacts(
         "subagent",
-        { name: `agent-${i}`, task: `Write .IDE_Plans/senai/runs/r1/plan/scouts/scout-angle_${i}.md` },
+        { name: `agent-${i}`, task: `Write .IDE_Plans/pi-senai/runs/r1/plan/scouts/scout-angle_${i}.md` },
         cwd,
       );
       assert.strictEqual(
@@ -438,10 +438,10 @@ describe("approve verification stress", () => {
   it("100 sibling run folders x 100 iterations: exact labels every time", () => {
     const cwd = makeTmp("stress-approveverify-");
     for (let i = 0; i < 100; i++) {
-      writeFile(cwd, `.IDE_Plans/senai/runs/old-run-${i}/plan/plan.md`, "stale");
+      writeFile(cwd, `.IDE_Plans/pi-senai/runs/old-run-${i}/plan/plan.md`, "stale");
     }
     // The active run exists but has NO artifacts written.
-    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "senai", "runs", "active-run"), { recursive: true });
+    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "pi-senai", "runs", "active-run"), { recursive: true });
 
     const expected: Record<string, string[]> = {
       plan: [
@@ -599,14 +599,14 @@ describe("discussions stress", () => {
     const elapsed = performance.now() - start;
     console.log(`discussions: 50 recordDiscussion calls in ${elapsed.toFixed(0)} ms`);
 
-    const transcriptsDir = path.join(cwd, ".IDE_Plans/senai/discussions/pre-run");
+    const transcriptsDir = path.join(cwd, ".IDE_Plans/pi-senai/discussions/pre-run");
     const allEntries = fs.readdirSync(transcriptsDir).sort();
     const files = allEntries.filter((n) => /^discussion-\d{2}-/.test(n));
     assert.strictEqual(files.length, 50, `transcript files: ${files.join(", ")}`);
     assert.ok(files[0].startsWith("discussion-01-"));
     assert.ok(files[49].startsWith("discussion-50-"));
 
-    const briefPath = path.join(cwd, ".IDE_Plans/senai/discussions/pre-run/mission-brief.md");
+    const briefPath = path.join(cwd, ".IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md");
     const brief = fs.readFileSync(briefPath, "utf8");
     const sections = brief.match(/## Discussion — /g) ?? [];
     assert.strictEqual(sections.length, 50);
@@ -651,7 +651,7 @@ describe("discussions stress", () => {
       }
     }
     for (const runId of ["run-aaa", "run-bbb", "run-ccc", "run-ddd", "run-eee"]) {
-      const d = path.join(cwd, ".IDE_Plans/senai/runs", runId, "discussions");
+      const d = path.join(cwd, ".IDE_Plans/pi-senai/runs", runId, "discussions");
       const files = fs.readdirSync(d).sort();
       assert.strictEqual(files.length, 3, `${runId} should have 3 transcripts`);
       assert.ok(files[0].startsWith("discussion-01-"));

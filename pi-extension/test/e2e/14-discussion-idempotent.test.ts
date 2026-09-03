@@ -35,8 +35,8 @@ describe("e2e/14-discussion-idempotent", () => {
 		assert.ok(client && home, "test setup missing");
 		try {
 			// Pre-run brief path (no active run).
-			const briefPath = path.join(home.cwd, ".IDE_Plans/senai/discussions/pre-run/mission-brief.md");
-			const transcriptDir = path.join(home.cwd, ".IDE_Plans/senai/discussions/pre-run");
+			const briefPath = path.join(home.cwd, ".IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md");
+			const transcriptDir = path.join(home.cwd, ".IDE_Plans/pi-senai/discussions/pre-run");
 
 			// First discussion + approve.
 			await client.request("prompt", { text: "/senai-discussion pick the best stack" });
