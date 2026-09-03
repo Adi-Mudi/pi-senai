@@ -1042,6 +1042,70 @@ function buildAgentMarkdown(
     lines.push(`- ${forbidden}`);
   }
 
+  // Per-role testing discipline (Plan v2.0). Reviewers act in the plan stage;
+  // the code-review role reuses reviewer-correctness per ARCHITECTURE_AGENT_MAPPING
+  // so the anti-pattern scan lives there too. Implementer is the only writer in
+  // the implement stage; its discipline block is what makes the tests worth
+  // writing in the first place. planner and reviewer-security are unchanged.
+  const roleDiscipline: Record<string, string[]> = {
+    implementer: [
+      "## Testing discipline",
+      "",
+      "Run the affected test files after every commit-sized change. The full suite must stay green; a new failure must be fixed before the next change. Never `skip` / `xfail` a failing test without a `// TODO(reason): re-enable in <ticket>` comment.",
+      "",
+      "Tests must follow:",
+      "- AAA structure (Arrange, Act, Assert separated by blank lines or comments).",
+      "- The project's naming convention. One convention only.",
+      "- Equivalence partitioning (one representative per input class).",
+      "- Boundary value analysis (boundary, just-below, just-above for every numeric / length / range contract).",
+      "- Table-driven / parameterized cases for repeated logic.",
+      "- At least one property-based test per pure function (Hypothesis, fast-check, jqwik, proptest, FsCheck).",
+      "- FIRST quality: Fast (milliseconds), Independent, Repeatable, Self-validating, Timely.",
+      "",
+      "Coverage target on changed files: 80% line + branch. Security-critical paths (auth, payment, secrets): 100%. Report coverage at the end of the implement stage.",
+      "",
+      "Anti-patterns to refuse to write: God Test, zero-assertion test, mystery guest, over-mocking (>3 doubles), testing private methods, mirror-logic assertions.",
+    ],
+    "reviewer-tests": [
+      "## Review checklist",
+      "",
+      "Review the plan's test strategy and the implement-stage test artifacts. Write a blocking issue to the review artifact if any item fails.",
+      "1. `<plan>` ends with a `## Verification` section listing specific commands or named test cases (not \"tests pass\").",
+      "2. High-risk areas (auth, money, data loss, concurrency) name explicit test cases.",
+      "3. Input validation tests are listed (empty, null, max-length, invalid encoding).",
+      "4. Boundary and edge cases are listed for every numeric / length / range contract.",
+      "5. The test framework name and test path are named.",
+      "6. No public contract is left untested.",
+      "7. Property-based tests are mentioned for pure functions.",
+      "8. The implement-stage tests cover the `## Verification` steps.",
+      "9. Coverage on changed files is at least 80% (line + branch).",
+      "10. The full suite was green at the end of the implement stage.",
+    ],
+    "reviewer-correctness": [
+      "## Anti-pattern scan",
+      "",
+      "When reviewing code (Plan review OR implement-stage code-review), scan the changed tests for these smells and write each finding to the review artifact with file:line and the smell name:",
+      "- **God Test** — one test exercises more than one unrelated behavior.",
+      "- **Zero-assertion test** — test runs but contains no `assert*` / `expect*` / equivalent.",
+      "- **Mystery Guest** — test depends on data from a file, env var, or fixture that is not visible inside the test.",
+      "- **Over-Mocking** — test uses more than three test doubles.",
+      "- **Private-method testing** — test reaches into non-public API of the system under test.",
+      "- **Mirror-logic assertion** — assertion duplicates the production expression (asserts `add(a,b) === a+b`).",
+      "- **No AAA structure** — Arrange / Act / Assert not separated.",
+      "- **Flaky timing** — test uses `sleep`, `setTimeout`, or fixed waits instead of condition polling.",
+      "",
+      "Severity: these are blocking when the smell appears in a critical-path test (auth, payment, data loss). They are non-blocking elsewhere but must still be listed.",
+    ],
+  };
+
+  const discipline = roleDiscipline[role];
+  if (discipline) {
+    lines.push("");
+    for (const line of discipline) {
+      lines.push(line);
+    }
+  }
+
   lines.push("");
   lines.push("## Completion contract");
   lines.push("");

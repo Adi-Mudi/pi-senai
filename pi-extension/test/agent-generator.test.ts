@@ -761,4 +761,141 @@ describe("sub-agent regeneration", () => {
     assert.deepStrictEqual(after, before, "preview must not write anything");
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  // ----- Testing discipline pinning (Plan v2.0, Change 16) -----
+
+  it("test-skeleton mandate carries the testing-discipline keywords", () => {
+    const def = GENERATED_ROLES.find((r) => r.role === "test-skeleton");
+    assert.ok(def, "test-skeleton role must exist");
+    const mandate = def.mandate;
+    // Required keywords that the test-skeleton agent must see in its mandate.
+    const required = [
+      "AAA",
+      "Equivalence partitioning",
+      "Boundary value analysis",
+      "naming convention",
+      "table-driven",
+      "property-based",
+      "RED",
+      "zero-assertion",
+      "mystery guest",
+      "over-mocking",
+      "mirror-logic",
+    ];
+    for (const kw of required) {
+      assert.ok(
+        mandate.toLowerCase().includes(kw.toLowerCase()),
+        `test-skeleton mandate must contain "${kw}"; got: ${mandate}`,
+      );
+    }
+  });
+
+  it("test-skeleton mandate does not balloon past 25% over the prior size", () => {
+    const def = GENERATED_ROLES.find((r) => r.role === "test-skeleton");
+    assert.ok(def, "test-skeleton role must exist");
+    // Pre-discipline mandate was ~115 chars. Allow 25% headroom.
+    assert.ok(
+      def.mandate.length <= 700,
+      `test-skeleton mandate grew too large (${def.mandate.length} chars); consider trimming`,
+    );
+  });
+
+  it("only test-skeleton carries the test-design discipline keywords (no cross-contamination)", () => {
+    // test-skeleton owns the test-DESIGN discipline (AAA, EP, BVA, naming, table-driven, property-based).
+    // linter and full-test are testing-adjacent and may mention anti-pattern names — they should
+    // NOT carry the design keywords like Equivalence partitioning or Boundary value analysis.
+    const designOnlyKeywords = [
+      "Equivalence partitioning",
+      "Boundary value analysis",
+      "table-driven",
+      "property-based",
+      "naming convention",
+    ];
+    const defs = GENERATED_ROLES.filter((r) =>
+      ["linter", "full-test", "scout-2", "scout-3", "scout-4", "discussion", "plan-overview", "security-gate", "archive"].includes(r.role),
+    );
+    for (const def of defs) {
+      for (const kw of designOnlyKeywords) {
+        assert.ok(
+          !def.mandate.includes(kw),
+          `${def.role} mandate must NOT carry the test-design keyword "${kw}"; that belongs to test-skeleton only`,
+        );
+      }
+    }
+  });
+
+  it("linter mandate carries the testing-adjacent anti-pattern awareness (Q3)", () => {
+    const def = GENERATED_ROLES.find((r) => r.role === "linter");
+    assert.ok(def, "linter role must exist");
+    const mandate = def.mandate;
+    const required = [
+      "testPaths",
+      "anti-pattern",          // linter flags anti-patterns when scanning tests
+      "zero-assertion",
+      "over-mocking",
+      "mirror-logic",
+      "blocking",
+      "Do not auto-fix",
+    ];
+    for (const kw of required) {
+      assert.ok(
+        mandate.toLowerCase().includes(kw.toLowerCase()),
+        `linter mandate must mention "${kw}"; got: ${mandate}`,
+      );
+    }
+  });
+
+  it("full-test mandate requires zero skipped tests and named blockers (Q3)", () => {
+    const def = GENERATED_ROLES.find((r) => r.role === "full-test");
+    assert.ok(def, "full-test role must exist");
+    const mandate = def.mandate;
+    const required = [
+      "exact error output",
+      ".skip",
+      "xfail",
+      "TODO",
+      "re-enable",
+      "zero-assertion",
+      "no tests discovered",
+    ];
+    for (const kw of required) {
+      assert.ok(
+        mandate.toLowerCase().includes(kw.toLowerCase()),
+        `full-test mandate must mention "${kw}"; got: ${mandate}`,
+      );
+    }
+  });
+
+  it("linter and full-test mandates stay under 700 chars (no balloon)", () => {
+    for (const role of ["linter", "full-test"]) {
+      const def = GENERATED_ROLES.find((r) => r.role === role);
+      assert.ok(def, `${role} role must exist`);
+      assert.ok(
+        def.mandate.length <= 700,
+        `${role} mandate grew too large (${def.mandate.length} chars); consider trimming`,
+      );
+    }
+  });
+
+  it("test-skeleton generated agent body carries the full discipline rules (via the mandate block)", () => {
+    const tmpDir = makeTmpDir("agent-gen-disciplineskel-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    const skelPlan = plans.find((p) => p.role === "test-skeleton");
+    assert.ok(skelPlan, "test-skeleton plan must exist");
+    const body = skelPlan.content;
+
+    // The agent-generator embeds the mandate into the body. Every rule that
+    // we promised in the skill must appear in the body, because that is what
+    // the runtime agent actually reads.
+    const required = ["AAA", "Equivalence partitioning", "Boundary value analysis", "naming convention",
+      "table-driven", "property-based", "zero-assertion", "mystery guest",
+      "over-mocking", "mirror-logic"];
+    for (const kw of required) {
+      assert.ok(body.toLowerCase().includes(kw.toLowerCase()), `test-skeleton body must mention "${kw}"`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

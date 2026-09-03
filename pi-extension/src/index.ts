@@ -19,6 +19,7 @@ import { completionWarning, recordSpawnArtifacts } from "./completion-guard.js";
 import { isRateLimitError, record429 } from "./spawn-cadence.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { registerArchitectTools } from "./architect-tools.js";
+import { registerTestDisciplineTools } from "./test-discipline-tool.js";
 import { migrateLegacyOrchestraDirs } from "./migrate.js";
 import { cleanupTempFiles } from "./atomic-write.js";
 import { releaseStaleLockIfHeldByUs, lockInfo } from "./lock.js";
@@ -53,6 +54,7 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
   registerAgentGeneratorCommand(pi);
   registerDocsStructureCommand(pi);
   registerArchitectTools(pi);
+  registerTestDisciplineTools(pi);
 
   // Per-project defensive recovery on every session_start:
   //   1. Release any lock whose recorded pid is ours (process reuse edge case).

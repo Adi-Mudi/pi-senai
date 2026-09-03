@@ -1720,4 +1720,58 @@ describe("architect agent orchestration frontmatter", () => {
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  // ----- Testing discipline pinning (Plan v2.0, Change 16) -----
+
+  it("implementer agent body carries the testing discipline section", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-discipl-impl-"));
+    generateAgentFiles(tmpDir, makeProfile(), makeEntry());
+    const body = readAgent(tmpDir, "implementer");
+    assert.ok(body.includes("## Testing discipline"), "implementer body must include '## Testing discipline'");
+    const required = ["AAA", "Equivalence partitioning", "Boundary value analysis",
+      "naming convention", "table-driven", "property-based", "FIRST",
+      "Coverage target", "God Test", "over-mocking"];
+    for (const kw of required) {
+      assert.ok(body.toLowerCase().includes(kw.toLowerCase()), `implementer body must mention "${kw}"`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reviewer-tests agent body carries the review checklist section", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-discipl-rtests-"));
+    generateAgentFiles(tmpDir, makeProfile(), makeEntry());
+    const body = readAgent(tmpDir, "reviewer-tests");
+    assert.ok(body.includes("## Review checklist"), "reviewer-tests body must include '## Review checklist'");
+    const required = ["Verification", "input validation", "boundary", "test framework",
+      "Property-based", "Coverage", "80%"];
+    for (const kw of required) {
+      assert.ok(body.toLowerCase().includes(kw.toLowerCase()), `reviewer-tests body must mention "${kw}"`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("reviewer-correctness body carries the anti-pattern scan section (code-review re-uses it)", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-discipl-rcorr-"));
+    generateAgentFiles(tmpDir, makeProfile(), makeEntry());
+    const body = readAgent(tmpDir, "reviewer-correctness");
+    assert.ok(body.includes("## Anti-pattern scan"), "reviewer-correctness body must include '## Anti-pattern scan'");
+    const required = ["God Test", "Zero-assertion", "Mystery Guest", "Over-Mocking",
+      "Private-method", "Mirror-logic", "No AAA", "Flaky timing"];
+    for (const kw of required) {
+      assert.ok(body.includes(kw), `reviewer-correctness body must mention "${kw}"`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("planner and reviewer-security do NOT carry testing discipline (discipline is targeted)", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-discipl-untouched-"));
+    generateAgentFiles(tmpDir, makeProfile(), makeEntry());
+    for (const role of ["planner", "reviewer-security"]) {
+      const body = readAgent(tmpDir, role);
+      assert.ok(!body.includes("## Testing discipline"), `${role} must NOT carry the testing discipline section`);
+      assert.ok(!body.includes("## Review checklist"), `${role} must NOT carry the review checklist section`);
+      assert.ok(!body.includes("## Anti-pattern scan"), `${role} must NOT carry the anti-pattern scan section`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
 });

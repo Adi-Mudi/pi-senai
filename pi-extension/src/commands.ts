@@ -27,6 +27,7 @@ import {
   buildSuggestionMap,
 } from "./agent-suggestions.js";
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
+import { collectImplementSignals, formatImplementSignals, signalsBlockAdvance } from "./implement-signals.js";
 import { roleDocumentNeed, suggestTruthDocuments } from "./document-suggestions.js";
 import {
   formatDiagnosticReport,
@@ -364,6 +365,7 @@ export function registerCommands(pi: ExtensionAPI) {
       // can retry, run /senai-doctor, or wait for the holder to finish.
       // The user-confirmation is intentionally outside the lock so a cancel
       // never touches the lock directory.
+      let pendingSignalSummary: string | null = null;
       const lockResult = await withRunLock(
         { cwd: ctx.cwd, mode: "approve", command: "/senai-approve", runId: state.runId },
         async () => {
@@ -395,6 +397,28 @@ export function registerCommands(pi: ExtensionAPI) {
             if (!proceed) {
               return { kind: "noop" as const, message: "Cancelled by user at artifact check." };
             }
+          }
+
+          // Phase 2 discipline signals — collected when leaving the implement
+          // stage. In strict mode, blocking findings halt advance; in advisory
+          // mode they are surfaced for the user to decide.
+          if (current === "implementing" && fresh.runId) {
+            const signals = await collectImplementSignals(ctx.cwd, fresh);
+            const summary = formatImplementSignals(signals);
+            const block = signalsBlockAdvance(signals);
+            if (block.blocked) {
+              const proceed = await runSimpleConfirm(
+                ctx,
+                "Discipline findings",
+                `${summary}\n\nBlocking reasons:\n${block.reasons.slice(0, 10).join("\n")}\n\nAdvance anyway?`,
+              );
+              if (!proceed) {
+                return { kind: "noop" as const, message: `Cancelled by user at discipline check.\n${summary}` };
+              }
+            }
+            // Always surface the summary alongside the approval notification.
+            // The notify handler in the post-lock section concatenates it.
+            pendingSignalSummary = summary;
           }
 
           // Advance from current working stage to completed stage, recording the
@@ -470,9 +494,10 @@ export function registerCommands(pi: ExtensionAPI) {
         return;
       }
       // result.kind === "advance"
+      const signalSuffix = pendingSignalSummary ? `\n\n${pendingSignalSummary}` : "";
       ctx.ui.notify(
         `Stage '${result.fromStage}' approved. Advanced to '${result.completedStage}'.\n` +
-          `Automatically running the next stage: ${result.nextCommand}`,
+          `Automatically running the next stage: ${result.nextCommand}${signalSuffix}`,
         "info",
       );
 

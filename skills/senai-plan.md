@@ -119,7 +119,15 @@ Spawn three reviewers, using the dispatch rule from the **Spawn Cadence** block 
 
 - **reviewer-correctness** → `<reviewCorrectness>`: Is the plan technically correct and complete?
 - **reviewer-security** → `<reviewSecurity>`: Security and privacy concerns?
-- **reviewer-tests** → `<reviewTests>`: Is the test strategy adequate?
+- **reviewer-tests** → `<reviewTests>`: Validate the plan's test strategy against this checklist. Write a blocking issue to `<reviewTests>` if any item is missing:
+  1. `<plan>` ends with a `## Verification` section listing specific commands or named test cases (not "tests pass").
+  2. High-risk areas (auth, money, data loss, concurrency) name explicit test cases.
+  3. Input validation tests are listed (empty, null, max-length, invalid encoding).
+  4. Boundary and edge cases are listed for every numeric / length / range contract.
+  5. The test framework name and test path are named (so the implementer does not have to guess).
+  6. No public contract is left untested.
+  7. Property-based tests are mentioned for pure functions.
+  8. Coverage floor (default 80%) and security-critical paths are named.
 
 ## 8. Approval gate
 

@@ -1819,6 +1819,42 @@ function checkGeneratedAgentContent(cwd: string): DiagnosticSection {
       problems.push("body is missing a '## Forbidden patterns' section");
     }
 
+    // Plan v2.0 Change 12: warn when the discipline sections introduced for
+    // testing-discipline are missing. These are warnings (not errors) so they
+    // surface without blocking runs that already work; the user can regenerate
+    // to pick them up. Only the roles that own testing discipline get checked.
+    // Suppressed when the agent already has structural problems — the user will
+    // see the error item and fix everything together; we do not double-report.
+    if (problems.length === 0) {
+      if (role === "implementer" && !content.includes("## Testing discipline")) {
+        items.push({
+          status: "warning",
+          message: `${agentName}: body is missing the '## Testing discipline' section (pi-senai v2.0+).`,
+          details: [
+            "Re-run /senai-generate-architect to refresh, or paste the section in by hand.",
+            "This warning is informational; the agent will still run, but without the discipline text.",
+          ],
+        });
+      } else if (role === "reviewer-tests" && !content.includes("## Review checklist")) {
+        items.push({
+          status: "warning",
+          message: `${agentName}: body is missing the '## Review checklist' section (pi-senai v2.0+).`,
+          details: [
+            "Re-run /senai-generate-architect to refresh, or paste the section in by hand.",
+          ],
+        });
+      } else if (role === "reviewer-correctness" && !content.includes("## Anti-pattern scan")) {
+        items.push({
+          status: "warning",
+          message: `${agentName}: body is missing the '## Anti-pattern scan' section (pi-senai v2.0+).`,
+          details: [
+            "code-review re-uses this agent (ARCHITECTURE_AGENT_MAPPING), so both lose the scan.",
+            "Re-run /senai-generate-architect to refresh, or paste the section in by hand.",
+          ],
+        });
+      }
+    }
+
     if (problems.length === 0) {
       items.push({ status: "ok", message: `${agentName}: content complete` });
     } else {
