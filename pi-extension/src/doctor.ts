@@ -40,6 +40,7 @@ import {
 } from "./architect.js";
 import { loadDrivers } from "./driver-extractor.js";
 import { getArchitectStateDir, getArtifactPaths } from "./constants.js";
+import { cacheSize, oldestCacheTimestamp } from "./scouts/community-research.js";
 import { loadState, type SenaiState } from "./state.js";
 import {
   GENERATED_ROLES,
@@ -168,6 +169,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   sections.push(checkAgentFileIntegrity(cwd, resolvedAgents));
   sections.push(checkSecretScan(cwd));
   sections.push(checkDocsFactory(cwd));
+  sections.push(checkCommunityResearchCache(cwd));
 
   const summary = sections.reduce(
     (acc, section) => {
@@ -2392,6 +2394,40 @@ function checkDocsFactory(cwd: string): DiagnosticSection {
   }
 
   return { title: "Documentation factory", items };
+}
+
+/** Reports the cross-run community-research cache state. Always emitted, even
+ *  when the cache is empty (informational). Includes file count, oldest
+ *  entry timestamp, and a hint for manual purge. */
+function checkCommunityResearchCache(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+  const size = cacheSize(cwd);
+  const oldest = oldestCacheTimestamp(cwd);
+
+  if (size === 0) {
+    items.push({
+      status: "info",
+      message: "Community research cache: empty (no /senai-discussion scout runs yet).",
+    });
+    return { title: "Community research cache", items };
+  }
+
+  items.push({
+    status: "info",
+    message: `Community research cache: ${size} file(s) under .IDE_Plans/senai/.cache/community-research/.`,
+  });
+  if (oldest) {
+    items.push({
+      status: "info",
+      message: `  Oldest entry: ${oldest}`,
+    });
+  }
+  items.push({
+    status: "info",
+    message: "Run /senai-purge-community-cache to clear the cache.",
+  });
+
+  return { title: "Community research cache", items };
 }
 
 export function formatDiagnosticReport(report: DiagnosticReport): string {

@@ -64,6 +64,7 @@ import {
   getRunDiscussionsDir,
   getRunMissionBriefPath,
 } from "./constants.js";
+import { purgeCache as purgeCommunityCache } from "./scouts/community-research.js";
 import {
   finalizeMissionBrief,
   validateBriefSections,
@@ -631,6 +632,9 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
         `</pi-senai>`,
         ``,
         loadSkill("discussion"),
+        // Community-research is an optional side-channel inside discussion.
+        // The parent loads this skill on demand when a trigger path matches.
+        loadSkill("community-research"),
       ].join("\n");
       pi.sendUserMessage(prompt);
     },
@@ -793,6 +797,40 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
           (outcome.runId
             ? "Next: run /senai-plan again or /senai-approve to continue the run."
             : "Next: run /senai-plan <mission> to start a run that consumes this brief."),
+        "info",
+      );
+    },
+  });
+
+  pi.registerCommand("senai-purge-community-cache", {
+    description:
+      "Clear all community-research cache entries (.IDE_Plans/senai/.cache/community-research/).",
+    handler: async (_args, ctx) => {
+      const state = loadState(ctx.cwd);
+      const lockResult = await withRunLock(
+        {
+          cwd: ctx.cwd,
+          mode: "discussion-research",
+          command: "/senai-purge-community-cache",
+          runId: state.runId,
+        },
+        async () => {
+          const purged = purgeCommunityCache(ctx.cwd);
+          return { kind: "ok" as const, count: purged };
+        },
+      );
+
+      if (!lockResult.ok) {
+        ctx.ui.notify(
+          `Lock busy — could not acquire the run lock.\n${lockResult.reason}` +
+            (lockResult.holder ? `\nHolder: ${describeHolder(lockResult.holder)}` : ""),
+          "error",
+        );
+        return;
+      }
+
+      ctx.ui.notify(
+        `Community-research cache purged: ${lockResult.value.count} file(s) removed.`,
         "info",
       );
     },

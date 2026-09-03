@@ -6,9 +6,10 @@ import { atomicWriteJson } from "./atomic-write.js";
 /**
  * Project-wide run lock.
  *
- * Two Senai commands (`/senai-approve`, `/senai-discussion-approve`) share one
- * lock file so they mutually exclude each other. A second Pi session in the
- * same project, or a double-click inside one session, both surface as
+ * Three Senai commands (`/senai-approve`, `/senai-discussion-approve`,
+ * `/senai-purge-community-cache`) share one lock file so they mutually
+ * exclude each other. A second Pi session in the same project, or a
+ * double-click inside one session, both surface as
  * "Lock busy: holder pid=… command=… started=…". Stale locks (dead pid or
  * heartbeat older than SENAI_LOCK_STALE_MS) are auto-stolen on the next
  * acquire attempt so a crashed previous session never wedges the run.
@@ -29,7 +30,7 @@ import { atomicWriteJson } from "./atomic-write.js";
  *      rm the lock dir.
  */
 
-export type LockMode = "approve" | "discussion-approve";
+export type LockMode = "approve" | "discussion-approve" | "discussion-research";
 
 export interface LockMeta {
   pid: number;
@@ -94,7 +95,7 @@ function readMeta(filePath: string): LockMeta | null {
       typeof parsed.command === "string" &&
       typeof parsed.startedAt === "string" &&
       typeof parsed.heartbeatAt === "string" &&
-      (parsed.mode === "approve" || parsed.mode === "discussion-approve")
+      (parsed.mode === "approve" || parsed.mode === "discussion-approve" || parsed.mode === "discussion-research")
     ) {
       return parsed;
     }

@@ -133,6 +133,41 @@ export function getPreRunMissionBriefPath(cwd: string): string {
   return path.join(getPreRunDiscussionDir(cwd), "mission-brief.md");
 }
 
+/** Directory that holds the cross-run community-research cache. Lives
+ *  next to state.json under SENAI_DIR. Project-local, never global. */
+export const COMMUNITY_RESEARCH_CACHE_DIR = ".cache/community-research";
+export const COMMUNITY_RESEARCH_CACHE_CAP = 50;
+
+/** Absolute path to the cross-run community-research cache directory. */
+export function getCommunityResearchCacheDir(cwd: string): string {
+  return path.join(getSenaiDir(cwd), COMMUNITY_RESEARCH_CACHE_DIR);
+}
+
+/** Absolute path to a single cache file keyed by content hash. */
+export function getCommunityResearchCachePath(cwd: string, hash: string): string {
+  return path.join(getCommunityResearchCacheDir(cwd), `${hash}.json`);
+}
+
+/** Absolute path to a run-scoped community-research transcript. Created on
+ *  demand by the discussion handler. */
+export function getRunCommunityResearchTranscriptPath(
+  cwd: string,
+  runId: string,
+  sequence: string,
+  slug: string,
+): string {
+  return path.join(getRunDiscussionsDir(cwd, runId), `discussion-${sequence}-${slug}.md`);
+}
+
+/** Absolute path to a pre-run community-research transcript. */
+export function getPreRunCommunityResearchTranscriptPath(
+  cwd: string,
+  sequence: string,
+  slug: string,
+): string {
+  return path.join(getPreRunDiscussionDir(cwd), `discussion-${sequence}-${slug}.md`);
+}
+
 export function getArtifactPaths(cwd: string, runId: string): StageArtifactPaths {
   const runDir = getRunDir(cwd, runId);
   const planDir = path.join(runDir, "plan");

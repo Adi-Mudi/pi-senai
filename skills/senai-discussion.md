@@ -38,6 +38,10 @@ mission-type question
 2-5 focused AskUserQuestion rounds (≤2 options each, end with `?`)
         │
         ▼
+optional side-channel: parent decides "I need more info" → load skills/senai-community-research.md
+        │     → 4-option source picker (web / official / community / similar)
+        │     → run scout → write transcript + ## External references in brief
+        ▼
 draft mission-brief.md (top-level sections + each ## Discussion section)
         │
         ▼
