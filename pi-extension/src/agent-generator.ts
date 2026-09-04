@@ -19,6 +19,14 @@ export interface GeneratedRoleDef {
   label: string;
   tools: string[];
   mandate: string;
+  /** When the harness should spawn this agent. Becomes part of the YAML
+   *  description: frontmatter so the harness auto-invokes correctly.
+   *  Required — every role has one. */
+  invocationHint: string;
+  /** What this agent MUST NOT do, even if asked. Rendered as the
+   *  `## Out of scope` section between mandate and completion contract.
+   *  Required — every role has at least one entry. */
+  outOfScope: string[];
   interactive?: boolean;
   /** Doc-writer roles carry a documentation contract from the catalog. */
   docType?: DocTypeId;
@@ -26,21 +34,179 @@ export interface GeneratedRoleDef {
 
 // The 14 non-architecture Senai roles. The 7 architecture-bound roles are
 // owned by the architecture factory and are never generated here.
+//
+// Every row carries `invocationHint` (becomes part of the YAML description
+// frontmatter so the harness auto-invokes correctly) and `outOfScope`
+// (rendered as the `## Out of scope` section in the body to prevent the
+// agent from drifting into another role's job).
 export const GENERATED_ROLES: GeneratedRoleDef[] = [
-  { role: "scout-2", label: "Scout 2 — Code Search", tools: ["read", "write"], mandate: "Search the codebase and report relevant code locations, existing implementations, and reusable patterns." },
-  { role: "scout-3", label: "Scout 3 — Code Risk / Dependency Audit", tools: ["read", "write"], mandate: "Audit code risks, fragile areas, and dependency health before planning." },
-  { role: "scout-4", label: "Scout 4 — PRD / Documentation Audit", tools: ["read", "write"], mandate: "Audit requirements and documentation coverage against the mission." },
-  { role: "discussion", label: "Discussion", tools: ["read", "write"], interactive: true, mandate: "Interview the user, consolidate scout findings, and record decisions in discussion notes." },
-  { role: "plan-overview", label: "Plan Overview", tools: ["read", "write"], mandate: "Write the user-friendly plan overview: mission, approach, key decisions, and expected outcome." },
-  { role: "test-skeleton", label: "Test Skeleton", tools: ["read", "write"], mandate: "Write failing test skeletons derived from the approved plan before implementation starts. Follow the testing discipline: AAA structure, equivalence partitioning + boundary value analysis, the project's naming convention, table-driven cases for repeated logic, and at least one property-based test for every pure function. Tests must be RED (failing) when you finish — do not implement the feature. Anti-patterns to avoid: zero-assertion tests, mystery guests, over-mocking (more than three doubles), mirror-logic assertions, and testing private methods." },
-  { role: "linter", label: "Linter", tools: ["read", "bash", "write"], mandate: "Run the project's linters and write the violations report (with file and line references) to the artifact path given in your task. When a file under testPaths or in a `*.test.*` / `*_test.*` / `*.spec.*` location is linted, also flag the testing anti-patterns the scanner checks for (zero-assertion, over-mocking, mirror-logic, flaky-timing, no-AAA, mystery-guest, private-method, god-test) — list each smell with file:line. Severity matters: zero-assertion and over-mocking are blocking; mirror-logic / flaky-timing / mystery-guest / private-method are actionable; no-AAA is informational. Do not auto-fix — write findings only." },
-  { role: "full-test", label: "Full Test", tools: ["read", "bash", "write"], mandate: "Run the full test suite and write the results report (failures with exact error output) to the artifact path given in your task. 'All tests pass' means: every assertion fired, no `.skip` / `xfail` / `it.todo` left over without a `// TODO(reason): re-enable in <ticket>` comment that names the blocker, and no test exited without an assertion (zero-assertion). Report skipped tests separately with their TODO comments. If the suite produces zero tests because the test path is misconfigured, write a clear 'no tests discovered' finding — do not report success." },
-  { role: "readme-writer", label: "README Writer", tools: ["read", "write"], mandate: "Update the README so it matches what was actually built.", docType: "readme" },
-  { role: "changelog-writer", label: "Changelog Writer", tools: ["read", "write"], mandate: "Update the CHANGELOG with the changes made in this run.", docType: "changelog" },
-  { role: "api-docs-writer", label: "API Docs Writer", tools: ["read", "write"], mandate: "Update API documentation to match the implemented interfaces.", docType: "api-reference" },
-  { role: "other-docs-writer", label: "Other Docs Writer", tools: ["read", "write"], mandate: "Update the remaining project docs (guides, design docs) to match the implementation.", docType: "how-to" },
-  { role: "security-gate", label: "Security Gate", tools: ["read", "write"], mandate: "Run the final security audit and write the security report." },
-  { role: "archive", label: "Archive", tools: ["read", "write", "bash"], mandate: "Archive run artifacts and keep the run directory tidy." },
+  {
+    role: "scout-2",
+    label: "Scout 2 — Code Search",
+    tools: ["read", "write"],
+    mandate: "Search the codebase and report relevant code locations, existing implementations, and reusable patterns.",
+    invocationHint: "Spawn in plan stage in parallel with the other scouts; report code-search findings.",
+    outOfScope: [
+      "Do not write a plan — that is the planner's job.",
+      "Do not edit or create source files.",
+      "Do not write scout reports for other roles (scout-3, scout-4).",
+    ],
+  },
+  {
+    role: "scout-3",
+    label: "Scout 3 — Code Risk / Dependency Audit",
+    tools: ["read", "write"],
+    mandate: "Audit code risks, fragile areas, and dependency health before planning.",
+    invocationHint: "Spawn in plan stage in parallel with the other scouts; report code-risk and dependency findings.",
+    outOfScope: [
+      "Do not write a plan — that is the planner's job.",
+      "Do not edit or create source files.",
+      "Do not write scout reports for other roles (scout-2, scout-4).",
+    ],
+  },
+  {
+    role: "scout-4",
+    label: "Scout 4 — PRD / Documentation Audit",
+    tools: ["read", "write"],
+    mandate: "Audit requirements and documentation coverage against the mission.",
+    invocationHint: "Spawn in plan stage in parallel with the other scouts; audit PRD and doc coverage.",
+    outOfScope: [
+      "Do not write a plan — that is the planner's job.",
+      "Do not edit or create source files.",
+      "Do not write scout reports for other roles (scout-2, scout-3).",
+    ],
+  },
+  {
+    role: "discussion",
+    label: "Discussion",
+    tools: ["read", "write"],
+    interactive: true,
+    mandate: "Interview the user, consolidate scout findings, and record decisions in discussion notes.",
+    invocationHint: "Spawn in plan stage after scouts complete; consolidate scout findings and interview the user.",
+    outOfScope: [
+      "Do not write the implementation plan — that is the planner's job.",
+      "Do not edit source files.",
+      "Do not make decisions the user must make — ask via AskUserQuestion.",
+    ],
+  },
+  {
+    role: "plan-overview",
+    label: "Plan Overview",
+    tools: ["read", "write"],
+    mandate: "Write the user-friendly plan overview: mission, approach, key decisions, and expected outcome.",
+    invocationHint: "Spawn in plan stage after the planner finishes; write the user-friendly plan summary.",
+    outOfScope: [
+      "Do not edit the implementation plan (plan.md).",
+      "Do not change scope or requirements — that is the planner's job.",
+      "Do not edit source files.",
+    ],
+  },
+  {
+    role: "test-skeleton",
+    label: "Test Skeleton",
+    tools: ["read", "write"],
+    mandate: "Write failing test skeletons derived from the approved plan before implementation starts. Follow the testing discipline: AAA structure, equivalence partitioning + boundary value analysis, the project's naming convention, table-driven cases for repeated logic, and at least one property-based test for every pure function. Tests must be RED (failing) when you finish — do not implement the feature. Anti-patterns to avoid: zero-assertion tests, mystery guests, over-mocking (more than three doubles), mirror-logic assertions, and testing private methods.",
+    invocationHint: "Spawn first in implement stage before the implementer; write failing test stubs.",
+    outOfScope: [
+      "Do not implement source code — the implementer agent does that.",
+      "Do not run linters or the full test suite — the linter and full-test agents do that.",
+      "Do not modify the plan — that is the planner's job.",
+    ],
+  },
+  {
+    role: "linter",
+    label: "Linter",
+    tools: ["read", "bash", "write"],
+    mandate: "Run the project's linters and write the violations report (with file and line references) to the artifact path given in your task. When a file under testPaths or in a `*.test.*` / `*_test.*` / `*.spec.*` location is linted, also flag the testing anti-patterns the scanner checks for (zero-assertion, over-mocking, mirror-logic, flaky-timing, no-AAA, mystery-guest, private-method, god-test) — list each smell with file:line. Severity matters: zero-assertion and over-mocking are blocking; mirror-logic / flaky-timing / mystery-guest / private-method are actionable; no-AAA is informational. Do not auto-fix — write findings only.",
+    invocationHint: "Spawn in implement stage after the implementer; run project linters and flag test smells.",
+    outOfScope: [
+      "Do not auto-fix findings — write them only.",
+      "Do not implement source code.",
+      "Do not run the full test suite — that is the full-test agent's job.",
+    ],
+  },
+  {
+    role: "full-test",
+    label: "Full Test",
+    tools: ["read", "bash", "write"],
+    mandate: "Run the full test suite and write the results report (failures with exact error output) to the artifact path given in your task. 'All tests pass' means: every assertion fired, no `.skip` / `xfail` / `it.todo` left over without a `// TODO(reason): re-enable in <ticket>` comment that names the blocker, and no test exited without an assertion (zero-assertion). Report skipped tests separately with their TODO comments. If the suite produces zero tests because the test path is misconfigured, write a clear 'no tests discovered' finding — do not report success.",
+    invocationHint: "Spawn last in implement stage; run the full test suite and verify completeness.",
+    outOfScope: [
+      "Do not skip tests silently — every skip needs a TODO comment.",
+      "Do not modify source code.",
+      "Do not edit tests to make them pass — fix the source instead.",
+    ],
+  },
+  {
+    role: "readme-writer",
+    label: "README Writer",
+    tools: ["read", "write"],
+    mandate: "Update the README so it matches what was actually built.",
+    docType: "readme",
+    invocationHint: "Spawn in document stage; update the README to match what was built.",
+    outOfScope: [
+      "Do not edit source code.",
+      "Do not write other document types (CHANGELOG, API reference, guides).",
+    ],
+  },
+  {
+    role: "changelog-writer",
+    label: "Changelog Writer",
+    tools: ["read", "write"],
+    mandate: "Update the CHANGELOG with the changes made in this run.",
+    docType: "changelog",
+    invocationHint: "Spawn in document stage; update the CHANGELOG with this run's changes.",
+    outOfScope: [
+      "Do not edit source code.",
+      "Do not write other document types (README, API reference, guides).",
+    ],
+  },
+  {
+    role: "api-docs-writer",
+    label: "API Docs Writer",
+    tools: ["read", "write"],
+    mandate: "Update API documentation to match the implemented interfaces.",
+    docType: "api-reference",
+    invocationHint: "Spawn in document stage when the project exposes a public API surface; update API reference.",
+    outOfScope: [
+      "Do not edit source code.",
+      "Do not write narrative guides or how-tos — those are other-docs-writer's job.",
+    ],
+  },
+  {
+    role: "other-docs-writer",
+    label: "Other Docs Writer",
+    tools: ["read", "write"],
+    mandate: "Update the remaining project docs (guides, design docs) to match the implementation.",
+    docType: "how-to",
+    invocationHint: "Spawn in document stage; update guides, design docs, and how-tos.",
+    outOfScope: [
+      "Do not edit source code.",
+      "Do not write README, CHANGELOG, or API reference — those have dedicated writers.",
+    ],
+  },
+  {
+    role: "security-gate",
+    label: "Security Gate",
+    tools: ["read", "write"],
+    mandate: "Run the final security audit and write the security report.",
+    invocationHint: "Spawn in deliver stage; run the final security audit and write the security report.",
+    outOfScope: [
+      "Do not modify source code.",
+      "Do not declare the run delivered — that requires user approval.",
+    ],
+  },
+  {
+    role: "archive",
+    label: "Archive",
+    tools: ["read", "write", "bash"],
+    mandate: "Archive run artifacts and keep the run directory tidy.",
+    invocationHint: "Spawn in deliver stage after security-gate passes; package run artifacts.",
+    outOfScope: [
+      "Do not modify source code.",
+      "Do not run the security audit — that is the security-gate agent's job.",
+    ],
+  },
 ];
 
 export interface TechnologyResource {
@@ -70,7 +236,9 @@ export interface WriteAgentsResult {
 // every generated agent so doctor can detect files from an older format.
 // v3: linter and full-test gained the write tool (they write report artifacts).
 // v4: doc-writer roles carry a documentation contract (target, template, cap).
-export const GENERATOR_VERSION = 4;
+// v5: every role carries an invocationHint (frontmatter description trigger)
+//     and an outOfScope section (boundary in the body).
+export const GENERATOR_VERSION = 5;
 
 // Returns the sha256 of a file, or null when it cannot be read.
 function hashFile(filePath: string): string | null {
@@ -204,10 +372,15 @@ export function buildGeneratedAgentMarkdown(
   resources: TechnologyResource[],
   report: ArchitectReport | null,
 ): string {
+  // Description is the auto-invocation trigger. The harness reads this to
+  // decide WHEN to spawn the agent — a vague description = wrong spawns.
+  // Format: invocationHint + " — " + label + " for " + projectName.
+  const description = `${def.invocationHint} — ${def.label} for ${projectName}. Generated by pi-senai.`;
+
   const lines = [
     "---",
     `name: ${agentName}`,
-    `description: ${def.label} for ${projectName}. Generated by pi-senai.`,
+    `description: ${description}`,
     `tools: ${def.tools.join(", ")}`,
     "session-mode: lineage-only",
     "auto-exit: true",
@@ -224,11 +397,25 @@ export function buildGeneratedAgentMarkdown(
     `- ${def.mandate}`,
     "- Report results with exact file paths and evidence. Do not modify anything outside your mandate.",
     "",
+  ];
+
+  // Out-of-scope section: explicit boundary so the agent does not drift into
+  // another role's job. Rendered between mandate and completion contract so
+  // it is visible alongside the rules the agent follows.
+  if (def.outOfScope.length > 0) {
+    lines.push("## Out of scope", "");
+    for (const item of def.outOfScope) {
+      lines.push(`- ${item}`);
+    }
+    lines.push("");
+  }
+
+  lines.push(
     "## Completion contract",
     "",
     "- Write your deliverable to the artifact path given in your task. The file on disk is the deliverable.",
     "- Your FINAL message must be at most 10 lines: outcome + artifact path(s). Never paste the deliverable content into the final message.",
-  ];
+  );
 
   // Doc-writer roles carry a documentation contract from the catalog: exact
   // default target, template id, required sections, and the hard length cap.

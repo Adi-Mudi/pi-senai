@@ -898,4 +898,86 @@ describe("sub-agent regeneration", () => {
     }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
+
+  // ----- Generator v5 fine-tune pinning (Plan generator_finetune_v5) -----
+
+  it("every GENERATED_ROLES row carries a non-empty invocationHint", () => {
+    for (const def of GENERATED_ROLES) {
+      assert.ok(
+        typeof def.invocationHint === "string" && def.invocationHint.length > 0,
+        `${def.role} must carry a non-empty invocationHint so the YAML description is a real trigger`,
+      );
+    }
+  });
+
+  it("every GENERATED_ROLES row carries an outOfScope array of length >= 1", () => {
+    for (const def of GENERATED_ROLES) {
+      assert.ok(
+        Array.isArray(def.outOfScope) && def.outOfScope.length >= 1,
+        `${def.role} must carry at least one outOfScope entry so the agent knows its boundary`,
+      );
+    }
+  });
+
+  it("test-skeleton invocationHint names 'failing test stubs' and outOfScope forbids implementation", () => {
+    const def = GENERATED_ROLES.find((r) => r.role === "test-skeleton");
+    assert.ok(def, "test-skeleton role must exist");
+    assert.ok(
+      def.invocationHint.toLowerCase().includes("failing test stub"),
+      `test-skeleton invocationHint must name 'failing test stubs'; got: ${def.invocationHint}`,
+    );
+    const joined = def.outOfScope.join(" ").toLowerCase();
+    assert.ok(
+      joined.includes("do not implement source code"),
+      `test-skeleton outOfScope must forbid implementing source code; got: ${def.outOfScope}`,
+    );
+  });
+
+  it("generated agent body contains a '## Out of scope' section between mandate and completion contract", () => {
+    const tmpDir = makeTmpDir("agent-gen-outofscope-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    for (const plan of plans) {
+      const body = plan.content;
+      assert.ok(body.includes("## Out of scope"), `${plan.agentName} body must include '## Out of scope'`);
+      // Section order: Your mandate -> Out of scope -> Completion contract
+      const mandateIdx = body.indexOf("## Your mandate");
+      const outOfScopeIdx = body.indexOf("## Out of scope");
+      const contractIdx = body.indexOf("## Completion contract");
+      assert.ok(mandateIdx >= 0, `${plan.agentName}: missing Your mandate`);
+      assert.ok(outOfScopeIdx > mandateIdx, `${plan.agentName}: Out of scope must follow Your mandate`);
+      assert.ok(contractIdx > outOfScopeIdx, `${plan.agentName}: Completion contract must follow Out of scope`);
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generated agent body description contains the invocationHint as the auto-invocation trigger", () => {
+    const tmpDir = makeTmpDir("agent-gen-descrtrigger-");
+    fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
+    const resources = discoverTechnologyResources(tmpDir);
+    const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
+
+    for (const plan of plans) {
+      const def = GENERATED_ROLES.find((d) => d.role === plan.role);
+      assert.ok(def, `${plan.role} role def must exist`);
+      // Extract the YAML description from the frontmatter.
+      const frontmatterMatch = plan.content.match(/^---\n([\s\S]*?)\n---/);
+      assert.ok(frontmatterMatch, `${plan.agentName}: missing YAML frontmatter`);
+      const frontmatter = frontmatterMatch![1];
+      const descMatch = frontmatter.match(/^description:\s*(.+)$/m);
+      assert.ok(descMatch, `${plan.agentName}: missing description: in frontmatter`);
+      const desc = descMatch![1];
+      assert.ok(
+        desc.includes(def.invocationHint),
+        `${plan.agentName}: description must start with invocationHint ("${def.invocationHint}"); got: ${desc}`,
+      );
+    }
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("GENERATOR_VERSION is bumped to 5", () => {
+    assert.strictEqual(GENERATOR_VERSION, 5, "GENERATOR_VERSION must be 5 after the v5 fine-tune");
+  });
 });
