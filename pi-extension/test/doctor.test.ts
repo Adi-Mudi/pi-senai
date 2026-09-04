@@ -4449,3 +4449,81 @@ describe("doctor lock state", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });
+
+describe("doctor testing discipline section", () => {
+  function findSection(report: ReturnType<typeof runSenaiDiagnostic>, title: string) {
+    const section = report.sections.find((s) => s.title === title);
+    assert.ok(section, `section "${title}" should exist`);
+    return section;
+  }
+
+  it("Testing discipline section appears with strict-mode info item", () => {
+    const tmpDir = makeTmpDir("doctor-test-discipline-");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Testing discipline");
+
+    // Strict mode info item is always shown (info or warning, never error).
+    const strictItem = section.items.find((i) => i.message.toLowerCase().includes("strict mode"));
+    assert.ok(strictItem, "Testing discipline section must include a Strict mode item");
+    assert.notStrictEqual(strictItem!.status, "error", "Strict-mode item must not be error (info or warning)");
+
+    // Coverage floor info item is always shown.
+    const floorItem = section.items.find((i) => i.message.toLowerCase().includes("coverage floor"));
+    assert.ok(floorItem, "Testing discipline section must include a Coverage floor item");
+    assert.match(floorItem!.message, /Coverage floor: \d+%/);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("Testing discipline section warns when testPaths is empty in files.json", () => {
+    const tmpDir = makeTmpDir("doctor-test-empty-");
+    // Empty testPaths.
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Testing discipline");
+    const testPathsItem = section.items.find((i) => i.message.toLowerCase().includes("test paths"));
+    assert.ok(testPathsItem, "Testing discipline section must include a Test paths item");
+    assert.strictEqual(testPathsItem!.status, "warning");
+    assert.match(testPathsItem!.message, /not configured/i);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("Testing discipline section reports ok for test paths when they are configured", () => {
+    const tmpDir = makeTmpDir("doctor-test-configured-");
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: ["src/"],
+      inputDocuments: [],
+      testPaths: ["tests/", "__tests__/"],
+      excludedPaths: [],
+    });
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Testing discipline");
+    const testPathsItem = section.items.find((i) => i.message.toLowerCase().includes("test paths configured"));
+    assert.ok(testPathsItem, "Testing discipline section must include a 'test paths configured' item");
+    assert.strictEqual(testPathsItem!.status, "ok");
+    assert.match(testPathsItem!.message, /2 entries/);
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("Sub-agent generator completeness section reports OK on a healthy project", () => {
+    const tmpDir = makeTmpDir("doctor-subagent-ok-");
+    const report = runSenaiDiagnostic(tmpDir);
+    const section = findSection(report, "Sub-agent generator completeness");
+    const completenessItem = section.items.find((i) =>
+      i.message.includes("GENERATED_ROLES rows have invocationHint + outOfScope"),
+    );
+    assert.ok(completenessItem, "section must include the GENERATED_ROLES completeness item");
+    assert.strictEqual(completenessItem!.status, "ok");
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});

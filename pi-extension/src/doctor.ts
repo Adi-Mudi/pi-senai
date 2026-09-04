@@ -146,6 +146,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
   sections.push(checkAgentMappings(resolvedAgents));
   sections.push(checkAgentCapabilities(resolvedAgents));
+  sections.push(checkTestingDiscipline(cwd, filesConfig));
   sections.push(checkRunArtifacts(cwd));
 
   if (filesConfig) {
@@ -164,6 +165,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   sections.push(checkGeneratedAgentContent(cwd));
   sections.push(checkArchitectureDrift(cwd));
   sections.push(checkGeneratedTeamContent(cwd, agentConfig));
+  sections.push(checkGeneratedRolesCompleteness(cwd));
   sections.push(checkTechnologyResources(cwd));
   sections.push(checkAgentSkillReferences(cwd, resolvedAgents));
   sections.push(checkAgentFileIntegrity(cwd, resolvedAgents));
@@ -654,6 +656,125 @@ function artifactMissing(filePath: string): boolean {
  *  was supposed to produce actually exists and is non-empty. Catches the
  *  "subagent reported completed but wrote nothing" failure seen in real
  *  sessions, which the parent only noticed after user prodding. */
+function checkTestingDiscipline(cwd: string, filesConfig: FilesConfig | null): DiagnosticSection {
+  // Single-glance audit for the testing-discipline feature added in v2.0+.
+  // Reads environment variables, files.json testPaths, and the three stage
+  // skills to surface the discipline's runtime state without running the
+  // scanner itself. All items are info or warning — never error — because
+  // the discipline is opt-in.
+  const items: DiagnosticItem[] = [];
+
+  // 1. Strict mode status (always shown).
+  const strictMode = process.env.SENAI_TEST_DISCIPLINE_STRICT === "1";
+  items.push({
+    status: "info",
+    message: `Strict mode: ${strictMode ? "on (blocking findings will halt advance)" : "off (advisory; set SENAI_TEST_DISCIPLINE_STRICT=1 to enable)"}`,
+  });
+
+  // 2. Coverage floor (always shown).
+  const floorRaw = process.env.SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR;
+  const floor = floorRaw && floorRaw !== "" && Number.isFinite(Number(floorRaw)) ? Number(floorRaw) : 80;
+  items.push({
+    status: "info",
+    message: `Coverage floor: ${floor}% (set SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR to override; 0 disables)`,
+  });
+
+  // 3. Test paths configured.
+  const testPaths = filesConfig?.testPaths ?? [];
+  if (testPaths.length === 0) {
+    items.push({
+      status: "warning",
+      message: "Test paths are not configured in files.json — the scanner cannot run.",
+      details: ["Run /senai-configure-files and set the testPaths field so senai_scan_test_smells has files to scan."],
+    });
+  } else {
+    items.push({
+      status: "ok",
+      message: `Test paths configured: ${testPaths.length} entr${testPaths.length === 1 ? "y" : "ies"} in files.json.`,
+    });
+  }
+
+  // 4. Scanner module compiled and present in dist/.
+  try {
+    const distPath = path.join(cwd, "dist", "pi-extension", "src", "test-discipline.js");
+    if (fs.existsSync(distPath)) {
+      items.push({
+        status: "ok",
+        message: "Scanner module compiled (test-discipline.js present in dist/).",
+      });
+    } else {
+      items.push({
+        status: "warning",
+        message: "Scanner module dist/ not found — run `npm run build` before testing the scanner.",
+      });
+    }
+  } catch {
+    items.push({
+      status: "warning",
+      message: "Scanner module check failed unexpectedly.",
+    });
+  }
+
+  // 5. Stage skills carry the discipline block.
+  const skillFiles = [
+    "skills/senai-implement.md",
+    "skills/senai-document.md",
+    "skills/senai-deliver.md",
+  ];
+  const missing = skillFiles.filter((rel) => {
+    const p = path.join(cwd, rel);
+    if (!fs.existsSync(p)) return true;
+    try {
+      return !fs.readFileSync(p, "utf8").includes("## Testing discipline");
+    } catch {
+      return true;
+    }
+  });
+  if (missing.length === 0) {
+    items.push({ status: "ok", message: "Stage skills carry ## Testing discipline: implement, document, deliver." });
+  } else {
+    items.push({
+      status: "warning",
+      message: `${missing.length} stage skill(s) missing the ## Testing discipline block.`,
+      details: missing,
+    });
+  }
+
+  // 6. Generated agents on the latest version.
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  if (fs.existsSync(agentsDir)) {
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    if (files.length === 0) {
+      items.push({ status: "info", message: "No generated agents yet — run /senai-generate-sub-agents." });
+    } else {
+      const onLatest = files.filter((f) => {
+        try {
+          return fs.readFileSync(path.join(agentsDir, f), "utf8").includes(`(generator v${GENERATOR_VERSION})`);
+        } catch {
+          return false;
+        }
+      });
+      const stale = files.filter((f) => !onLatest.includes(f));
+      if (stale.length === 0) {
+        items.push({
+          status: "ok",
+          message: `Generated agents on v${GENERATOR_VERSION}: ${onLatest.length} of ${files.length}.`,
+        });
+      } else {
+        items.push({
+          status: "warning",
+          message: `Generated agents on v${GENERATOR_VERSION}: ${onLatest.length} of ${files.length} (${stale.length} stale).`,
+          details: stale,
+        });
+      }
+    }
+  } else {
+    items.push({ status: "info", message: "No generated agents yet — run /senai-generate-sub-agents." });
+  }
+
+  return { title: "Testing discipline", items };
+}
+
 function checkRunArtifacts(cwd: string): DiagnosticSection {
   const title = "Run artifacts";
   let state: SenaiState;
@@ -2017,6 +2138,61 @@ function checkGeneratedTeamContent(cwd: string, agentConfig: AgentConfig | null)
   }
 
   return { title: "Generated team agents", items };
+}
+
+/**
+ * Pin check: every GENERATED_ROLES row carries the v5 fields (invocationHint
+ * + outOfScope) and the running GENERATOR_VERSION matches the latest
+ * generator. Catches future code regressions where a role is added without
+ * the new fields, or where the version constant is bumped but the test
+ * pinning is missed.
+ */
+function checkGeneratedRolesCompleteness(cwd: string): DiagnosticSection {
+  const items: DiagnosticItem[] = [];
+
+  // 1. Every GENERATED_ROLES row has invocationHint + outOfScope.
+  const missingFields: string[] = [];
+  for (const def of GENERATED_ROLES) {
+    const hasHint = typeof def.invocationHint === "string" && def.invocationHint.length > 0;
+    const hasOOS = Array.isArray(def.outOfScope) && def.outOfScope.length >= 1;
+    if (!hasHint) missingFields.push(`${def.role} (no invocationHint)`);
+    if (!hasOOS) missingFields.push(`${def.role} (no outOfScope)`);
+  }
+  if (missingFields.length === 0) {
+    items.push({
+      status: "ok",
+      message: `All ${GENERATED_ROLES.length} GENERATED_ROLES rows have invocationHint + outOfScope.`,
+    });
+  } else {
+    items.push({
+      status: "warning",
+      message: `${missingFields.length} GENERATED_ROLES row(s) missing required v5 fields.`,
+      details: missingFields,
+    });
+  }
+
+  // 2. Generated agents on latest version — duplicate count for stand-alone pin.
+  const agentsDir = path.join(cwd, ".pi", "agents");
+  if (fs.existsSync(agentsDir)) {
+    const files = fs.readdirSync(agentsDir).filter((f) => f.endsWith(".md"));
+    if (files.length > 0) {
+      const onLatest = files.filter((f) => {
+        try {
+          return fs.readFileSync(path.join(agentsDir, f), "utf8").includes(`(generator v${GENERATOR_VERSION})`);
+        } catch {
+          return false;
+        }
+      });
+      if (onLatest.length < files.length) {
+        items.push({
+          status: "info",
+          message: `Agent version distribution: ${onLatest.length} on v${GENERATOR_VERSION}, ${files.length - onLatest.length} on older.`,
+        });
+      }
+    }
+  }
+
+  return { title: "Sub-agent generator completeness", items };
 }
 
 function checkTechnologyResources(cwd: string): DiagnosticSection {

@@ -286,6 +286,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Net tests: 1399 → 1401 (2 new pinning tests: every doc-writer carries the new boundary; non-doc-writers do NOT carry it; GENERATOR_VERSION is 6).
 - No new commands. No new npm dependencies. No changes to `package.json`, `tsconfig.json`, or `state.json` schema. The body assembly logic (`buildGeneratedAgentMarkdown`) is unchanged — only the data in `GENERATED_ROLES` got one new entry per doc-writer row.
 
+### Added — Doctor Testing-Discipline Sections
+
+- `/senai-doctor` gains two new sections:
+  - **Testing discipline** (6 items): strict-mode status, coverage floor, test-paths-configured (warns when empty), scanner module compiled (checks for `dist/pi-extension/src/test-discipline.js`), stage skills carry the discipline block (checks all three: implement, document, deliver), generated agents on the latest version. All items are info or warning — never error — because the discipline is opt-in.
+  - **Sub-agent generator completeness** (2 items): every `GENERATED_ROLES` row has the v5 fields `invocationHint` + `outOfScope`, and the agent version distribution count. Catches future code regressions where a role is added without the new fields.
+- Net tests: 1401 → 1405 (4 new pinning tests for the new sections). All existing 1401 tests still pass.
+- No new commands. No new npm dependencies. Doctor remains read-only — does not run the scanner, does not read coverage-summary.json, does not depend on run-state structure.
+
 ## [0.1.0] - 2026-06-12
 
 ### Added
