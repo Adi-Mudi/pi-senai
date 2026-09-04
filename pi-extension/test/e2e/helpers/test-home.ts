@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { execSync } from "node:child_process";
 
 export interface TestHome {
@@ -92,6 +92,16 @@ function findProjectRoot(start: string): string | null {
 		dir = parent;
 	}
 	return null;
+}
+
+/** Absolute file:// URL of a compiled module under `dist/pi-extension/src/`.
+ *  E2E subprocesses run with cwd set to the temp project dir, so a relative
+ *  specifier like `./dist/...` cannot resolve. Callers must use this. */
+export function distModuleUrl(relative: string): string {
+	const thisDir = path.dirname(fileURLToPath(import.meta.url));
+	const root = findProjectRoot(thisDir);
+	if (!root) throw new Error("distModuleUrl: could not locate the pi-senai project root");
+	return pathToFileURL(path.join(root, "dist", "pi-extension", "src", relative)).href;
 }
 
 export function makeTestHome(opts: MakeHomeOptions = {}): TestHome {

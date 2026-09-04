@@ -29,15 +29,8 @@ describe("e2e/24-community-research", () => {
 		if (home) home.cleanup();
 	});
 
-	it("scout module exports the expected surface (pure unit)", () => {
-		const mod = require("../../dist/pi-extension/src/scouts/community-research.js") as {
-			runCommunityResearch: unknown;
-			cacheKey: unknown;
-			isWorking: unknown;
-			retryWithNewKeywords: unknown;
-			purgeCache: unknown;
-			RESEARCH_SOURCES: readonly string[];
-		};
+	it("scout module exports the expected surface (pure unit)", async () => {
+		const mod = await import("../../src/scouts/community-research.js");
 		assert.strictEqual(typeof mod.runCommunityResearch, "function");
 		assert.strictEqual(typeof mod.cacheKey, "function");
 		assert.strictEqual(typeof mod.isWorking, "function");
@@ -46,13 +39,10 @@ describe("e2e/24-community-research", () => {
 		assert.deepStrictEqual([...mod.RESEARCH_SOURCES], ["web", "official", "community", "similar"]);
 	});
 
-	it("cache round-trips a written output (pure unit)", () => {
+	it("cache round-trips a written output (pure unit)", async () => {
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "cr-e2e-"));
 		try {
-			const mod = require("../../dist/pi-extension/src/scouts/community-research.js") as {
-				writeCache: (cwd: string, hash: string, out: unknown) => void;
-				readCache: (cwd: string, hash: string) => unknown;
-			};
+			const mod = await import("../../src/scouts/community-research.js");
 			mod.writeCache(tmp, "abc123abc123abc123abc123abc123ab", {
 				source: "web",
 				community: [],
@@ -72,10 +62,8 @@ describe("e2e/24-community-research", () => {
 		}
 	});
 
-	it("LockMode union includes discussion-research (pure unit)", () => {
-		const mod = require("../../dist/pi-extension/src/lock.js") as {
-			acquireLock: (opts: { cwd: string; mode: string; command: string; timeoutMs: number; staleMs: number }) => { ok: boolean };
-		};
+	it("LockMode union includes discussion-research (pure unit)", async () => {
+		const mod = await import("../../src/lock.js");
 		// We don't actually acquire — we just confirm the function accepts the new mode.
 		// Use a free cwd by pointing at a fresh tmpdir with no lock.
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lock-e2e-"));
@@ -118,9 +106,7 @@ describe("e2e/24-community-research", () => {
 	});
 
 	it("doctor report includes the Community research cache section (pure unit)", async (t) => {
-		const mod = require("../../dist/pi-extension/src/doctor.js") as {
-			runSenaiDiagnostic: (cwd: string) => { sections: Array<{ title: string }> };
-		};
+		const mod = await import("../../src/doctor.js");
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-e2e-"));
 		try {
 			// Doctor may need other config; we just confirm the section is wired without error.
