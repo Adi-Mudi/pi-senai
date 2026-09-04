@@ -146,6 +146,7 @@ export const GENERATED_ROLES: GeneratedRoleDef[] = [
     invocationHint: "Spawn in document stage; update the README to match what was built.",
     outOfScope: [
       "Do not edit source code.",
+      "Do not modify test files; do not change code examples that are exercised by tests.",
       "Do not write other document types (CHANGELOG, API reference, guides).",
     ],
   },
@@ -158,6 +159,7 @@ export const GENERATED_ROLES: GeneratedRoleDef[] = [
     invocationHint: "Spawn in document stage; update the CHANGELOG with this run's changes.",
     outOfScope: [
       "Do not edit source code.",
+      "Do not modify test files; do not change code examples that are exercised by tests.",
       "Do not write other document types (README, API reference, guides).",
     ],
   },
@@ -170,6 +172,7 @@ export const GENERATED_ROLES: GeneratedRoleDef[] = [
     invocationHint: "Spawn in document stage when the project exposes a public API surface; update API reference.",
     outOfScope: [
       "Do not edit source code.",
+      "Do not modify test files; do not change code examples that are exercised by tests.",
       "Do not write narrative guides or how-tos — those are other-docs-writer's job.",
     ],
   },
@@ -182,6 +185,7 @@ export const GENERATED_ROLES: GeneratedRoleDef[] = [
     invocationHint: "Spawn in document stage; update guides, design docs, and how-tos.",
     outOfScope: [
       "Do not edit source code.",
+      "Do not modify test files; do not change code examples that are exercised by tests.",
       "Do not write README, CHANGELOG, or API reference — those have dedicated writers.",
     ],
   },
@@ -238,7 +242,9 @@ export interface WriteAgentsResult {
 // v4: doc-writer roles carry a documentation contract (target, template, cap).
 // v5: every role carries an invocationHint (frontmatter description trigger)
 //     and an outOfScope section (boundary in the body).
-export const GENERATOR_VERSION = 5;
+// v6: doc-writer roles' outOfScope now forbids modifying tests or tested
+//     code examples (prevents doc drift from breaking the test suite).
+export const GENERATOR_VERSION = 6;
 
 // Returns the sha256 of a file, or null when it cannot be read.
 function hashFile(filePath: string): string | null {

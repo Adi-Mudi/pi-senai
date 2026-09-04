@@ -977,7 +977,42 @@ describe("sub-agent regeneration", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("GENERATOR_VERSION is bumped to 5", () => {
-    assert.strictEqual(GENERATOR_VERSION, 5, "GENERATOR_VERSION must be 5 after the v5 fine-tune");
+  // ----- Generator v6 follow-up pinning (Plan generator_finetune_v5_followup) -----
+
+  it("every doc-writer role's outOfScope forbids modifying tests or tested code examples", () => {
+    const docWriters = ["readme-writer", "changelog-writer", "api-docs-writer", "other-docs-writer"];
+    for (const role of docWriters) {
+      const def = GENERATED_ROLES.find((r) => r.role === role);
+      assert.ok(def, `${role} must exist`);
+      const joined = def.outOfScope.join(" ").toLowerCase();
+      assert.ok(
+        joined.includes("do not modify test files"),
+        `${role} outOfScope must include "Do not modify test files; ..."; got: ${JSON.stringify(def.outOfScope)}`,
+      );
+      assert.ok(
+        joined.includes("code examples that are exercised by tests"),
+        `${role} outOfScope must include the tested-examples clause; got: ${JSON.stringify(def.outOfScope)}`,
+      );
+    }
+  });
+
+  it("non-doc-writer roles do NOT carry the 'Do not modify test files' boundary (no cross-contamination)", () => {
+    // The boundary belongs to doc-writers only. test-skeleton / linter / full-test
+    // already have their own testing boundaries; adding this one would be redundant.
+    const otherRoles = ["test-skeleton", "linter", "full-test", "scout-2", "scout-3", "scout-4",
+      "discussion", "plan-overview", "security-gate", "archive"];
+    for (const role of otherRoles) {
+      const def = GENERATED_ROLES.find((r) => r.role === role);
+      assert.ok(def, `${role} must exist`);
+      const joined = def.outOfScope.join(" ").toLowerCase();
+      assert.ok(
+        !joined.includes("do not modify test files"),
+        `${role} outOfScope must NOT carry the doc-writer's "Do not modify test files" boundary`,
+      );
+    }
+  });
+
+  it("GENERATOR_VERSION is 6", () => {
+    assert.strictEqual(GENERATOR_VERSION, 6, "GENERATOR_VERSION must be 6 after the v6 follow-up");
   });
 });

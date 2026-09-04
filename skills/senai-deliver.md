@@ -72,6 +72,15 @@ subagent({
 });
 ```
 
+## Testing discipline
+
+The Deliver stage is the last gate before the user marks the run delivered. Drift between implement-end and deliver-time must be caught here:
+
+- Before presenting the approval gate, the orchestrator MUST re-run `senai_scan_test_smells` on the implement-stage test paths (same paths the implement stage scanned).
+- Compare the new report to the implement-stage report. Any **new** blocking finding that did not exist at implement-end is drift — it MUST block the approval gate and surface in the deliver summary.
+- Existing findings that the user already approved during implement are NOT re-surfaced as drift; only net-new findings count.
+- Include the drift verdict in the deliver summary alongside the security report and mission verification outcome.
+
 ## Approval gate
 
 Present the security report and deliver summary to the user:

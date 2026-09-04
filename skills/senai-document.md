@@ -58,6 +58,14 @@ subagent({
 });
 ```
 
+## Testing discipline
+
+The Document stage does not run the test suite, but document changes can silently break tests — especially when a writer rewrites a code example that the test suite imports, asserts on, or screenshots. Every doc-writer agent is generated with an `outOfScope` rule forbidding test-file edits and tested-example changes. The orchestrator reinforces that rule here:
+
+- Before presenting the approval gate, the orchestrator MUST run the project's test runner (e.g. `npm test`, `pytest`, `go test ./...`). If any test fails because a doc change altered a tested code example, send the doc-writer back to fix.
+- The orchestrator MUST also call `senai_scan_test_smells` on the doc-writer batch output paths (the files the doc-writers wrote or modified). Surface any new finding in the approval summary.
+- "All docs updated" means: every doc at its target path is non-empty, respects its catalog length cap, AND the test suite is still green.
+
 ## Approval gate
 
 Present the updated docs to the user and ask:
