@@ -294,6 +294,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Net tests: 1401 → 1405 (4 new pinning tests for the new sections). All existing 1401 tests still pass.
 - No new commands. No new npm dependencies. Doctor remains read-only — does not run the scanner, does not read coverage-summary.json, does not depend on run-state structure.
 
+### Docs — Testing Discipline
+
+- `README.md` gains a `## Testing discipline` section listing the 8 anti-patterns, the `senai_scan_test_smells` tool, the `SENAI_TEST_DISCIPLINE_STRICT` and `SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR` env vars, and the 9 places the discipline shows up (skills, generated agents, architecture-bound agents, doctor).
+- `AGENTS.md` design principle 8 documents the deterministic scanner, the strict-mode opt-in, the coverage floor, and the `GENERATOR_VERSION` constant.
+- `Doc/senai-full-sequence.md` Stage 2 (Implement) gains a `### Testing discipline` subsection listing the rules, the 8 anti-patterns with severities, and the strict-mode behavior.
+- `Doc/senai-sequence.md` Stage 2 gains a one-paragraph summary of the discipline.
+- `Doc/step-by-step-guide.md` gains a "Setting up the testing discipline" subsection showing the env vars and what the new `/senai-doctor` sections report.
+- No code or test changes in this commit.
+
 ## [0.1.0] - 2026-06-12
 
 ### Added

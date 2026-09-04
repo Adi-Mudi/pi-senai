@@ -207,6 +207,75 @@ Check the current settings:
 /senai-agents-files
 ```
 
+## Testing discipline
+
+Pi Senai enforces a testing discipline across the four stages. It is opt-in by default — strict mode is off, so all checks are advisory until you opt in.
+
+### What is enforced
+
+Every test written in the **Implement** stage follows these rules:
+
+- **AAA** structure — Arrange, Act, Assert, separated by blank lines or comments
+- **Equivalence partitioning** — one representative value per input class
+- **Boundary value analysis** — boundary, just-below, just-above for every numeric / length / range contract
+- **Naming** — one convention everywhere (`should_<expected>_<when>_<condition>`)
+- **Table-driven / parameterized** cases for repeated logic
+- **Property-based** tests for pure functions (Hypothesis, fast-check, jqwik, proptest, FsCheck)
+- **FIRST** quality — Fast, Independent, Repeatable, Self-validating, Timely
+- **Coverage target** — 80% line + branch on changed files, 100% on security-critical paths
+
+### Anti-patterns the scanner rejects
+
+The deterministic scanner (`pi-extension/src/test-discipline.ts`) flags:
+
+| # | Anti-pattern | Severity | Description |
+|---|---|---|---|
+| 1 | `zero-assertion` | blocking | Test runs but has no assert/expect/should |
+| 2 | `over-mocking` | blocking | More than 3 test doubles in one test |
+| 3 | `mirror-logic` | actionable | Assertion duplicates the production expression (e.g. `assert(add(a,b), a+b)`) |
+| 4 | `flaky-timing` | actionable | `sleep`/`setTimeout` not wrapped in a polling helper |
+| 5 | `no-aaa` | informational | Test body has no blank lines or Arrange/Act/Assert comments |
+| 6 | `mystery-guest` | actionable | Test reads a file from outside the configured fixture paths |
+| 7 | `private-method` | actionable | Test calls a method starting with `_` or `@private` |
+| 8 | `god-test` | actionable | More than 5 asserts or body longer than 50 lines |
+
+### Tool: `senai_scan_test_smells`
+
+Call the scanner on test paths:
+
+```
+senai_scan_test_smells
+```
+
+Or from Node:
+
+```typescript
+import { scanTestFilesOnDisk } from "./dist/pi-extension/src/test-discipline.js";
+const report = scanTestFilesOnDisk(["tests/", "src/**/*.test.ts"]);
+console.log(report.blockingCount, report.findings);
+```
+
+### Environment variables
+
+| # | Variable | Default | Purpose |
+|---|---|---|---|
+| 1 | `SENAI_TEST_DISCIPLINE_STRICT=1` | unset | Promote blocking findings + below-floor coverage to hard gates (otherwise advisory) |
+| 2 | `SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR` | 80 | Minimum line + branch coverage % on changed files (0 disables the floor) |
+
+### Where the discipline shows up
+
+| # | Where | What |
+|---|---|---|
+| 1 | `skills/senai-implement.md` | `## Testing discipline` block tells the orchestrator what good tests look like; `## Approval gate` requires scan + coverage + verification before prompting |
+| 2 | `skills/senai-document.md` | Orchestrator must run `npm test` AND `senai_scan_test_smells` before presenting the doc-stage approval gate |
+| 3 | `skills/senai-deliver.md` | Orchestrator must re-scan and block on any NEW blocking finding not seen at implement-end (drift detection) |
+| 4 | Generated `<project>-test-skeleton.md` | Carries the discipline rules in its `## Your mandate`; its `## Out of scope` forbids implementing source code |
+| 5 | Generated `<project>-linter.md` | Flags the 8 anti-patterns alongside style violations |
+| 6 | Generated `<project>-full-test.md` | Refuses to declare success when there are skipped tests without TODO comments |
+| 7 | Generated doc-writer agents | `## Out of scope` forbids modifying test files or tested code examples |
+| 8 | Architecture-generated `implementer` / `reviewer-tests` / `reviewer-correctness` | `## Testing discipline` / `## Review checklist` / `## Anti-pattern scan` sections |
+| 9 | `/senai-doctor` | Two new sections: **Testing discipline** (strict mode, coverage, scanner, skills, version distribution) and **Sub-agent generator completeness** (every GENERATED_ROLES row has the v5 fields) |
+
 ## Architecture generation
 
 Pi Senai can generate project-specific architecture agents and skills from your requirements documents.

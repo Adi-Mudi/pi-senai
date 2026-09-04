@@ -266,9 +266,36 @@ Auto-starts Document
 - One writer at a time.
 - The stage must not start until `plan.md` exists.
 
+### Testing discipline
+
+Every test written in this stage must follow these rules. The implementer and test-skeleton agents carry the same rules in their generated bodies; the orchestrator enforces them via the `senai_scan_test_smells` tool before the approval gate.
+
+- **AAA structure** — Arrange, Act, Assert, separated by blank lines or comments.
+- **Equivalence partitioning** — one representative value per input class.
+- **Boundary value analysis** — boundary, just-below, just-above for every numeric / length / range contract.
+- **Naming** — one convention everywhere (`should_<expected>_<when>_<condition>`).
+- **Table-driven / parameterized** cases for repeated logic.
+- **Property-based** tests for pure functions (Hypothesis, fast-check, jqwik, proptest, FsCheck).
+- **FIRST** quality — Fast, Independent, Repeatable, Self-validating, Timely.
+- **Coverage target** — 80% line + branch on changed files; 100% on security-critical paths.
+
+The deterministic scanner (`pi-extension/src/test-discipline.ts`) flags 8 anti-patterns:
+
+| # | Anti-pattern | Severity | Description |
+|---|---|---|---|
+| 1 | `zero-assertion` | blocking | Test runs but has no assert/expect/should |
+| 2 | `over-mocking` | blocking | More than 3 test doubles in one test |
+| 3 | `mirror-logic` | actionable | Assertion duplicates the production expression |
+| 4 | `flaky-timing` | actionable | `sleep`/`setTimeout` not wrapped in a polling helper |
+| 5 | `no-aaa` | informational | Test body has no blank lines or Arrange/Act/Assert comments |
+| 6 | `mystery-guest` | actionable | Test reads a file from outside the configured fixture paths |
+| 7 | `private-method` | actionable | Test calls a method starting with `_` or `@private` |
+| 8 | `god-test` | actionable | More than 5 asserts or body longer than 50 lines |
+
 ### Approval Gate
+- Before prompting, the orchestrator collects three signals: scan report + coverage (from `coverage/coverage-summary.json` if present) + mission verification re-run (parses `<plan>` `## Verification` and runs each step via `bash`).
 - If all checks pass → run `/senai-approve`. This marks implementation complete and automatically starts the Document stage.
-- If any check fails → fix and re-run the stage.
+- If any check fails → fix and re-run the stage. Failed required verification steps ALWAYS block; coverage and smell findings block only under `SENAI_TEST_DISCIPLINE_STRICT=1`.
 
 ---
 

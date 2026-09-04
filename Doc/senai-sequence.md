@@ -184,8 +184,13 @@ full-test
 - One writer at a time.
 - The stage must not start until `plan.md` exists.
 
+### Testing discipline (summary)
+
+This stage enforces a testing discipline: AAA structure, equivalence partitioning + boundary value analysis, table-driven cases, property-based tests for pure functions, coverage target 80% / 100% on security-critical paths. The deterministic scanner (`pi-extension/src/test-discipline.ts`) flags 8 anti-patterns — `zero-assertion` and `over-mocking` are blocking; `mirror-logic`, `flaky-timing`, `mystery-guest`, `private-method` are actionable; `no-aaa` is informational. The scanner is exposed as `senai_scan_test_smells`. Strict mode is OFF by default; set `SENAI_TEST_DISCIPLINE_STRICT=1` to promote blocking findings + below-floor coverage to hard gates. Failed required verification steps always block regardless. See `Doc/senai-full-sequence.md` for the full rule set, and `/senai-doctor` for a single-glance audit (the **Testing discipline** section surfaces strict mode, coverage floor, test paths, scanner availability, stage skills, and agent version distribution).
+
 ### Approval Gate
 
+- Before prompting, the orchestrator collects three signals: scan report + coverage + mission verification re-run.
 - If all checks pass → run `/senai-approve` to approve implementation and automatically start the Document stage.
 - If any check fails → fix and re-run the stage.
 

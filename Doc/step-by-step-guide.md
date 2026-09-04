@@ -157,6 +157,45 @@ When the main agent reports that tests and review pass, run:
 
 Stage advances from `implementing` to `implemented`, then the extension automatically starts the Document stage (`documenting`).
 
+The approve handler now collects three signals before prompting: a test-smell scan report (from `senai_scan_test_smells`), a coverage number (if your project writes `coverage/coverage-summary.json`), and a mission verification re-run (executes each step from `<plan>` `## Verification` via `bash`). Failed required verification steps always block. Coverage and smell findings block only under strict mode — see "Setting up the testing discipline" below for the env vars.
+
+### Setting up the testing discipline
+
+The Implement stage enforces a testing discipline that is opt-in by default. Two environment variables control the strictness:
+
+| # | Variable | Default | Effect |
+|---|---|---|---|
+| 1 | `SENAI_TEST_DISCIPLINE_STRICT=1` | unset | Promote blocking findings + below-floor coverage to hard gates. Without it, all signals are advisory. |
+| 2 | `SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR` | `80` | Minimum line + branch coverage % on changed files. `0` disables the floor. |
+
+To turn on strict mode in your shell for one session:
+
+```bash
+export SENAI_TEST_DISCIPLINE_STRICT=1
+export SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR=80
+```
+
+Or set them in your CI environment so every run enforces the discipline.
+
+The deterministic scanner checks for 8 anti-patterns in test files: `zero-assertion`, `over-mocking` (both blocking), `mirror-logic`, `flaky-timing`, `mystery-guest`, `private-method`, `god-test` (all actionable), and `no-aaa` (informational). It is a pure-TypeScript module at `pi-extension/src/test-discipline.ts` and is registered as the `senai_scan_test_smells` tool — any agent can call it.
+
+After implementing, run `/senai-doctor` to see two new sections in the report:
+
+```
+Testing discipline
+- Strict mode: on / off
+- Coverage floor: 80%
+- Test paths configured: 3 entries in files.json.
+- Scanner module compiled (test-discipline.js present in dist/).
+- Stage skills carry ## Testing discipline: implement, document, deliver.
+- Generated agents on v6: 12 of 14.
+
+Sub-agent generator completeness
+- All 14 GENERATED_ROLES rows have invocationHint + outOfScope.
+```
+
+If the scanner reports stale agents or missing fields, regenerate with `/senai-generate-sub-agents`.
+
 ---
 
 ## Stage 3 — Document
