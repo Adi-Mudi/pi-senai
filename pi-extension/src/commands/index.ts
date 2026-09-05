@@ -15,7 +15,7 @@ import {
   type AgentsFilesConfig,
   type AgentFilesDocuments,
 } from "../agents/agents-files-config.js";
-import { discoverProjectFiles, safeReadDir, isExcluded } from "../agents/files-discovery.js";
+import { discoverProjectFiles } from "../agents/files-discovery.js";
 import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "../agents/files-config.js";
 import {
   DEFAULT_AGENTS,
@@ -1291,7 +1291,13 @@ export function registerFilesCommands(pi: ExtensionAPI) {
 
 type CategoryKey = "codePaths" | "inputDocuments" | "testPaths";
 
-const SUGGESTION_PAGE_SIZE = 10;
+import {
+	SUGGESTION_PAGE_SIZE,
+	browsePath,
+	normalizePath,
+	type PickerMode,
+	isPathConflict,
+} from "./_shared.js";
 
 function buildDocumentCandidates(
   cwd: string,
@@ -1422,106 +1428,9 @@ function getAllSelectedPaths(config: FilesConfig): string[] {
   return [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
 }
 
-export function normalizePath(input: string): string {
-  // Keep trailing slash if the user included it; otherwise treat as file.
-  return input.replace(/\\/g, "/");
-}
+// Helpers (SUGGESTION_PAGE_SIZE, browsePath, normalizePath, isFolderLike,
+// type PickerMode, isPathConflict) now live in commands/_shared.ts.
 
-export function isPathConflict(path: string, current: string[], other: string[]): boolean {
-  // Within the same category, a folder blocks any file inside it,
-  // and a file inside blocks the folder.
-  for (const existing of current) {
-    if (existing === path) return true;
-    if (existing.endsWith("/")) {
-      if (path.startsWith(existing)) return true;
-    }
-    if (path.endsWith("/")) {
-      if (existing.startsWith(path)) return true;
-    }
-  }
-  // Across categories, only block exact duplicates.
-  for (const existing of other) {
-    if (existing === path) return true;
-  }
-  return false;
-}
-
-export function isFolderLike(dir: string, entry: fs.Dirent): boolean {
-  if (entry.isDirectory()) return true;
-  if (entry.isSymbolicLink()) {
-    try {
-      return fs.statSync(path.join(dir, entry.name)).isDirectory();
-    } catch {
-      return false;
-    }
-  }
-  return false;
-}
-
-type PickerMode = "folder" | "file" | "both";
-
-async function browsePath(
-  ctx: ExtensionContext,
-  cwd: string,
-  mode: PickerMode,
-  excludedPaths: string[],
-): Promise<string | null> {
-  const root = path.resolve(cwd);
-  let currentDir = root;
-
-  while (true) {
-    const relativeDir = path.relative(root, currentDir).replace(/\\/g, "/") || "";
-    const prefix = relativeDir ? `${relativeDir}/` : "";
-    const entries = safeReadDir(currentDir)
-      .filter((e) => {
-        if (e.name.startsWith(".") && e.name !== ".github") return false;
-        const rel = `${prefix}${e.name}${isFolderLike(currentDir, e) ? "/" : ""}`;
-        return !isExcluded(rel, excludedPaths);
-      })
-      .sort((a, b) => {
-        if (isFolderLike(currentDir, a) && !isFolderLike(currentDir, b)) return -1;
-        if (!isFolderLike(currentDir, a) && isFolderLike(currentDir, b)) return 1;
-        return a.name.localeCompare(b.name);
-      });
-
-    const pickerItems: SimplePickerItem[] = [];
-    if (relativeDir && mode !== "file") {
-      pickerItems.push({ id: "select-current", label: `📁 Select this folder (${relativeDir}/)` });
-    }
-    for (const entry of entries) {
-      if (isFolderLike(currentDir, entry)) {
-        pickerItems.push({ id: `dir:${entry.name}`, label: `📂 ${entry.name}/` });
-      } else if (mode !== "folder") {
-        pickerItems.push({ id: `file:${entry.name}`, label: `📄 ${entry.name}` });
-      }
-    }
-    if (currentDir !== root) {
-      pickerItems.push({ id: "up", label: "⬆️ ../" });
-    }
-    pickerItems.push({ id: "cancel", label: "❌ Cancel" });
-
-    const title = relativeDir ? `Browsing ${relativeDir}/` : "Browsing project root";
-    const choice = await runSimplePicker(ctx, { title, items: pickerItems });
-
-    if (choice === "cancel") return null;
-    if (choice === undefined) continue; // esc redraws the browser, same as before
-    if (choice === "up") {
-      currentDir = path.dirname(currentDir);
-      continue;
-    }
-    if (choice === "select-current") {
-      return `${relativeDir}/`;
-    }
-    if (choice.startsWith("dir:")) {
-      currentDir = path.join(currentDir, choice.slice(4));
-      continue;
-    }
-    if (choice.startsWith("file:")) {
-      const name = choice.slice(5);
-      return relativeDir ? `${relativeDir}/${name}` : name;
-    }
-  }
-}
 
 export function registerAgentsFilesCommands(pi: ExtensionAPI) {
   pi.registerCommand("senai-agents-files", {
@@ -2002,5 +1911,9 @@ function buildArchitectDocumentItems(suggestions: string[], current: string[]): 
 }
 
 export { registerArchitectCommand, defaultArchitectSkill } from "./generate-architect.js";
+
+// Re-export shared helpers so callers (including tests) can still import them
+// from commands/index.ts. The actual implementations live in _shared.ts.
+export { SUGGESTION_PAGE_SIZE, browsePath, normalizePath, isFolderLike, isPathConflict } from "./_shared.js";
 
 export { registerAgentGeneratorCommand } from "./generate-sub-agents.js";
