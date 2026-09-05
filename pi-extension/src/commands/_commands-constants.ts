@@ -1,5 +1,4 @@
 // Constants used across multiple per-command files in commands/.
-// Extracted during Phase 3l.4.
 
 export const NEXT_COMMAND: Record<string, string> = {
 	planning: "/senai-approve",
@@ -10,4 +9,16 @@ export const NEXT_COMMAND: Record<string, string> = {
 	documented: "/senai-deliver",
 	delivering: "/senai-approve",
 	delivered: "/senai-status",
+};
+
+export const STAGE_COMMANDS: Record<string, string> = {
+	planned: "implementing",
+	implemented: "documenting",
+	documented: "delivering",
+};
+
+export const STAGE_SKILL: Record<string, string> = {
+	implementing: "implement",
+	documenting: "document",
+	delivering: "deliver",
 };
