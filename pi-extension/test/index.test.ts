@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import piSenaiExtension from "../src/index.js";
-import { resetCompletionGuard } from "../src/completion-guard.js";
+import { resetCompletionGuard } from "../src/hooks/completion-guard.js";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 describe("index", () => {

@@ -9,7 +9,7 @@ import {
   completionWarning,
   recordSpawnArtifacts,
   resetCompletionGuard,
-} from "../src/completion-guard.js";
+} from "../src/hooks/completion-guard.js";
 import { saveAgentConfig } from "../src/agents/config.js";
 import { SENAI_ROLES, DEFAULT_AGENTS } from "../src/agents/suggestions.js";
 import { defaultState, saveState } from "../src/core/state.js";

@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadState } from "./core/state.js";
+import { loadState } from "../core/state.js";
 
 /** Tools that spawn or resume subagents. */
 const SPAWN_TOOLS = new Set(["subagent", "subagent_resume"]);

@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { guardSpawnCall } from "./spawn-guard.js";
-import { recordSpawnArtifacts } from "../completion-guard.js";
+import { recordSpawnArtifacts } from "./completion-guard.js";
 
 /**
  * Block subagent spawns that use a bare role/built-in name while a custom

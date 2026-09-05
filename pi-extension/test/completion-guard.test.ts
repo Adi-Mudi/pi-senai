@@ -8,7 +8,7 @@ import {
   extractArtifactPaths,
   recordSpawnArtifacts,
   resetCompletionGuard,
-} from "../src/completion-guard.js";
+} from "../src/hooks/completion-guard.js";
 import { defaultState, saveState } from "../src/core/state.js";
 
 function makeTmp(): string {

@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { completionWarning } from "../completion-guard.js";
+import { completionWarning } from "./completion-guard.js";
 import { isRateLimitError, record429 } from "../implement/cadence.js";
 
 /**
