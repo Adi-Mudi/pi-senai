@@ -80,8 +80,7 @@ pi-extension/src/
 ├── architect/                # Architecture factory
 │   ├── index.ts              # composer
 │   ├── tools.ts              # deterministic LLM-callable tools
-│   ├── drivers.ts            # driver merging (was driver-extractor.ts)
-│   └── inputs-config.ts      # .pi/senai/architect-inputs.json
+│   └── drivers.ts            # driver merging (was driver-extractor.ts)
 │
 ├── doctor/                   # Diagnostic
 │   └── index.ts              # (was doctor.ts — 2794 lines; split deferred)
@@ -105,8 +104,32 @@ pi-extension/src/
 ├── scouts/                   # Scout modules
 │   └── community-research.ts
 │
-└── commands.ts               # slash command handlers (2365 lines; split deferred — see plan)
+├── commands/                 # COMMAND layer — one file per command group
+│   ├── index.ts              # composition root (~60 lines): registers + re-exports
+│   ├── _helpers.ts           # ensureStage, checkStageArtifact, ensureAgentConfig, …
+│   ├── _shared.ts            # picker helpers: browsePath, normalizePath, isPathConflict, …
+│   ├── _commands-constants.ts # NEXT_COMMAND, STAGE_COMMANDS, STAGE_SKILL
+│   ├── stage-commands.ts     # /senai-plan, -implement, -document, -deliver
+│   ├── approve.ts            # /senai-approve
+│   ├── status.ts             # /senai-status
+│   ├── ops.ts                # /senai-reset, -lock-info, -lock-force, -cadence-status, -cadence-reset
+│   ├── discussion.ts         # /senai-discussion, -discussion-approve
+│   ├── doctor.ts             # /senai-doctor
+│   ├── configure-agents.ts   # /senai-configure-agents, /senai-agents
+│   ├── configure-files.ts    # /senai-configure-files, /senai-files
+│   ├── configure-agents-files.ts     # /senai-configure-agents-files, /senai-agents-files
+│   ├── configure-architect-inputs.ts # /senai-configure-architect-inputs
+│   ├── generate-architect.ts         # /senai-generate-architect
+│   ├── generate-sub-agents.ts        # /senai-generate-sub-agents
+│   └── generate-docs-structure.ts    # /senai-generate-docs-structure
+│
+└── architect-inputs-config.ts        # .pi/senai/architect-inputs.json
 ```
+
+There are no re-export shims. `src/commands.ts` and `src/architect.ts` were removed
+once every importer pointed at `commands/index.ts` and `architect/index.ts`;
+`pi-extension/test/architecture.test.ts` fails the build if a new shim
+appears.
 
 **Test layout mirrors src/:** `test/core/`, `test/io/`, `test/agents/`, `test/architect/`, `test/doctor/`, `test/docs-factory/`, `test/implement/`, `test/ui/`. E2E tests live in `test/e2e/`.
 
