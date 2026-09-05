@@ -7,7 +7,7 @@ import {
 	saveArchitectInputsConfig,
 	type ArchitectDocumentType,
 	type ArchitectInputsConfig,
-} from "../architect-inputs-config.js";
+} from "../architect/inputs-config.js";
 import { runListEditor, type ListEditorItem } from "../ui/list-editor.js";
 import { runRolePicker, type RolePickerItem } from "../ui/role-picker.js";
 import { browsePath, normalizePath, SUGGESTION_PAGE_SIZE } from "./_shared.js";

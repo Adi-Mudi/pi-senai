@@ -4,7 +4,7 @@ import type {
   ArchitectDocumentInput,
   ArchitectDocumentType,
   ArchitectInputsConfig,
-} from "../architect-inputs-config.js";
+} from "../architect/inputs-config.js";
 import type {
   ArchitecturalDrivers,
   DriverItem,

@@ -24,7 +24,7 @@ import {
   ROLE_LABELS,
   type SenaiRole,
 } from "../agents/suggestions.js";
-import { loadArchitectInputsConfig } from "../architect-inputs-config.js";
+import { loadArchitectInputsConfig } from "../architect/inputs-config.js";
 import { suggestTruthDocuments } from "../agents/document-suggestions.js";
 import {
   ARCHITECT_ROLES,

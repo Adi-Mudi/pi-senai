@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadArchitectInputsConfig } from "../architect-inputs-config.js";
+import { loadArchitectInputsConfig } from "../architect/inputs-config.js";
 import { loadFilesConfig } from "./files-config.js";
 import type { SenaiRole } from "./suggestions.js";
 

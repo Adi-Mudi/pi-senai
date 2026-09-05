@@ -23,7 +23,7 @@ import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
   type ArchitectInputsConfig,
-} from "../src/architect-inputs-config.js";
+} from "../src/architect/inputs-config.js";
 import {
   buildIngestBatches,
   mergeMapOutputs,

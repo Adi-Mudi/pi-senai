@@ -28,8 +28,8 @@ import {
 } from "../../src/architect/index.js";
 import { saveAgentConfig } from "../../src/agents/config.js";
 import type { ArchitectProfile, ArchitectReport, ArchitectureLibraryEntry } from "../../src/architect/index.js";
-import { saveArchitectInputsConfig } from "../../src/architect-inputs-config.js";
-import type { ArchitectInputsConfig } from "../../src/architect-inputs-config.js";
+import { saveArchitectInputsConfig } from "../../src/architect/inputs-config.js";
+import type { ArchitectInputsConfig } from "../../src/architect/inputs-config.js";
 import { createEmptyDrivers } from "../../src/architect/drivers.js";
 
 describe("architect", () => {

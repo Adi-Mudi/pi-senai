@@ -7,7 +7,7 @@ import { runSenaiDiagnostic, formatDiagnosticReport, significantWords, wordsOver
 import { saveAgentConfig } from "../../src/agents/config.js";
 import { saveFilesConfig } from "../../src/agents/files-config.js";
 import { saveAgentsFilesConfig } from "../../src/agents/agents-files-config.js";
-import { saveArchitectInputsConfig } from "../../src/architect-inputs-config.js";
+import { saveArchitectInputsConfig } from "../../src/architect/inputs-config.js";
 import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest } from "../../src/architect/index.js";
 import { getProjectSlug, GENERATOR_VERSION } from "../../src/agents/generator.js";
 import { createEmptyDrivers, saveDrivers } from "../../src/architect/drivers.js";

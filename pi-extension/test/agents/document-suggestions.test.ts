@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { suggestTruthDocuments, roleDocumentNeed } from "../../src/agents/document-suggestions.js";
 import { SENAI_ROLES } from "../../src/agents/suggestions.js";
-import { saveArchitectInputsConfig } from "../../src/architect-inputs-config.js";
+import { saveArchitectInputsConfig } from "../../src/architect/inputs-config.js";
 import { saveFilesConfig } from "../../src/agents/files-config.js";
 
 function makeTmpDir(): string {

@@ -80,7 +80,8 @@ pi-extension/src/
 ├── architect/                # Architecture factory
 │   ├── index.ts              # composer
 │   ├── tools.ts              # deterministic LLM-callable tools
-│   └── drivers.ts            # driver merging (was driver-extractor.ts)
+│   ├── drivers.ts            # driver merging (was driver-extractor.ts)
+│   └── inputs-config.ts      # .pi/senai/architect-inputs.json
 │
 ├── doctor/                   # Diagnostic
 │   └── index.ts              # (was doctor.ts — 2794 lines; split deferred)
@@ -122,8 +123,6 @@ pi-extension/src/
 │   ├── generate-architect.ts         # /senai-generate-architect
 │   ├── generate-sub-agents.ts        # /senai-generate-sub-agents
 │   └── generate-docs-structure.ts    # /senai-generate-docs-structure
-│
-└── architect-inputs-config.ts        # .pi/senai/architect-inputs.json
 ```
 
 There are no re-export shims. `src/commands.ts` and `src/architect.ts` were removed

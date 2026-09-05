@@ -26,7 +26,7 @@ import {
   readMapOutputs,
   sanitizeDocumentPath,
 } from "../docs-factory/ingest.js";
-import { loadArchitectInputsConfig } from "../architect-inputs-config.js";
+import { loadArchitectInputsConfig } from "./inputs-config.js";
 import {
   mergeDrivers,
   normalizeDrivers,

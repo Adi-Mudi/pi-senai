@@ -6,7 +6,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { registerArchitectTools } from "../../src/architect/tools.js";
 import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest, addToGeneratedManifest, loadGeneratedManifest } from "../../src/architect/index.js";
-import { saveArchitectInputsConfig } from "../../src/architect-inputs-config.js";
+import { saveArchitectInputsConfig } from "../../src/architect/inputs-config.js";
 import { createEmptyDrivers } from "../../src/architect/drivers.js";
 import { getArchitectMapDir } from "../../src/core/paths.js";
 

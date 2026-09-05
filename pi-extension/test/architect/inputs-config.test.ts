@@ -12,8 +12,8 @@ import {
   saveArchitectInputsConfig,
   validateArchitectInputsConfig,
   ARCHITECT_INPUTS_CONFIG_COMMENT,
-} from "../../src/architect-inputs-config.js";
-import type { ArchitectInputsConfig } from "../../src/architect-inputs-config.js";
+} from "../../src/architect/inputs-config.js";
+import type { ArchitectInputsConfig } from "../../src/architect/inputs-config.js";
 
 function makeConfig(overrides?: Partial<ArchitectInputsConfig>): ArchitectInputsConfig {
   return {

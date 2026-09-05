@@ -17,7 +17,7 @@ import {
 } from "../../src/docs-factory/ingest.js";
 import { getArchitectMapDir } from "../../src/core/paths.js";
 import type { ArchitectMapOutput } from "../../src/docs-factory/ingest.js";
-import type { ArchitectInputsConfig } from "../../src/architect-inputs-config.js";
+import type { ArchitectInputsConfig } from "../../src/architect/inputs-config.js";
 
 describe("document-ingest", () => {
   it("sanitizeDocumentPath converts paths safely", () => {
