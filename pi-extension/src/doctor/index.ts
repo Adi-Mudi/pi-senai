@@ -53,62 +53,59 @@ import {
 import { DOC_TYPES, isDocStub, type DocTypeId } from "../docs-factory/catalog.js";
 import { validateBriefSections } from "../core/mission-brief.js";
 
-export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
+import {
+	type DiagnosticStatus,
+	type DiagnosticItem,
+	type DiagnosticSection,
+	type DiagnosticReport,
+	type ResolvedAgent,
+	BUILTIN_AGENT_NAMES,
+	CONFLICTING_READONLY_PATTERNS,
+	MANDATE_CHECK_ROLES,
+	READONLY_ROLES,
+	ROLE_REQUIRED_TOOLS,
+	VALID_THINKING_LEVELS,
+} from "./_types.js";
+import {
+	artifactMissing,
+	compareVersions,
+	documentSignalWords,
+	isKnownToolName,
+	isPathConflict,
+	mandateTextForRole,
+	resolveSkillFile,
+	significantWords,
+	validateSkillFile,
+	wordsOverlap,
+} from "./_helpers.js";
 
-export interface DiagnosticItem {
-  status: DiagnosticStatus;
-  message: string;
-  details?: string[];
-}
-
-export interface DiagnosticSection {
-  title: string;
-  items: DiagnosticItem[];
-}
-
-export interface DiagnosticReport {
-  ok: boolean;
-  summary: { ok: number; warning: number; error: number; info: number };
-  sections: DiagnosticSection[];
-}
-
-export interface ResolvedAgent {
-  name: string;
-  source: "project" | "user" | "builtin" | "not found";
-  filePath: string | null;
-  frontmatter: AgentFrontmatter | null;
-  shadowed: Array<{ source: "project" | "user" | "builtin"; filePath?: string }>;
-}
-
-const BUILTIN_AGENT_NAMES = Array.from(new Set(Object.values(DEFAULT_AGENTS)));
-
-// Tool requirements for the 14 generator roles come from GENERATED_ROLES
-// (single source of truth); architecture-bound roles are listed explicitly.
-const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
-  ...Object.fromEntries(GENERATED_ROLES.map((def) => [def.role, def.tools])),
-  "scout-1": ["read", "write"],
-  planner: ["read", "write"],
-  "reviewer-correctness": ["read", "write"],
-  "reviewer-security": ["read", "write"],
-  "reviewer-tests": ["read", "write"],
-  implementer: ["read", "write", "edit"],
-  "code-review": ["read", "write"],
-};
-
-// Roles that only report via their final message and never write artifact
-// files. All artifact-writing roles require (and may have) the write tool.
-// Currently empty: linter and full-test write report artifacts since
-// generator v3. Keep the mechanism for future read-only roles.
-const READONLY_ROLES: SenaiRole[] = [];
-
-const CONFLICTING_READONLY_PATTERNS = [
-  { pattern: /fix only/i, reason: "Agent mandate is 'fix only'" },
-  { pattern: /do not build/i, reason: "Agent mandate is 'do not build'" },
-  { pattern: /do not write/i, reason: "Agent mandate is 'do not write'" },
-  { pattern: /do not implement/i, reason: "Agent mandate is 'do not implement'" },
-  { pattern: /only diagnoses/i, reason: "Agent is diagnostic-only" },
-  { pattern: /only reviews/i, reason: "Agent is review-only" },
-];
+// Re-export so existing consumers of `../doctor/index.js` keep working.
+export {
+	type DiagnosticStatus,
+	type DiagnosticItem,
+	type DiagnosticSection,
+	type DiagnosticReport,
+	type ResolvedAgent,
+	BUILTIN_AGENT_NAMES,
+	CONFLICTING_READONLY_PATTERNS,
+	KNOWN_TOOL_NAMES,
+	MANDATE_CHECK_ROLES,
+	READONLY_ROLES,
+	ROLE_REQUIRED_TOOLS,
+	VALID_THINKING_LEVELS,
+} from "./_types.js";
+export {
+	artifactMissing,
+	compareVersions,
+	documentSignalWords,
+	isKnownToolName,
+	isPathConflict,
+	mandateTextForRole,
+	resolveSkillFile,
+	significantWords,
+	validateSkillFile,
+	wordsOverlap,
+} from "./_helpers.js";
 
 export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   const sections: DiagnosticSection[] = [];
@@ -643,14 +640,6 @@ const STAGE_RANK: Record<string, number> = {
   delivering: 7,
   delivered: 8,
 };
-
-function artifactMissing(filePath: string): boolean {
-  try {
-    return fs.statSync(filePath).size === 0;
-  } catch {
-    return true;
-  }
-}
 
 /** Post-hoc audit of the recorded run: verifies that every artifact a stage
  *  was supposed to produce actually exists and is non-empty. Catches the
@@ -1349,16 +1338,6 @@ const SUBAGENT_PROVIDER_PACKAGES = [
 ];
 
 /** Compares dotted versions; returns negative when a < b. */
-export function compareVersions(a: string, b: string): number {
-  const pa = a.split(".").map((n) => parseInt(n, 10) || 0);
-  const pb = b.split(".").map((n) => parseInt(n, 10) || 0);
-  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
-    const d = (pa[i] ?? 0) - (pb[i] ?? 0);
-    if (d !== 0) return d;
-  }
-  return 0;
-}
-
 /** Reads pi's user-level package list (read-only) and verifies the subagent
  *  extension senai depends on: present, new enough, and not shadowed by
  *  dead entries or competing providers. */
@@ -1486,79 +1465,6 @@ function checkStrayFiles(cwd: string): DiagnosticSection {
     items.push({ status: "ok", message: "No stray tmp_* helper files." });
   }
   return { title: "Stray files", items };
-}
-
-function isPathConflict(a: string, b: string): boolean {
-  if (a === b) return true;
-  if (a.endsWith("/") && b.startsWith(a)) return true;
-  if (b.endsWith("/") && a.startsWith(b)) return true;
-  return false;
-}
-
-/** Roles verified by the mandate layer: roles the suggestion rules
- *  (ROLE_TYPE_RULES in document-suggestions.ts) do not cover. scout-3 is
- *  excluded per user decision — it keeps existence-only checking. */
-const MANDATE_CHECK_ROLES: SenaiRole[] = ["scout-2", "plan-overview"];
-
-const MANDATE_STOPWORDS = new Set([
-  "the", "and", "for", "with", "that", "this", "from", "into", "your", "their",
-  "them", "they", "will", "shall", "must", "before", "after", "against", "about",
-  "report", "write", "reads", "read", "user", "agent", "role",
-]);
-
-/** Lowercase word set: drops stopwords and words shorter than 4 chars. */
-export function significantWords(text: string): Set<string> {
-  const words = new Set<string>();
-  for (const raw of text.toLowerCase().split(/[^a-z0-9]+/)) {
-    if (raw.length < 4) continue;
-    if (MANDATE_STOPWORDS.has(raw)) continue;
-    words.add(raw);
-  }
-  return words;
-}
-
-/** Exact match, or one word prefixing the other (code/codebase, test/testing). */
-export function wordsOverlap(a: Set<string>, b: Set<string>): boolean {
-  for (const wa of a) {
-    for (const wb of b) {
-      if (wa === wb) return true;
-      const [shorter, longer] = wa.length <= wb.length ? [wa, wb] : [wb, wa];
-      if (shorter.length >= 4 && longer.startsWith(shorter)) return true;
-    }
-  }
-  return false;
-}
-
-/** What the agent does: frontmatter description + generator mandate + label. */
-export function mandateTextForRole(agent: ResolvedAgent, role: SenaiRole): string {
-  const parts: string[] = [];
-  if (agent.frontmatter?.description) parts.push(agent.frontmatter.description);
-  const generated = GENERATED_ROLES.find((def) => def.role === role);
-  if (generated) parts.push(generated.mandate);
-  parts.push(ROLE_LABELS[role]);
-  return parts.join(". ");
-}
-
-/** What the document is: classified type + filename + first markdown heading. */
-export function documentSignalWords(cwd: string, relPath: string, fullPath: string): Set<string> {
-  const words = new Set<string>();
-  try {
-    const inputs = loadArchitectInputsConfig(cwd);
-    const entry = inputs?.documents.find((d) => d.path === relPath);
-    if (entry?.type) for (const w of significantWords(entry.type)) words.add(w);
-  } catch {
-    // Invalid architect inputs are reported in the architecture setup section.
-  }
-  const base = path.basename(relPath).replace(/\.[^.]+$/, "");
-  for (const w of significantWords(base)) words.add(w);
-  try {
-    const content = fs.readFileSync(fullPath, "utf8");
-    const heading = content.match(/^#\s+(.+)$/m);
-    if (heading) for (const w of significantWords(heading[1])) words.add(w);
-  } catch {
-    // Unreadable file: fall back to filename/type signals only.
-  }
-  return words;
 }
 
 function checkArchitectureSetup(cwd: string): DiagnosticSection {
@@ -2277,33 +2183,6 @@ function checkTechnologyResources(cwd: string): DiagnosticSection {
   return { title: "Technology resources", items };
 }
 
-function resolveSkillFile(cwd: string, skillName: string): string | null {
-  const candidates = [
-    path.join(cwd, ".pi", "skills", skillName, "SKILL.md"),
-    path.join(getAgentDir(), "skills", skillName, "SKILL.md"),
-    path.resolve(getBundledTechnologiesDir(), "..", "..", "skills", `${skillName}.md`),
-  ];
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-  return null;
-}
-
-function validateSkillFile(filePath: string): string[] {
-  const problems: string[] = [];
-  try {
-    const content = fs.readFileSync(filePath, "utf8");
-    const { frontmatter } = parseFrontmatter<Record<string, unknown>>(content);
-    if (!String(frontmatter.name ?? "").trim()) problems.push("SKILL.md frontmatter is missing a name");
-    if (!String(frontmatter.description ?? "").trim()) problems.push("SKILL.md frontmatter is missing a description");
-    const body = content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
-    if (!body) problems.push("SKILL.md body is empty");
-  } catch {
-    problems.push("SKILL.md could not be parsed");
-  }
-  return problems;
-}
-
 function checkAgentSkillReferences(
   cwd: string,
   resolved: Record<SenaiRole, ResolvedAgent>,
@@ -2349,19 +2228,6 @@ function checkAgentSkillReferences(
 
   return { title: "Agent skill references", items };
 }
-
-const KNOWN_TOOL_NAMES = new Set([
-  "read", "write", "edit", "bash", "grep", "find", "ls",
-  "askuserquestion", "intercom", "subagent",
-  "taskcreate", "taskexecute", "taskget", "tasklist", "taskoutput", "taskstop", "taskupdate",
-]);
-
-function isKnownToolName(tool: string): boolean {
-  if (tool.startsWith("ext:")) return tool.length > 4;
-  return KNOWN_TOOL_NAMES.has(tool.toLowerCase());
-}
-
-const VALID_THINKING_LEVELS = new Set(["off", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 function checkAgentFileIntegrity(
   cwd: string,
