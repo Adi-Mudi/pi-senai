@@ -15,10 +15,6 @@ import {
 } from "../agents/suggestions.js";
 import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "../core/paths.js";
 import { collectImplementSignals, formatImplementSignals, signalsBlockAdvance } from "../implement/signals.js";
-import {
-  formatDiagnosticReport,
-  runSenaiDiagnostic,
-} from "../doctor/index.js";
 
 import { buildStagePrompt } from "../prompt.js";
 
@@ -38,7 +34,6 @@ import {
   getPreRunMissionBriefPath,
 } from "../core/paths.js";
 
-import { atomicWriteFile } from "../io/atomic-write.js";
 import { withRunLock, describeHolder, forceStealLock, lockInfo } from "../io/lock.js";
 import {
   buildCadenceBlock,
@@ -807,19 +802,7 @@ export { registerFilesCommands } from "./configure-files.js";
 
 export { registerAgentsFilesCommands } from "./configure-agents-files.js";
 
-export function registerDoctorCommand(pi: ExtensionAPI) {
-  pi.registerCommand("senai-doctor", {
-    description: "Run a full diagnostic check on Senai configuration",
-    handler: async (_args, ctx) => {
-      const report = runSenaiDiagnostic(ctx.cwd);
-      const text = formatDiagnosticReport(report);
-      const reportPath = path.join(ctx.cwd, ".IDE_Plans", "pi-senai", "doctor-report.md");
-      fs.mkdirSync(path.dirname(reportPath), { recursive: true });
-      atomicWriteFile(reportPath, text, "utf8");
-      pi.sendUserMessage(`${text}\n\nReport saved to .IDE_Plans/pi-senai/doctor-report.md`);
-    },
-  });
-}
+export { registerDoctorCommand } from "./doctor.js";
 
 export { registerDocsStructureCommand } from "./generate-docs-structure.js";
 
