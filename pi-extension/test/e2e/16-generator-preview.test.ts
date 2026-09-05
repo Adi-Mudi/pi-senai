@@ -32,7 +32,7 @@ describe("e2e/16-generator-preview", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { previewRegeneration, planAgentGeneration, GENERATED_ROLES } from '${distModuleUrl("agent-generator.js")}'; const cwd = process.cwd(); const plan = planAgentGeneration(cwd, GENERATED_ROLES, [], null); const preview = previewRegeneration(cwd, plan.map(p => p.agentName)); process.stdout.write(JSON.stringify({ planCount: plan.length, preview }))"`,
+			command: `node --input-type=module -e "import { previewRegeneration, planAgentGeneration, GENERATED_ROLES } from '${distModuleUrl("agents/generator.js")}'; const cwd = process.cwd(); const plan = planAgentGeneration(cwd, GENERATED_ROLES, [], null); const preview = previewRegeneration(cwd, plan.map(p => p.agentName)); process.stdout.write(JSON.stringify({ planCount: plan.length, preview }))"`,
 		});
 		assert.ok(result.success, "sub-agent preview subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";
@@ -50,7 +50,7 @@ describe("e2e/16-generator-preview", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { previewRegeneration, planAgentGeneration, GENERATED_ROLES } from '${distModuleUrl("agent-generator.js")}'; const cwd = process.cwd(); const plan = planAgentGeneration(cwd, GENERATED_ROLES, [], null); previewRegeneration(cwd, plan.map(p => p.agentName)); process.stdout.write('ok')"`,
+			command: `node --input-type=module -e "import { previewRegeneration, planAgentGeneration, GENERATED_ROLES } from '${distModuleUrl("agents/generator.js")}'; const cwd = process.cwd(); const plan = planAgentGeneration(cwd, GENERATED_ROLES, [], null); previewRegeneration(cwd, plan.map(p => p.agentName)); process.stdout.write('ok')"`,
 		});
 		assert.ok(result.success, "preview subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";

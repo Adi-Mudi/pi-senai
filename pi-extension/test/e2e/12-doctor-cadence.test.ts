@@ -34,7 +34,7 @@ describe("e2e/12-doctor-cadence", () => {
 		// that imports the built doctor module and prints the report.
 		// This works around the pi 0.84.3 prompt-handler bug.
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
+			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor/index.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
 		});
 		assert.ok(result.success, "doctor subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";
@@ -57,7 +57,7 @@ describe("e2e/12-doctor-cadence", () => {
 		});
 
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
+			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor/index.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
 		});
 		assert.ok(result.success, "doctor subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";

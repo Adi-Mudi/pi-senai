@@ -29,7 +29,7 @@ describe("e2e/25-scanner-tool", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
+			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor/index.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
 		});
 		assert.ok(result.success, "doctor subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";
@@ -43,7 +43,7 @@ describe("e2e/25-scanner-tool", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor.js")}'; const report = runSenaiDiagnostic(process.cwd()); const section = report.sections.find(s => s.title === 'Testing discipline'); process.stdout.write(JSON.stringify(section))"`,
+			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor/index.js")}'; const report = runSenaiDiagnostic(process.cwd()); const section = report.sections.find(s => s.title === 'Testing discipline'); process.stdout.write(JSON.stringify(section))"`,
 		});
 		assert.ok(result.success, "doctor subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";
@@ -58,7 +58,7 @@ describe("e2e/25-scanner-tool", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor.js")}'; const report = runSenaiDiagnostic(process.cwd()); const section = report.sections.find(s => s.title === 'Sub-agent generator completeness'); process.stdout.write(JSON.stringify(section))"`,
+			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor/index.js")}'; const report = runSenaiDiagnostic(process.cwd()); const section = report.sections.find(s => s.title === 'Sub-agent generator completeness'); process.stdout.write(JSON.stringify(section))"`,
 		});
 		assert.ok(result.success, "doctor subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";

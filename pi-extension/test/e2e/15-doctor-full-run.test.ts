@@ -30,7 +30,7 @@ describe("e2e/15-doctor-full-run", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
+			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor/index.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
 		});
 		assert.ok(result.success, "doctor subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";

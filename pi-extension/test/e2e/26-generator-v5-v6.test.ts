@@ -30,7 +30,7 @@ describe("e2e/26-generator-v5-v6", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { planAgentGeneration, GENERATED_ROLES, GENERATOR_VERSION } from '${distModuleUrl("agent-generator.js")}'; const cwd = process.cwd(); const plans = planAgentGeneration(cwd, GENERATED_ROLES, [], null); const summary = plans.map(p => ({ role: p.role, hasV6: p.content.includes('(generator v' + GENERATOR_VERSION + ')'), hasOOS: p.content.includes('## Out of scope'), descLead: (p.content.match(/^description:\\s*(.+)$/m) || [])[1] || '' })); process.stdout.write(JSON.stringify(summary))"`,
+			command: `node --input-type=module -e "import { planAgentGeneration, GENERATED_ROLES, GENERATOR_VERSION } from '${distModuleUrl("agents/generator.js")}'; const cwd = process.cwd(); const plans = planAgentGeneration(cwd, GENERATED_ROLES, [], null); const summary = plans.map(p => ({ role: p.role, hasV6: p.content.includes('(generator v' + GENERATOR_VERSION + ')'), hasOOS: p.content.includes('## Out of scope'), descLead: (p.content.match(/^description:\\s*(.+)$/m) || [])[1] || '' })); process.stdout.write(JSON.stringify(summary))"`,
 		});
 		assert.ok(result.success, "generator subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";
@@ -47,7 +47,7 @@ describe("e2e/26-generator-v5-v6", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { planAgentGeneration, GENERATED_ROLES } from '${distModuleUrl("agent-generator.js")}'; const cwd = process.cwd(); const plans = planAgentGeneration(cwd, GENERATED_ROLES, [], null); const docRoles = ['readme-writer', 'changelog-writer', 'api-docs-writer', 'other-docs-writer']; const summary = plans.filter(p => docRoles.includes(p.role)).map(p => ({ role: p.role, hasBoundary: /Do not modify test files/i.test(p.content) })); process.stdout.write(JSON.stringify(summary))"`,
+			command: `node --input-type=module -e "import { planAgentGeneration, GENERATED_ROLES } from '${distModuleUrl("agents/generator.js")}'; const cwd = process.cwd(); const plans = planAgentGeneration(cwd, GENERATED_ROLES, [], null); const docRoles = ['readme-writer', 'changelog-writer', 'api-docs-writer', 'other-docs-writer']; const summary = plans.filter(p => docRoles.includes(p.role)).map(p => ({ role: p.role, hasBoundary: /Do not modify test files/i.test(p.content) })); process.stdout.write(JSON.stringify(summary))"`,
 		});
 		assert.ok(result.success, "generator subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";
@@ -62,7 +62,7 @@ describe("e2e/26-generator-v5-v6", () => {
 		if (!shouldRunE2E()) return t.skip(SKIP_MESSAGE);
 		assert.ok(client && home, "test setup missing");
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { GENERATOR_VERSION } from '${distModuleUrl("agent-generator.js")}'; process.stdout.write(String(GENERATOR_VERSION))"`,
+			command: `node --input-type=module -e "import { GENERATOR_VERSION } from '${distModuleUrl("agents/generator.js")}'; process.stdout.write(String(GENERATOR_VERSION))"`,
 		});
 		assert.ok(result.success, "version subprocess must succeed");
 		const output = String(result.data?.output ?? result.output ?? "");

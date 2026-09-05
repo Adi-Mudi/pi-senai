@@ -34,7 +34,7 @@ describe("e2e/17-docs-factory", () => {
 		// The slash command would hit the prompt bug; the function call
 		// does not.
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { generateDocsStructure } from '${distModuleUrl("doc-selection.js")}'; generateDocsStructure(process.cwd()); process.stdout.write('ok')"`,
+			command: `node --input-type=module -e "import { generateDocsStructure } from '${distModuleUrl("docs-factory/selection.js")}'; generateDocsStructure(process.cwd()); process.stdout.write('ok')"`,
 		});
 		assert.ok(result.success, "docs factory subprocess must succeed");
 
@@ -64,7 +64,7 @@ describe("e2e/17-docs-factory", () => {
 		fs.writeFileSync(readme, "# README\n\n" + "x".repeat(10_000) + "\n", "utf8");
 
 		const result = await client.request<any>("bash", {
-			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
+			command: `node --input-type=module -e "import { runSenaiDiagnostic } from '${distModuleUrl("doctor/index.js")}'; process.stdout.write(JSON.stringify(runSenaiDiagnostic(process.cwd())))"`,
 		});
 		assert.ok(result.success, "doctor subprocess must succeed");
 		const output = result.data?.output ?? result.output ?? "";
