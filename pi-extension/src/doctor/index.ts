@@ -13,13 +13,11 @@ import { loadFilesConfig, type FilesConfig } from "../agents/files-config.js";
 import { loadAgentsFilesConfig, type AgentsFilesConfig } from "../agents/agents-files-config.js";
 import {
   DEFAULT_AGENTS,
-  DOCUMENT_ROLES,
   SENAI_ROLES,
   ROLE_LABELS,
   type SenaiRole,
 } from "../agents/suggestions.js";
 import { loadArchitectInputsConfig } from "../architect/inputs-config.js";
-import { suggestTruthDocuments } from "../agents/document-suggestions.js";
 import {
   ARCHITECT_ROLES,
   ARCHITECT_STAGES,
@@ -53,23 +51,18 @@ import {
 	type ResolvedAgent,
 	BUILTIN_AGENT_NAMES,
 	CONFLICTING_READONLY_PATTERNS,
-	MANDATE_CHECK_ROLES,
 	READONLY_ROLES,
 	ROLE_REQUIRED_TOOLS,
 	VALID_THINKING_LEVELS,
 } from "./_types.js";
 import {
 	compareVersions,
-	documentSignalWords,
 	isKnownToolName,
-	isPathConflict,
-	mandateTextForRole,
 	resolveSkillFile,
-	significantWords,
 	validateSkillFile,
-	wordsOverlap,
 } from "./_helpers.js";
 import * as ChecksRunState from "./checks-runstate.js";
+import * as ChecksConfig from "./checks-config.js";
 
 // Re-export so existing consumers of `../doctor/index.js` keep working.
 export {
@@ -128,7 +121,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   sections.push(ChecksRunState.checkSetupProgress(cwd));
   sections.push(ChecksRunState.checkLock(cwd));
   sections.push(ChecksRunState.checkCadence(cwd));
-  sections.push(checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
+  sections.push(ChecksConfig.checkConfigFiles(cwd, agentConfig, filesConfig, agentsFilesConfig, filesConfigError, agentConfigError, agentsFilesConfigError));
   sections.push(ChecksRunState.checkDiscussions(cwd));
 
   const resolvedAgents = resolveAllAgents(cwd, agentConfig);
@@ -138,11 +131,11 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
   sections.push(ChecksRunState.checkRunArtifacts(cwd));
 
   if (filesConfig) {
-    sections.push(checkFileScope(cwd, filesConfig));
+    sections.push(ChecksConfig.checkFileScope(cwd, filesConfig));
   }
 
   if (agentsFilesConfig) {
-    sections.push(checkAgentsFiles(cwd, agentsFilesConfig, filesConfig, resolvedAgents));
+    sections.push(ChecksConfig.checkAgentsFiles(cwd, agentsFilesConfig, filesConfig, resolvedAgents));
   }
 
   sections.push(checkEnvironment());
@@ -184,86 +177,6 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
  *  which dispatch tier (A/B/C/D) is currently in effect, when the last
  *  rate-limit error fired, and whether the floor (tier D) has been stuck
  *  long enough to deserve a manual reset. */
-function checkConfigFiles(
-  cwd: string,
-  agentConfig: AgentConfig | null,
-  filesConfig: FilesConfig | null,
-  agentsFilesConfig: AgentsFilesConfig | null,
-  filesConfigError: string | null,
-  agentConfigError: string | null,
-  agentsFilesConfigError: string | null,
-): DiagnosticSection {
-  const items: DiagnosticItem[] = [];
-
-  const agentPath = path.join(cwd, ".pi", "senai", "agents.json");
-  if (agentConfigError) {
-    items.push({
-      status: "error",
-      message: agentConfigError,
-      details: ["Run /senai-configure-agents to recreate the file."],
-    });
-  } else if (agentConfig) {
-    items.push({ status: "ok", message: `agents.json found and valid at ${agentPath}` });
-    if (agentConfig.version !== 1) {
-      items.push({
-        status: "warning",
-        message: `agents.json version is ${agentConfig.version}; expected 1`,
-      });
-    }
-  } else {
-    items.push({
-      status: "error",
-      message: `agents.json missing or invalid at ${agentPath}`,
-      details: ["Run /senai-generate-sub-agents (or /senai-generate-architect) to create it, or /senai-configure-agents to configure agents manually."],
-    });
-  }
-
-  const filesPath = path.join(cwd, ".pi", "senai", "files.json");
-  if (filesConfigError) {
-    items.push({
-      status: "error",
-      message: filesConfigError,
-      details: ["Run /senai-configure-files to recreate the file."],
-    });
-  } else if (filesConfig) {
-    items.push({ status: "ok", message: `files.json found and valid at ${filesPath}` });
-  } else {
-    items.push({
-      status: "error",
-      message: `files.json missing or invalid at ${filesPath}`,
-      details: ["Run /senai-configure-files to create it."],
-    });
-  }
-
-  const agentsFilesPath = path.join(cwd, ".pi", "senai", "agents_files.json");
-  if (agentsFilesConfigError) {
-    items.push({
-      status: "error",
-      message: agentsFilesConfigError,
-      details: ["Run /senai-configure-agents-files to recreate the file."],
-    });
-  } else if (agentsFilesConfig) {
-    items.push({
-      status: "ok",
-      message: `agents_files.json found and valid at ${agentsFilesPath}`,
-    });
-    if (agentsFilesConfig.version !== 2) {
-      items.push({
-        status: "warning",
-        message: `agents_files.json version is ${agentsFilesConfig.version}; expected 2`,
-      });
-    }
-  } else {
-    items.push({
-      status: "error",
-      message: `agents_files.json missing or invalid at ${agentsFilesPath}`,
-      details: ["Run /senai-configure-agents-files to create it."],
-    });
-  }
-
-  return { title: "Configuration files", items };
-}
-
 function resolveAllAgents(
   cwd: string,
   agentConfig: AgentConfig | null,
@@ -617,241 +530,6 @@ function checkAgentCapabilities(resolved: Record<SenaiRole, ResolvedAgent>): Dia
   }
 
   return { title: "Agent-role capability fit", items };
-}
-
-function checkFileScope(cwd: string, config: FilesConfig): DiagnosticSection {
-  const items: DiagnosticItem[] = [];
-
-  const categories: Array<{
-    key: keyof FilesConfig;
-    label: string;
-  }> = [
-    { key: "codePaths", label: "Code paths" },
-    { key: "inputDocuments", label: "Input documents" },
-    { key: "testPaths", label: "Test paths" },
-  ];
-
-  for (const { key, label } of categories) {
-    const paths = config[key] as string[];
-    if (paths.length === 0) {
-      items.push({
-        status: "warning",
-        message: `${label}: none configured`,
-      });
-      continue;
-    }
-
-    const missing: string[] = [];
-    for (const p of paths) {
-      const fullPath = path.resolve(cwd, p);
-      if (!fs.existsSync(fullPath)) {
-        missing.push(p);
-      }
-    }
-
-    if (missing.length > 0) {
-      items.push({
-        status: "error",
-        message: `${label}: ${paths.length} configured, ${missing.length} not found`,
-        details: missing,
-      });
-    } else {
-      items.push({
-        status: "ok",
-        message: `${label}: ${paths.length} configured, all exist`,
-      });
-    }
-  }
-
-  const allSelected = [...config.codePaths, ...config.inputDocuments, ...config.testPaths];
-  const conflicts: string[] = [];
-  for (let i = 0; i < allSelected.length; i++) {
-    for (let j = i + 1; j < allSelected.length; j++) {
-      const a = allSelected[i];
-      const b = allSelected[j];
-      if (isPathConflict(a, b)) {
-        conflicts.push(`${a} overlaps ${b}`);
-      }
-    }
-  }
-
-  if (conflicts.length > 0) {
-    items.push({
-      status: "error",
-      message: "Path conflicts detected",
-      details: conflicts,
-    });
-  }
-
-  return { title: "Project file scope", items };
-}
-
-function checkAgentsFiles(
-  cwd: string,
-  config: AgentsFilesConfig,
-  filesConfig: FilesConfig | null,
-  resolved: Record<SenaiRole, ResolvedAgent>,
-): DiagnosticSection {
-  const items: DiagnosticItem[] = [];
-
-  const allConfiguredDocs = new Set<string>();
-  if (filesConfig) {
-    for (const p of filesConfig.inputDocuments) allConfiguredDocs.add(path.resolve(cwd, p));
-  }
-
-  for (const role of SENAI_ROLES) {
-    const docs = config.documents[role];
-    if (!docs) continue;
-    const label = ROLE_LABELS[role];
-
-    if (docs.primary) {
-      const fullPath = path.resolve(cwd, docs.primary);
-      if (fs.existsSync(fullPath)) {
-        const inScope = allConfiguredDocs.has(fullPath);
-        items.push({
-          status: inScope ? "ok" : "warning",
-          message: `${label} (${role}) truth document: ${docs.primary}`,
-          details: inScope
-            ? ["File exists and is in the inputDocuments scope."]
-            : ["File exists but is NOT in the inputDocuments scope. Add it to files.json if you want agents to discover it."],
-        });
-      } else {
-        items.push({
-          status: "error",
-          message: `${label} (${role}) truth document MISSING: ${docs.primary}`,
-          details: ["The configured truth document does not exist in the project."],
-        });
-      }
-    }
-
-    if (docs.reads) {
-      for (const readPath of docs.reads) {
-        const fullPath = path.resolve(cwd, readPath);
-        if (fs.existsSync(fullPath)) {
-          items.push({
-            status: "ok",
-            message: `${label} (${role}) comparison document: ${readPath}`,
-          });
-        } else {
-          items.push({
-            status: "error",
-            message: `${label} (${role}) comparison document MISSING: ${readPath}`,
-          });
-        }
-      }
-    }
-  }
-
-  // Artifact-driven roles consume stage outputs, not project documents. A
-  // hand-edited assignment on one of these roles is a configuration error
-  // (the /senai-configure-agents-files picker hides these roles by design).
-  for (const role of SENAI_ROLES) {
-    if ((DOCUMENT_ROLES as readonly string[]).includes(role)) continue;
-    const docs = config.documents[role];
-    if (!docs) continue;
-    const hasAssignment =
-      docs.primary !== undefined || (docs.reads?.length ?? 0) > 0;
-    if (!hasAssignment) continue;
-    const label = ROLE_LABELS[role];
-    items.push({
-      status: "error",
-      message: `${label} (${role}) has document assignments, but this role reads stage artifacts, not project documents.`,
-      details: [
-        ...(docs.primary ? [`Truth document assigned: ${docs.primary}`] : []),
-        ...(docs.reads?.length
-          ? [`Comparison documents assigned: ${docs.reads.join(", ")}`]
-          : []),
-        "Fix: remove this role from agents_files.json (run /senai-configure-agents-files; artifact-driven roles are hidden there by design).",
-      ],
-    });
-  }
-
-  // A truth document that contradicts the suggestion rules is a
-  // misassignment: the file exists, so the existence check passes, but the
-  // role should follow a different document type. Strict error per user
-  // decision; roles without a confident suggestion are not judged.
-  const allSuggestions = suggestTruthDocuments(cwd);
-  for (const s of allSuggestions) {
-    const assigned = config.documents[s.role]?.primary;
-    if (!assigned || assigned === s.path) continue;
-    if (!fs.existsSync(path.resolve(cwd, assigned))) continue; // the MISSING error above already covers this
-    const label = ROLE_LABELS[s.role];
-    items.push({
-      status: "error",
-      message: `${label} (${s.role}) truth document mismatch: assigned ${assigned}, but the expected ${s.reason} looks like ${s.path}.`,
-      details: [
-        "The assigned file exists, but it does not match the document type this role should follow.",
-        `Fix: run /senai-configure-agents-files and set the truth document to ${s.path}. If the assignment is intentional, re-classify the document type via /senai-configure-architect-inputs.`,
-      ],
-    });
-  }
-
-  // Layer 2 — mandate check for roles the suggestion rules do not cover.
-  // Compare what the agent does (mandate/description) with what the document
-  // is (type, filename, first heading). No overlap = clear contradiction =
-  // error. Not enough signal = reported as unverifiable, never silent.
-  const unverifiable: string[] = [];
-  for (const role of MANDATE_CHECK_ROLES) {
-    const assigned = config.documents[role]?.primary;
-    if (!assigned) continue;
-    const fullPath = path.resolve(cwd, assigned);
-    if (!fs.existsSync(fullPath)) continue; // the MISSING error above already covers this
-    const docWords = documentSignalWords(cwd, assigned, fullPath);
-    const mandateWords = significantWords(mandateTextForRole(resolved[role], role));
-    if (docWords.size === 0 || mandateWords.size === 0) {
-      unverifiable.push(`${ROLE_LABELS[role]} (${role}) → ${assigned}`);
-      continue;
-    }
-    if (!wordsOverlap(docWords, mandateWords)) {
-      const label = ROLE_LABELS[role];
-      items.push({
-        status: "error",
-        message: `${label} (${role}) truth document does not match the agent's mandate: ${assigned}.`,
-        details: [
-          `Agent mandate: ${mandateTextForRole(resolved[role], role)}`,
-          "The document shows no overlap with what this agent does.",
-          "Fix: run /senai-configure-agents-files and assign a document that fits the role, or remove the assignment.",
-        ],
-      });
-    }
-  }
-  if (unverifiable.length > 0) {
-    items.push({
-      status: "warning",
-      message: `Doctor cannot verify ${unverifiable.length} document assignment(s) (not enough signal to judge).`,
-      details: [
-        ...unverifiable,
-        "These assignments pass, but they are YOUR responsibility — doctor has no rule for them.",
-        "Tip: classify the document type via /senai-configure-architect-inputs and give the file a meaningful name and top heading to make it verifiable.",
-      ],
-    });
-  }
-
-  // Recommended roles without a truth document get a warning with concrete
-  // suggestions; the user approves by running /senai-configure-agents-files.
-  // Assignments stay optional. One item per role (not one aggregated item) so
-  // every missing assignment is visible in the summary, with the exact
-  // default path to assign.
-  const suggestions = allSuggestions.filter(
-    (s) => !config.documents[s.role]?.primary,
-  );
-  for (const s of suggestions) {
-    items.push({
-      status: "warning",
-      message: `${ROLE_LABELS[s.role]} (${s.role}) has no truth document. Assign: ${s.path}`,
-      details: [
-        `Why: ${s.reason}.`,
-        "Without a truth document this role reads whatever it finds — the main source of doc bloat and contradictions.",
-        `Fix: run /senai-configure-agents-files and set the truth document to ${s.path}.`,
-      ],
-    });
-  }
-
-  if (items.length === 0) {
-    items.push({ status: "info", message: "No per-role document assignments configured." });
-  }
-
-  return { title: "Agent document assignments", items };
 }
 
 function checkEnvironment(): DiagnosticSection {
@@ -2183,3 +1861,9 @@ export {
 	checkRunArtifacts,
 	checkDiscussions,
 } from "./checks-runstate.js";
+
+export {
+	checkConfigFiles,
+	checkFileScope,
+	checkAgentsFiles,
+} from "./checks-config.js";
