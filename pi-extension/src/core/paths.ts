@@ -36,6 +36,16 @@ export const STAGES: Stage[] = [
   "delivered",
 ];
 
+/** Numeric rank of each stage so checks can compare "is this stage at or past X?".
+ *  Kept in lock-step with STAGES above. */
+export const STAGE_RANK: Record<Stage, number> = STAGES.reduce(
+  (acc, stage, i) => {
+    acc[stage] = i;
+    return acc;
+  },
+  {} as Record<Stage, number>,
+);
+
 /** Valid stage transitions. Each key lists the stages that may follow it. */
 export const STAGE_TRANSITIONS: Record<Stage, Stage[]> = {
   none: ["planning"],
