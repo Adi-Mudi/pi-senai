@@ -6,7 +6,7 @@ import {
   renderTemplateStub,
   type DocTypeId,
 } from "./catalog.js";
-import { loadArchitectProfile } from "../architect.js";
+import { loadArchitectProfile } from "../architect/index.js";
 import { atomicWriteFile, atomicWriteJson } from "../io/atomic-write.js";
 
 /** The four document writer roles. */

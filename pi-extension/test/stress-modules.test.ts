@@ -46,7 +46,7 @@ import {
   addToGeneratedManifest,
   loadGeneratedManifest,
   writeGeneratedManifest,
-} from "../src/architect.js";
+} from "../src/architect/index.js";
 import {
   documentSignalWords,
   formatDiagnosticReport,

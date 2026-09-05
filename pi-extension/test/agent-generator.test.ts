@@ -14,7 +14,7 @@ import {
   previewRegeneration,
   writeGeneratedAgents,
 } from "../src/agents/generator.js";
-import { addToGeneratedManifest, loadGeneratedManifest, saveArchitectReport, slugify, writeGeneratedManifest } from "../src/architect.js";
+import { addToGeneratedManifest, loadGeneratedManifest, saveArchitectReport, slugify, writeGeneratedManifest } from "../src/architect/index.js";
 import { runSenaiDiagnostic } from "../src/doctor/index.js";
 import { saveAgentConfig } from "../src/agents/config.js";
 

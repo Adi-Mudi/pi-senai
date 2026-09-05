@@ -19,7 +19,7 @@ import { DOC_TYPES, isDocStub, renderTemplateStub, type DocTypeId } from "../src
 import { listMissingStageArtifacts } from "../src/commands/index.js";
 import { makeRunId } from "../src/core/paths.js";
 import { recordDiscussion } from "../src/core/mission-brief.js";
-import { saveArchitectProfile } from "../src/architect.js";
+import { saveArchitectProfile } from "../src/architect/index.js";
 import { createHash } from "node:crypto";
 
 /**

@@ -35,7 +35,7 @@ import {
   saveArchitectInputsConfig,
   ARCHITECT_INPUTS_CONFIG_COMMENT,
 } from "../src/architect-inputs-config.js";
-import { saveArchitectReport, slugify } from "../src/architect.js";
+import { saveArchitectReport, slugify } from "../src/architect/index.js";
 import { resolveSkillPath } from "../src/prompt.js";
 import { DEFAULT_AGENTS, type SenaiRole } from "../src/agents/suggestions.js";
 

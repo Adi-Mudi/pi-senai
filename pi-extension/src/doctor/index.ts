@@ -37,7 +37,7 @@ import {
   slugify,
   type ArchitectProfile,
   type ArchitectReport,
-} from "../architect.js";
+} from "../architect/index.js";
 import { loadDrivers } from "../architect/drivers.js";
 import { getArchitectStateDir, getArtifactPaths, getSenaiDir, getPreRunDiscussionDir } from "../core/paths.js";
 import { cacheSize, oldestCacheTimestamp } from "../scouts/community-research.js";

@@ -16,7 +16,7 @@ import {
   writeGeneratedManifest,
   GENERATED_MANIFEST_FILE,
   type ArchitectureLibraryEntry,
-} from "../architect.js";
+} from "./index.js";
 import { getArchitectMapDir, getArchitectStateDir } from "../core/paths.js";
 import { loadAgentConfig } from "../agents/config.js";
 import { atomicWriteJson } from "../io/atomic-write.js";

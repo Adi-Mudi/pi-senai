@@ -8,7 +8,7 @@ import {
   loadGeneratedManifest,
   slugify,
   type ArchitectReport,
-} from "../architect.js";
+} from "../architect/index.js";
 import { getDocType, type DocTypeId } from "../docs-factory/catalog.js";
 import { atomicWriteFile } from "../io/atomic-write.js";
 

@@ -3,7 +3,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadDrivers } from "../architect/drivers.js";
 import {
 	areDriversStale,
-} from "../architect.js";
+} from "../architect/index.js";
 import { loadArchitectInputsConfig, getSelectedInputPaths } from "../architect-inputs-config.js";
 import { resolveSkillPath } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";

@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { buildDocSelectionBlock, buildDocWritePlan, generateDocsStructure, MAX_BATCH, selectDocumentWriters } from "../../src/docs-factory/selection.js";
 import { DOC_TYPES } from "../../src/docs-factory/catalog.js";
-import { saveArchitectProfile } from "../../src/architect.js";
+import { saveArchitectProfile } from "../../src/architect/index.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "doc-selection-"));

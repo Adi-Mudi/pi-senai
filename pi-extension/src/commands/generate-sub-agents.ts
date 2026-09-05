@@ -15,7 +15,7 @@ import {
 	previewRegeneration,
 	writeGeneratedAgents,
 } from "../agents/generator.js";
-import { loadArchitectReport, slugify, type ArchitectReport } from "../architect.js";
+import { loadArchitectReport, slugify, type ArchitectReport } from "../architect/index.js";
 import { runSimpleConfirm, runSimplePicker } from "../ui/simple-picker.js";
 
 export function registerAgentGeneratorCommand(pi: ExtensionAPI) {
