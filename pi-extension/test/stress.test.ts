@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
-import { guardSpawnCall } from "../src/spawn-guard.js";
+import { guardSpawnCall } from "../src/hooks/spawn-guard.js";
 import {
   completionWarning,
   recordSpawnArtifacts,

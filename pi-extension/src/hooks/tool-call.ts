@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { guardSpawnCall } from "../spawn-guard.js";
+import { guardSpawnCall } from "./spawn-guard.js";
 import { recordSpawnArtifacts } from "../completion-guard.js";
 
 /**

@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { guardSpawnCall } from "../src/spawn-guard.js";
+import { guardSpawnCall } from "../src/hooks/spawn-guard.js";
 import { saveAgentConfig } from "../src/agents/config.js";
 import { defaultState, saveState } from "../src/core/state.js";
 
