@@ -31,6 +31,7 @@ describe("architecture invariants", () => {
 		const offenders: string[] = [];
 		for (const f of fs.readdirSync(srcRoot)) {
 			if (!f.endsWith(".ts")) continue;
+			if (f.endsWith(".d.ts")) continue; // skip generated declaration files
 			const filePath = path.join(srcRoot, f);
 			if (!fs.statSync(filePath).isFile()) continue;
 			const content = fs.readFileSync(filePath, "utf8");
@@ -49,6 +50,7 @@ describe("architecture invariants", () => {
 		const coreDir = path.join(import.meta.dirname, "..", "src", "core");
 		for (const f of fs.readdirSync(coreDir)) {
 			if (!f.endsWith(".ts")) continue;
+			if (f.endsWith(".d.ts")) continue;
 			const content = fs.readFileSync(path.join(coreDir, f), "utf8");
 			assert.equal(isShim(content), false, `${f} in core/ looks like a shim`);
 		}
