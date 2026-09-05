@@ -83,8 +83,16 @@ pi-extension/src/
 │   ├── drivers.ts            # driver merging (was driver-extractor.ts)
 │   └── inputs-config.ts      # .pi/senai/architect-inputs.json
 │
-├── doctor/                   # Diagnostic
-│   └── index.ts              # (was doctor.ts — 2794 lines; split deferred)
+├── doctor/                   # Diagnostic (composer + check groups)
+│   ├── index.ts              # composer: runSenaiDiagnostic + formatDiagnosticReport (~220 lines)
+│   ├── _types.ts             # DiagnosticSection, ResolvedAgent, ROLE_REQUIRED_TOOLS, …
+│   ├── _helpers.ts           # artifactMissing, compareVersions, significantWords, …
+│   ├── checks-runstate.ts    # setup progress, lock, cadence, run artifacts, discussions
+│   ├── checks-config.ts      # config files, file scope, agents files
+│   ├── checks-agents.ts      # resolve agents, mappings, capabilities, skills, integrity
+│   ├── checks-architecture.ts # architecture setup, mapping, generated, drift, tech resources
+│   ├── checks-environment.ts # environment, subagent extension, stray files, secret scan
+│   └── checks-docs.ts        # testing discipline, docs factory, community research cache
 │
 ├── docs-factory/             # Document factory
 │   ├── catalog.ts            # doc templates + length caps
