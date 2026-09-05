@@ -5,10 +5,7 @@ import { collectImplementSignals, formatImplementSignals, signalsBlockAdvance } 
 
 import { buildStagePrompt } from "../prompt.js";
 import {
-	ensureStage,
-	checkStageArtifact,
 	listMissingStageArtifacts,
-	ensureAgentConfig,
 	COMPLETED_STAGE_ARTIFACT,
 } from "./_helpers.js";
 
@@ -58,68 +55,8 @@ const STAGE_SKILL: Record<string, string> = {
 export function registerCommands(pi: ExtensionAPI) {
 	StageCmds.registerPlanCommand(pi);
 	StageCmds.registerImplementCommand(pi);
-
-  pi.registerCommand("senai-document", {
-    description: "Start the Document stage (requires implemented code)",
-    handler: async (_args, ctx) => {
-      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
-      const state = loadState(ctx.cwd);
-      const check = checkStageArtifact(state, "implement", ctx);
-      if (!check.ok) return;
-
-      const ensured = ensureStage(ctx.cwd, state, "implemented");
-      if (!ensured.ok) {
-        ctx.ui.notify(ensured.reason, "warning");
-        return;
-      }
-
-      const advance = advanceStage(ctx.cwd, ensured.state, "documenting");
-      if (!advance.ok) {
-        ctx.ui.notify(advance.reason, "error");
-        return;
-      }
-
-      ctx.ui.notify(
-        `Document stage started.\n` +
-          `When documentation is complete and you approve, run /senai-approve to continue.`,
-        "info",
-      );
-
-      const { prompt } = buildStagePrompt(ctx.cwd, advance.state, "document");
-      pi.sendUserMessage(prompt);
-    },
-  });
-
-  pi.registerCommand("senai-deliver", {
-    description: "Start the Deliver stage (requires documentation)",
-    handler: async (_args, ctx) => {
-      if (!ensureAgentConfig(ctx.cwd, ctx)) return;
-      const state = loadState(ctx.cwd);
-      const check = checkStageArtifact(state, "document", ctx);
-      if (!check.ok) return;
-
-      const ensured = ensureStage(ctx.cwd, state, "documented");
-      if (!ensured.ok) {
-        ctx.ui.notify(ensured.reason, "warning");
-        return;
-      }
-
-      const advance = advanceStage(ctx.cwd, ensured.state, "delivering");
-      if (!advance.ok) {
-        ctx.ui.notify(advance.reason, "error");
-        return;
-      }
-
-      ctx.ui.notify(
-        `Deliver stage started.\n` +
-          `When security audit and packaging are complete and you approve, run /senai-approve to finish.`,
-        "info",
-      );
-
-      const { prompt } = buildStagePrompt(ctx.cwd, advance.state, "deliver");
-      pi.sendUserMessage(prompt);
-    },
-  });
+	StageCmds.registerDocumentCommand(pi);
+	StageCmds.registerDeliverCommand(pi);
 
   pi.registerCommand("senai-status", {
     description: "Show current senai stage and artifact paths",
