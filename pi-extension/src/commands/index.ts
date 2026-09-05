@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 
-import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "../core/paths.js";
+import { STAGE_TRANSITIONS, type Stage } from "../core/paths.js";
 import { collectImplementSignals, formatImplementSignals, signalsBlockAdvance } from "../implement/signals.js";
 
 import { buildStagePrompt } from "../prompt.js";
@@ -29,16 +29,8 @@ import {
 } from "../implement/cadence.js";
 
 
-const NEXT_COMMAND: Record<string, string> = {
-  planning: "/senai-approve",
-  planned: "/senai-implement",
-  implementing: "/senai-approve",
-  implemented: "/senai-document",
-  documenting: "/senai-approve",
-  documented: "/senai-deliver",
-  delivering: "/senai-approve",
-  delivered: "/senai-status",
-};
+import * as StatusCmds from "./status.js";
+import { NEXT_COMMAND } from "./_commands-constants.js";
 
 const STAGE_COMMANDS: Record<string, Stage> = {
   planned: "implementing",
@@ -58,49 +50,7 @@ export function registerCommands(pi: ExtensionAPI) {
 	StageCmds.registerDocumentCommand(pi);
 	StageCmds.registerDeliverCommand(pi);
 
-  pi.registerCommand("senai-status", {
-    description: "Show current senai stage and artifact paths",
-    handler: async (_args, ctx) => {
-      const state = loadState(ctx.cwd);
-      if (state.currentStage === "none") {
-        ctx.ui.notify("No active senai run. Use /senai-plan <mission> to start.", "info");
-        return;
-      }
-
-      const artifacts = state.runId
-        ? getArtifactPaths(ctx.cwd, state.runId)
-        : null;
-
-      const nextCommand = NEXT_COMMAND[state.currentStage];
-
-      const lines = [
-        `Stage: ${state.currentStage}`,
-        `Mission: ${state.mission}`,
-        `Run ID: ${state.runId}`,
-        `Started: ${state.startedAt}`,
-        `Updated: ${state.updatedAt}`,
-      ];
-      if (artifacts) {
-        lines.push(
-          ``,
-          `Artifacts:`,
-          `  plan.md: ${artifacts.plan}`,
-          `  discussion-notes.md: ${artifacts.discussionNotes}`,
-          `  scout-angle_*.md: ${artifacts.scoutAngle1}`,
-          `  review-*.md: ${artifacts.reviewCorrectness}`,
-          `  security-report.md: ${artifacts.securityReport}`,
-          `  deliver-summary.md: ${artifacts.deliverSummary}`,
-        );
-      }
-      if (nextCommand) {
-        lines.push(
-          ``,
-          `Next step: run ${nextCommand}`,
-        );
-      }
-      ctx.ui.notify(lines.join("\n"), "info");
-    },
-  });
+	StatusCmds.registerStatusCommand(pi);
 
   pi.registerCommand("senai-approve", {
     description: "Approve the current stage and run the next stage automatically",
