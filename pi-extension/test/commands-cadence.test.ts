@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { registerCommands } from "../src/commands.js";
+import { registerCommands } from "../src/commands/index.js";
 import {
   loadCadenceState,
   record429,

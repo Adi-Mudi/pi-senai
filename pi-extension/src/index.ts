@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { registerAgentCommands, registerAgentGeneratorCommand, registerAgentsFilesCommands, registerArchitectCommand, registerArchitectInputsCommands, registerCommands, registerDiscussionCommands, registerDoctorCommand, registerDocsStructureCommand, registerFilesCommands } from "./commands.js";
+import { registerAgentCommands, registerAgentGeneratorCommand, registerAgentsFilesCommands, registerArchitectCommand, registerArchitectInputsCommands, registerCommands, registerDiscussionCommands, registerDoctorCommand, registerDocsStructureCommand, registerFilesCommands } from "./commands/index.js";
 import { migrateLegacyArchitectState } from "./architect.js";
 import { migrateLegacyOrchestraDirs } from "./io/migrate.js";
 import { registerArchitectTools } from "./architect/tools.js";

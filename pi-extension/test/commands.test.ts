@@ -22,7 +22,7 @@ import {
   isFolderLike,
   defaultArchitectSkill,
   listMissingStageArtifacts,
-} from "../src/commands.js";
+} from "../src/commands/index.js";
 import { loadState, startRun, advanceStage } from "../src/core/state.js";
 import type { SenaiState } from "../src/core/state.js";
 import type { Stage } from "../src/core/paths.js";

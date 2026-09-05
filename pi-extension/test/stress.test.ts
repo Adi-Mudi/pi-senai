@@ -16,7 +16,7 @@ import { defaultState, saveState } from "../src/core/state.js";
 import { runSenaiDiagnostic } from "../src/doctor/index.js";
 import { buildDocWritePlan, generateDocsStructure } from "../src/docs-factory/selection.js";
 import { DOC_TYPES, isDocStub, renderTemplateStub, type DocTypeId } from "../src/docs-factory/catalog.js";
-import { listMissingStageArtifacts } from "../src/commands.js";
+import { listMissingStageArtifacts } from "../src/commands/index.js";
 import { makeRunId } from "../src/core/paths.js";
 import { recordDiscussion } from "../src/core/mission-brief.js";
 import { saveArchitectProfile } from "../src/architect.js";

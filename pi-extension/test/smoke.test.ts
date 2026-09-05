@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { registerCommands } from "../src/commands.js";
+import { registerCommands } from "../src/commands/index.js";
 import { saveAgentConfig } from "../src/agents/config.js";
 import { saveFilesConfig } from "../src/agents/files-config.js";
 import { saveAgentsFilesConfig } from "../src/agents/agents-files-config.js";
