@@ -9,7 +9,7 @@ import {
   getUserAgentsDir,
   parseAgentFile,
   parseAgentFileFull,
-} from "../../src/agent-discovery.js";
+} from "../../src/agents/discovery.js";
 
 describe("agent-discovery", () => {
   function makeAgentFile(dir: string, name: string, frontmatter: string) {

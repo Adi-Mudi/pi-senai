@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { atomicWriteJson } from "./atomic-write.js";
+import { atomicWriteJson } from "./io/atomic-write.js";
 
 export const ARCHITECT_INPUTS_CONFIG_FILE = "architect-inputs.json";
 

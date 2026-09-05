@@ -5,20 +5,20 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { performance } from "node:perf_hooks";
-import { discoverProjectFiles, isExcluded } from "../src/files-discovery.js";
-import { discoverAgents, parseAgentFile } from "../src/agent-discovery.js";
-import { defaultState, loadState, saveState } from "../src/state.js";
-import { loadAgentConfig, saveAgentConfig } from "../src/agent-config.js";
+import { discoverProjectFiles, isExcluded } from "../src/agents/files-discovery.js";
+import { discoverAgents, parseAgentFile } from "../src/agents/discovery.js";
+import { defaultState, loadState, saveState } from "../src/core/state.js";
+import { loadAgentConfig, saveAgentConfig } from "../src/agents/config.js";
 import {
   loadFilesConfig,
   saveFilesConfig,
   type FilesConfig,
-} from "../src/files-config.js";
+} from "../src/agents/files-config.js";
 import {
   loadAgentsFilesConfig,
   saveAgentsFilesConfig,
   type AgentsFilesConfig,
-} from "../src/agents-files-config.js";
+} from "../src/agents/agents-files-config.js";
 import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
@@ -28,20 +28,20 @@ import {
   buildIngestBatches,
   mergeMapOutputs,
   type ArchitectMapOutput,
-} from "../src/document-ingest.js";
+} from "../src/docs-factory/ingest.js";
 import {
   findDriverGaps,
   mergeDrivers,
   normalizeDrivers,
   type ArchitecturalDrivers,
-} from "../src/driver-extractor.js";
+} from "../src/architect/drivers.js";
 import {
   GENERATED_ROLES,
   discoverTechnologyResources,
   matchTechnologies,
   planAgentGeneration,
   writeGeneratedAgents,
-} from "../src/agent-generator.js";
+} from "../src/agents/generator.js";
 import {
   addToGeneratedManifest,
   loadGeneratedManifest,
@@ -56,9 +56,9 @@ import {
   type DiagnosticReport,
   type DiagnosticSection,
   type DiagnosticStatus,
-} from "../src/doctor.js";
-import { buildSenaiCompactionSummary } from "../src/compaction.js";
-import { getStatePath } from "../src/constants.js";
+} from "../src/doctor/index.js";
+import { buildSenaiCompactionSummary } from "../src/core/compaction-summary.js";
+import { getStatePath } from "../src/core/paths.js";
 
 /**
  * Stress tests for every volume-exposed module: tree scanning, agent

@@ -5,7 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { spawn, type ChildProcess } from "node:child_process";
 import { fileURLToPath } from "node:url";
-import { lockInfo } from "../../src/lock.js";
+import { lockInfo } from "../../src/io/lock.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CHILD_PATH = path.join(HERE, "..", "helpers", "lock-child.js");

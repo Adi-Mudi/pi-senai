@@ -11,9 +11,9 @@ import {
   validateAgentConfig,
   validateMappedAgents,
   CONFIG_COMMENT,
-} from "../../src/agent-config.js";
-import type { AgentConfig } from "../../src/agent-config.js";
-import { DEFAULT_AGENTS } from "../../src/agent-suggestions.js";
+} from "../../src/agents/config.js";
+import type { AgentConfig } from "../../src/agents/config.js";
+import { DEFAULT_AGENTS } from "../../src/agents/suggestions.js";
 
 describe("agent-config", () => {
   it("getConfigPath returns .pi/senai/agents.json under cwd", () => {

@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { atomicWriteFile, atomicWriteJson, cleanupTempFiles } from "../../src/atomic-write.js";
+import { atomicWriteFile, atomicWriteJson, cleanupTempFiles } from "../../src/io/atomic-write.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-atomic-"));

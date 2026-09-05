@@ -16,7 +16,7 @@
 
 import * as path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import * as lock from "../../src/lock.js";
+import * as lock from "../../src/io/lock.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 // The compiled extension sits at dist/pi-extension/src/lock.js. This helper

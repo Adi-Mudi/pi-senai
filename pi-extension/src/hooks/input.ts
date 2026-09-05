@@ -1,6 +1,6 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { completionWarning } from "../completion-guard.js";
-import { isRateLimitError, record429 } from "../spawn-cadence.js";
+import { isRateLimitError, record429 } from "../implement/cadence.js";
 
 /**
  * Artifact-based completion guard: pi-interactive-subagents reports a

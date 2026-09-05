@@ -13,8 +13,8 @@ import {
   recordCleanRun,
   resetCadence,
   saveCadenceState,
-} from "../../src/spawn-cadence.js";
-import { getCadencePath } from "../../src/constants.js";
+} from "../../src/implement/cadence.js";
+import { getCadencePath } from "../../src/core/paths.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-cadence-"));

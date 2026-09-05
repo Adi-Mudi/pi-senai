@@ -4,8 +4,8 @@ import * as fs from "node:fs";
 import { RpcClient, isPiRpcPromptBug } from "./helpers/rpc-client.js";
 import { makeTestHome, shouldRunE2E, hasRealLlmKey, type TestHome } from "./helpers/test-home.js";
 import { makeMinimalProjectFiles, seedSenaiConfig } from "./helpers/fixtures.js";
-import { amendBullet, validateBriefSections } from "../../src/mission-brief.js";
-import { getPreRunMissionBriefPath } from "../../src/constants.js";
+import { amendBullet, validateBriefSections } from "../../src/core/mission-brief.js";
+import { getPreRunMissionBriefPath } from "../../src/core/paths.js";
 
 const SKIP_MESSAGE = "E2E tests require pi binary on PATH and RUN_E2E=1";
 

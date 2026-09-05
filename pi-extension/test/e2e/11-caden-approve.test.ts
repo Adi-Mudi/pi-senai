@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import { RpcClient, isPiRpcPromptBug } from "./helpers/rpc-client.js";
 import { makeTestHome, shouldRunE2E, hasRealLlmKey, type TestHome } from "./helpers/test-home.js";
 import { makeMinimalProjectFiles, seedSenaiConfig, writePlanArtifacts } from "./helpers/fixtures.js";
-import { getCadencePath } from "../../src/constants.js";
+import { getCadencePath } from "../../src/core/paths.js";
 
 const SKIP_NO_LLM = "this test drives /senai-plan which needs a real LLM API key";
 

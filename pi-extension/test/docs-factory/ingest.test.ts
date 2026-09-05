@@ -14,9 +14,9 @@ import {
   readMapOutputs,
   sanitizeDocumentPath,
   saveDocumentManifest,
-} from "../../src/document-ingest.js";
-import { getArchitectMapDir } from "../../src/constants.js";
-import type { ArchitectMapOutput } from "../../src/document-ingest.js";
+} from "../../src/docs-factory/ingest.js";
+import { getArchitectMapDir } from "../../src/core/paths.js";
+import type { ArchitectMapOutput } from "../../src/docs-factory/ingest.js";
 import type { ArchitectInputsConfig } from "../../src/architect-inputs-config.js";
 
 describe("document-ingest", () => {

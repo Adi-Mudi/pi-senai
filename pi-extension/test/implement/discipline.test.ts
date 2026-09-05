@@ -15,7 +15,7 @@ import {
     detectZeroAssertion,
     scanTestFiles,
     scanTestFilesOnDisk,
-} from "../../src/test-discipline.js";
+} from "../../src/implement/discipline.js";
 
 const F = "/fake/path";
 

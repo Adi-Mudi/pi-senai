@@ -12,12 +12,12 @@ import {
   slugifyStamp,
   BRIEF_DRAFT_MARKER,
   REQUIRED_BRIEF_SECTIONS,
-} from "../../src/mission-brief.js";
+} from "../../src/core/mission-brief.js";
 import {
   getPreRunMissionBriefPath,
   getRunMissionBriefPath,
   getRunDiscussionsDir,
-} from "../../src/constants.js";
+} from "../../src/core/paths.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-mb-"));

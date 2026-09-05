@@ -16,8 +16,8 @@ import {
   normalizeQualityAttributeItem,
   saveDrivers,
   validateDrivers,
-} from "../src/driver-extractor.js";
-import type { ArchitecturalDrivers } from "../src/driver-extractor.js";
+} from "../src/architect/drivers.js";
+import type { ArchitecturalDrivers } from "../src/architect/drivers.js";
 
 describe("driver-extractor", () => {
   it("getDriversPath returns correct path", () => {

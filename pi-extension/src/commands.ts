@@ -6,17 +6,17 @@ import {
   resolveAgentName,
   saveAgentConfig,
   validateMappedAgents,
-} from "./agent-config.js";
-import { discoverAgents } from "./agent-discovery.js";
+} from "./agents/config.js";
+import { discoverAgents } from "./agents/discovery.js";
 import {
   loadAgentsFilesConfig,
   saveAgentsFilesConfig,
   validateAgentsFilesConfig,
   type AgentsFilesConfig,
   type AgentFilesDocuments,
-} from "./agents-files-config.js";
-import { discoverProjectFiles, safeReadDir, isExcluded } from "./files-discovery.js";
-import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./files-config.js";
+} from "./agents/agents-files-config.js";
+import { discoverProjectFiles, safeReadDir, isExcluded } from "./agents/files-discovery.js";
+import { loadFilesConfig, saveFilesConfig, validateFilesConfig, type FilesConfig } from "./agents/files-config.js";
 import {
   DEFAULT_AGENTS,
   PICKER_ROLES,
@@ -25,15 +25,15 @@ import {
   ROLE_LABELS,
   type SenaiRole,
   buildSuggestionMap,
-} from "./agent-suggestions.js";
-import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./constants.js";
-import { collectImplementSignals, formatImplementSignals, signalsBlockAdvance } from "./implement-signals.js";
-import { roleDocumentNeed, suggestTruthDocuments } from "./document-suggestions.js";
+} from "./agents/suggestions.js";
+import { getArtifactPaths, STAGE_TRANSITIONS, type Stage } from "./core/paths.js";
+import { collectImplementSignals, formatImplementSignals, signalsBlockAdvance } from "./implement/signals.js";
+import { roleDocumentNeed, suggestTruthDocuments } from "./agents/document-suggestions.js";
 import {
   formatDiagnosticReport,
   runSenaiDiagnostic,
-} from "./doctor.js";
-import { generateDocsStructure } from "./doc-selection.js";
+} from "./doctor/index.js";
+import { generateDocsStructure } from "./docs-factory/selection.js";
 import { buildStagePrompt, loadSkill, resolveSkillPath } from "./prompt.js";
 import {
   runListEditor,
@@ -58,26 +58,26 @@ import {
   startRun,
   type DiscussionEvent,
   type SenaiState,
-} from "./state.js";
+} from "./core/state.js";
 import {
   getPreRunDiscussionDir,
   getPreRunMissionBriefPath,
   getRunDiscussionsDir,
   getRunMissionBriefPath,
-} from "./constants.js";
+} from "./core/paths.js";
 import { purgeCache as purgeCommunityCache } from "./scouts/community-research.js";
 import {
   finalizeMissionBrief,
   validateBriefSections,
-} from "./mission-brief.js";
-import { atomicWriteFile } from "./atomic-write.js";
-import { withRunLock, describeHolder, forceStealLock, lockInfo } from "./lock.js";
+} from "./core/mission-brief.js";
+import { atomicWriteFile } from "./io/atomic-write.js";
+import { withRunLock, describeHolder, forceStealLock, lockInfo } from "./io/lock.js";
 import {
   buildCadenceBlock,
   loadCadenceState,
   recordCleanRun,
   resetCadence,
-} from "./spawn-cadence.js";
+} from "./implement/cadence.js";
 import {
   createDefaultArchitectInputsConfig,
   getSelectedInputPaths,
@@ -86,7 +86,7 @@ import {
   type ArchitectDocumentType,
   type ArchitectInputsConfig,
 } from "./architect-inputs-config.js";
-import { loadDrivers } from "./driver-extractor.js";
+import { loadDrivers } from "./architect/drivers.js";
 import {
   areDriversStale,
   loadArchitectReport,
@@ -101,7 +101,7 @@ import {
   planAgentGeneration,
   previewRegeneration,
   writeGeneratedAgents,
-} from "./agent-generator.js";
+} from "./agents/generator.js";
 
 const NEXT_COMMAND: Record<string, string> = {
   planning: "/senai-approve",

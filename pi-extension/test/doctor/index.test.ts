@@ -3,18 +3,18 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { runSenaiDiagnostic, formatDiagnosticReport, significantWords, wordsOverlap, mandateTextForRole, documentSignalWords, compareVersions, type ResolvedAgent } from "../../src/doctor.js";
-import { saveAgentConfig } from "../../src/agent-config.js";
-import { saveFilesConfig } from "../../src/files-config.js";
-import { saveAgentsFilesConfig } from "../../src/agents-files-config.js";
+import { runSenaiDiagnostic, formatDiagnosticReport, significantWords, wordsOverlap, mandateTextForRole, documentSignalWords, compareVersions, type ResolvedAgent } from "../../src/doctor/index.js";
+import { saveAgentConfig } from "../../src/agents/config.js";
+import { saveFilesConfig } from "../../src/agents/files-config.js";
+import { saveAgentsFilesConfig } from "../../src/agents/agents-files-config.js";
 import { saveArchitectInputsConfig } from "../../src/architect-inputs-config.js";
 import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest } from "../../src/architect.js";
-import { getProjectSlug, GENERATOR_VERSION } from "../../src/agent-generator.js";
-import { createEmptyDrivers, saveDrivers } from "../../src/driver-extractor.js";
+import { getProjectSlug, GENERATOR_VERSION } from "../../src/agents/generator.js";
+import { createEmptyDrivers, saveDrivers } from "../../src/architect/drivers.js";
 import { getAgentDir } from "@mariozechner/pi-coding-agent";
-import { defaultState, saveState } from "../../src/state.js";
-import { generateDocsStructure } from "../../src/doc-selection.js";
-import { getLockDir, getLockPath } from "../../src/constants.js";
+import { defaultState, saveState } from "../../src/core/state.js";
+import { generateDocsStructure } from "../../src/docs-factory/selection.js";
+import { getLockDir, getLockPath } from "../../src/core/paths.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

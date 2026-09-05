@@ -10,8 +10,8 @@ import {
   SENAI_ROLES,
   SEQUENCE_ROLES,
   suggestAgentForRole,
-} from "../../src/agent-suggestions.js";
-import type { DiscoveredAgent } from "../../src/agent-discovery.js";
+} from "../../src/agents/suggestions.js";
+import type { DiscoveredAgent } from "../../src/agents/discovery.js";
 
 describe("agent-suggestions", () => {
   function agent(name: string, description = ""): DiscoveredAgent {

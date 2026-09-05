@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import { RpcClient, isPiRpcPromptBug } from "./helpers/rpc-client.js";
 import { makeTestHome, shouldRunE2E, shouldRunLLME2E, type TestHome } from "./helpers/test-home.js";
 import { makeMinimalProjectFiles, seedSenaiConfig, seedCadenceState } from "./helpers/fixtures.js";
-import { getCadencePath } from "../../src/constants.js";
+import { getCadencePath } from "../../src/core/paths.js";
 
 const SKIP_NO_LLM = "Tier 2 E2E requires RUN_LLM_E2E=1 plus a provider API key";
 

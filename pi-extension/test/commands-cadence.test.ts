@@ -9,8 +9,8 @@ import {
   record429,
   saveCadenceState,
   defaultCadenceState,
-} from "../src/spawn-cadence.js";
-import { getCadencePath } from "../src/constants.js";
+} from "../src/implement/cadence.js";
+import { getCadencePath } from "../src/core/paths.js";
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 
 describe("commands — cadence", () => {

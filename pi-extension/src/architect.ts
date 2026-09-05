@@ -4,11 +4,11 @@ import { createHash } from "node:crypto";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import type { ArchitectInputsConfig } from "./architect-inputs-config.js";
 import { getArchitectInputsConfigPath } from "./architect-inputs-config.js";
-import { getDriversPath, type ArchitecturalDrivers } from "./driver-extractor.js";
-import { getArchitectStateDir } from "./constants.js";
-import { loadAgentConfig, resolveAgentName, saveAgentConfig } from "./agent-config.js";
-import { DEFAULT_AGENTS, type SenaiRole } from "./agent-suggestions.js";
-import { atomicWriteFile, atomicWriteJson } from "./atomic-write.js";
+import { getDriversPath, type ArchitecturalDrivers } from "./architect/drivers.js";
+import { getArchitectStateDir } from "./core/paths.js";
+import { loadAgentConfig, resolveAgentName, saveAgentConfig } from "./agents/config.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "./agents/suggestions.js";
+import { atomicWriteFile, atomicWriteJson } from "./io/atomic-write.js";
 
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
 export const ARCHITECT_REPORT_FILE = "architect-report.json";

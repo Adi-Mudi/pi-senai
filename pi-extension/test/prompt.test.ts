@@ -5,10 +5,10 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadSkill, buildStagePrompt, resolveSkillPath, substituteArtifactPaths } from "../src/prompt.js";
-import { saveAgentConfig } from "../src/agent-config.js";
-import { saveFilesConfig } from "../src/files-config.js";
-import { saveAgentsFilesConfig } from "../src/agents-files-config.js";
-import type { SenaiState } from "../src/state.js";
+import { saveAgentConfig } from "../src/agents/config.js";
+import { saveFilesConfig } from "../src/agents/files-config.js";
+import { saveAgentsFilesConfig } from "../src/agents/agents-files-config.js";
+import type { SenaiState } from "../src/core/state.js";
 
 describe("prompt", () => {
   const cwd = "/fake/project";

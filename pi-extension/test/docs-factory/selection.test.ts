@@ -3,8 +3,8 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildDocSelectionBlock, buildDocWritePlan, generateDocsStructure, MAX_BATCH, selectDocumentWriters } from "../../src/doc-selection.js";
-import { DOC_TYPES } from "../../src/doc-catalog.js";
+import { buildDocSelectionBlock, buildDocWritePlan, generateDocsStructure, MAX_BATCH, selectDocumentWriters } from "../../src/docs-factory/selection.js";
+import { DOC_TYPES } from "../../src/docs-factory/catalog.js";
 import { saveArchitectProfile } from "../../src/architect.js";
 
 function makeTmp(): string {

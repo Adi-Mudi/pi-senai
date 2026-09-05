@@ -13,7 +13,7 @@ import {
   formatStageStatus,
   getArchitectStateDir,
   getArchitectMapDir,
-} from "../src/constants.js";
+} from "../src/core/paths.js";
 
 describe("constants", () => {
   const cwd = "/fake/project";

@@ -10,15 +10,15 @@ import {
   recordSpawnArtifacts,
   resetCompletionGuard,
 } from "../src/completion-guard.js";
-import { saveAgentConfig } from "../src/agent-config.js";
-import { SENAI_ROLES, DEFAULT_AGENTS } from "../src/agent-suggestions.js";
-import { defaultState, saveState } from "../src/state.js";
-import { runSenaiDiagnostic } from "../src/doctor.js";
-import { buildDocWritePlan, generateDocsStructure } from "../src/doc-selection.js";
-import { DOC_TYPES, isDocStub, renderTemplateStub, type DocTypeId } from "../src/doc-catalog.js";
+import { saveAgentConfig } from "../src/agents/config.js";
+import { SENAI_ROLES, DEFAULT_AGENTS } from "../src/agents/suggestions.js";
+import { defaultState, saveState } from "../src/core/state.js";
+import { runSenaiDiagnostic } from "../src/doctor/index.js";
+import { buildDocWritePlan, generateDocsStructure } from "../src/docs-factory/selection.js";
+import { DOC_TYPES, isDocStub, renderTemplateStub, type DocTypeId } from "../src/docs-factory/catalog.js";
 import { listMissingStageArtifacts } from "../src/commands.js";
-import { makeRunId } from "../src/constants.js";
-import { recordDiscussion } from "../src/mission-brief.js";
+import { makeRunId } from "../src/core/paths.js";
+import { recordDiscussion } from "../src/core/mission-brief.js";
 import { saveArchitectProfile } from "../src/architect.js";
 import { createHash } from "node:crypto";
 

@@ -13,7 +13,7 @@ import {
   D_FLOOR_CLEAN,
   PROMOTE_AFTER_CLEAN,
   loadCadenceState,
-} from "../spawn-cadence.js";
+} from "../implement/cadence.js";
 import { loadAgentConfig, resolveAgentName, type AgentConfig } from "../agents/config.js";
 import { loadFilesConfig, type FilesConfig } from "../agents/files-config.js";
 import { loadAgentsFilesConfig, type AgentsFilesConfig } from "../agents/agents-files-config.js";
@@ -50,8 +50,8 @@ import {
   getProjectTechnologiesDir,
   parseKeywords,
 } from "../agents/generator.js";
-import { DOC_TYPES, isDocStub, type DocTypeId } from "../doc-catalog.js";
-import { validateBriefSections } from "../mission-brief.js";
+import { DOC_TYPES, isDocStub, type DocTypeId } from "../docs-factory/catalog.js";
+import { validateBriefSections } from "../core/mission-brief.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 

@@ -9,7 +9,7 @@ import {
   recordSpawnArtifacts,
   resetCompletionGuard,
 } from "../src/completion-guard.js";
-import { defaultState, saveState } from "../src/state.js";
+import { defaultState, saveState } from "../src/core/state.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "completion-guard-"));

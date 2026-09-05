@@ -6,7 +6,7 @@ import {
     parseVerificationSteps,
     signalsBlockAdvance,
     type ImplementSignals,
-} from "../../src/implement-signals.js";
+} from "../../src/implement/signals.js";
 
 describe("parseVerificationSteps", () => {
     it("extracts numbered steps from a plan's ## Verification section", () => {

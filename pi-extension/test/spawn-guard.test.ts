@@ -4,8 +4,8 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { guardSpawnCall } from "../src/spawn-guard.js";
-import { saveAgentConfig } from "../src/agent-config.js";
-import { defaultState, saveState } from "../src/state.js";
+import { saveAgentConfig } from "../src/agents/config.js";
+import { defaultState, saveState } from "../src/core/state.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "spawn-guard-"));

@@ -40,36 +40,82 @@ npm test
 
 ## Project structure
 
+The extension source lives in `pi-extension/src/` organized as **layered folders** that mirror Pi's own `packages/ai → agent-core → coding-agent` model. The flat layout of the early codebase was replaced by a folder structure in the `architecture-upgrade` branch.
+
 ```text
-.
-├── package.json
-├── tsconfig.json
-├── README.md
-├── CHANGELOG.md
-├── AGENTS.md            # this file
-├── .gitignore
-├── pi-extension/src/    # extension source
-│   ├── index.ts         # entry point: register commands, hooks, guards, tools
-│   ├── commands.ts      # slash command handlers
-│   ├── architect-tools.ts # deterministic tools for the architecture factory
-│   ├── state.ts         # read/write .IDE_Plans/pi-senai/state.json
-│   ├── prompt.ts        # load stage skills and build prompts
-│   ├── constants.ts     # paths, stage enum, transitions, helpers
-│   ├── agent-discovery.ts   # discover project/user/built-in agents
-│   ├── agent-suggestions.ts # suggest agents per Senai role
-│   ├── agent-config.ts           # load/save/validate .pi/senai/agents.json
-│   ├── agent-registry.ts         # build agent registry prompt block
-│   ├── agent-generator.ts        # deterministic sub-agent generator (/senai-generate-sub-agents)
-│   ├── files-config.ts           # load/save/validate .pi/senai/files.json
-│   ├── agents-files-config.ts    # load/save/validate .pi/senai/agents_files.json
-│   ├── compaction.ts             # deterministic compaction summary for active runs
-│   ├── completion-guard.ts       # artifact-based subagent completion/stall guard
-│   ├── atomic-write.ts           # temp-file + fsync + atomic rename helper (every writer goes through this)
-│   ├── lock.ts                   # project-wide run lock: withRunLock, lockInfo, forceStealLock, heartbeat
-│   ├── doc-catalog.ts            # doc-type catalog: fixed templates + length caps (single source of truth)
-│   ├── doc-selection.ts          # deterministic Document stage writer selection + batched write plan
-│   └── mission-brief.ts          # /senai-discussion helpers: draft marker, monotonic sequence, amendment cross-out, section validation
-├── pi-extension/test/   # unit tests
+pi-extension/src/
+├── index.ts                  # entry point: wiring only (~50 lines)
+├── prompt.ts                 # stage prompt builder (single concern)
+│
+├── core/                     # DOMAIN layer
+│   ├── paths.ts              # paths, stage enum, transitions (was constants.ts)
+│   ├── state.ts              # state.json read/write
+│   ├── mission-brief.ts      # /senai-discussion helpers
+│   └── compaction-summary.ts # session_before_compact payload
+│
+├── io/                       # I/O layer
+│   ├── atomic-write.ts       # temp-file + fsync + atomic rename
+│   ├── lock.ts               # project-wide run lock
+│   └── migrate.ts            # legacy state migration
+│
+├── hooks/                    # Pi lifecycle event handlers (one per hook)
+│   ├── session-start.ts
+│   ├── session-before-compact.ts
+│   ├── tool-call.ts
+│   ├── input.ts
+│   ├── before-agent-start.ts
+│   └── index.ts              # composer
+│
+├── agents/                   # Sub-agent management
+│   ├── discovery.ts          # discover project/user/built-in agents
+│   ├── registry.ts           # build agent registry prompt block
+│   ├── suggestions.ts        # role→agent suggestion map
+│   ├── config.ts             # .pi/senai/agents.json load/save
+│   ├── generator.ts          # /senai-generate-sub-agents
+│   ├── agents-files-config.ts # .pi/senai/agents_files.json
+│   ├── files-config.ts       # .pi/senai/files.json
+│   ├── files-discovery.ts    # project deep scan
+│   └── document-suggestions.ts
+│
+├── architect/                # Architecture factory
+│   ├── index.ts              # composer
+│   ├── tools.ts              # deterministic LLM-callable tools
+│   ├── drivers.ts            # driver merging (was driver-extractor.ts)
+│   └── inputs-config.ts      # .pi/senai/architect-inputs.json
+│
+├── doctor/                   # Diagnostic
+│   └── index.ts              # (was doctor.ts — 2794 lines; split deferred)
+│
+├── docs-factory/             # Document factory
+│   ├── catalog.ts            # doc templates + length caps
+│   ├── selection.ts          # writer selection per project
+│   └── ingest.ts             # document ingestion helpers
+│
+├── implement/                # Implement stage
+│   ├── signals.ts            # collect + format
+│   ├── discipline.ts         # test anti-pattern scanner
+│   ├── discipline-tool.ts    # scanner tool wrapper
+│   └── cadence.ts            # adaptive spawn cadence
+│
+├── ui/                       # UI widgets
+│   ├── list-editor.ts
+│   ├── role-picker.ts
+│   └── simple-picker.ts
+│
+├── scouts/                   # Scout modules
+│   └── community-research.ts
+│
+└── commands.ts               # slash command handlers (2365 lines; split deferred — see plan)
+```
+
+**Test layout mirrors src/:** `test/core/`, `test/io/`, `test/agents/`, `test/architect/`, `test/doctor/`, `test/docs-factory/`, `test/implement/`, `test/ui/`. E2E tests live in `test/e2e/`.
+
+**Known follow-up (deferred):** `commands.ts` (2365 lines) and `architect.ts` (1150 lines) were left as single files because their cross-cutting dependencies make one-shot splitting unsafe (Phase 3 of the upgrade was abandoned after two failed attempts). Future work should split them incrementally, one function per commit, using the same `core/`, `io/`, `agents/` etc. layered pattern.
+
+Other top-level files and folders (unchanged):
+
+```text
+├── pi-extension/test/   # unit + E2E tests (mirrors src/)
 ├── skills/              # stage skill markdown files
 │   ├── senai-plan.md
 │   ├── senai-implement.md

@@ -10,8 +10,8 @@ import {
   isDocStub,
   renderTemplateStub,
   type DocTypeId,
-} from "../../src/doc-catalog.js";
-import { generateDocsStructure } from "../../src/doc-selection.js";
+} from "../../src/docs-factory/catalog.js";
+import { generateDocsStructure } from "../../src/docs-factory/selection.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "doc-catalog-"));

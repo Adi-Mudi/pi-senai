@@ -4,11 +4,11 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
-import { registerArchitectTools } from "../../src/architect-tools.js";
+import { registerArchitectTools } from "../../src/architect/tools.js";
 import { saveArchitectProfile, saveArchitectReport, writeGeneratedManifest, addToGeneratedManifest, loadGeneratedManifest } from "../../src/architect.js";
 import { saveArchitectInputsConfig } from "../../src/architect-inputs-config.js";
-import { createEmptyDrivers } from "../../src/driver-extractor.js";
-import { getArchitectMapDir } from "../../src/constants.js";
+import { createEmptyDrivers } from "../../src/architect/drivers.js";
+import { getArchitectMapDir } from "../../src/core/paths.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

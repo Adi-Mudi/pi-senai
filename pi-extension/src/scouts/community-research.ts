@@ -20,12 +20,12 @@
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { atomicWriteJson } from "../atomic-write.js";
+import { atomicWriteJson } from "../io/atomic-write.js";
 import {
   COMMUNITY_RESEARCH_CACHE_CAP,
   getCommunityResearchCacheDir,
   getCommunityResearchCachePath,
-} from "../constants.js";
+} from "../core/paths.js";
 
 // ---------------------------------------------------------------------------
 // Public type surface

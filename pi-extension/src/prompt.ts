@@ -1,20 +1,20 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadAgentConfig } from "./agent-config.js";
-import { buildAgentRegistryBlock } from "./agent-registry.js";
-import { SENAI_ROLES, ROLE_LABELS } from "./agent-suggestions.js";
+import { loadAgentConfig } from "./agents/config.js";
+import { buildAgentRegistryBlock } from "./agents/registry.js";
+import { SENAI_ROLES, ROLE_LABELS } from "./agents/suggestions.js";
 import {
   loadAgentsFilesConfig,
   type AgentsFilesConfig,
   type AgentFilesDocuments,
-} from "./agents-files-config.js";
-import { loadFilesConfig, type FilesConfig } from "./files-config.js";
-import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
-import { buildDocSelectionBlock } from "./doc-selection.js";
-import { atomicWriteFile } from "./atomic-write.js";
-import { buildCadenceBlock, loadCadenceState } from "./spawn-cadence.js";
-import type { SenaiState } from "./state.js";
+} from "./agents/agents-files-config.js";
+import { loadFilesConfig, type FilesConfig } from "./agents/files-config.js";
+import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./core/paths.js";
+import { buildDocSelectionBlock } from "./docs-factory/selection.js";
+import { atomicWriteFile } from "./io/atomic-write.js";
+import { buildCadenceBlock, loadCadenceState } from "./implement/cadence.js";
+import type { SenaiState } from "./core/state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 

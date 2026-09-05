@@ -9,7 +9,7 @@ import {
   slugify,
   type ArchitectReport,
 } from "../architect.js";
-import { getDocType, type DocTypeId } from "../doc-catalog.js";
+import { getDocType, type DocTypeId } from "../docs-factory/catalog.js";
 import { atomicWriteFile } from "../io/atomic-write.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));

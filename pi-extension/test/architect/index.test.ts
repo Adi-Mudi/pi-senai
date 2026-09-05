@@ -26,11 +26,11 @@ import {
   slugify,
   writeGeneratedManifest,
 } from "../../src/architect.js";
-import { saveAgentConfig } from "../../src/agent-config.js";
+import { saveAgentConfig } from "../../src/agents/config.js";
 import type { ArchitectProfile, ArchitectReport, ArchitectureLibraryEntry } from "../../src/architect.js";
 import { saveArchitectInputsConfig } from "../../src/architect-inputs-config.js";
 import type { ArchitectInputsConfig } from "../../src/architect-inputs-config.js";
-import { createEmptyDrivers } from "../../src/driver-extractor.js";
+import { createEmptyDrivers } from "../../src/architect/drivers.js";
 
 describe("architect", () => {
   it("slugify converts text to slug", () => {

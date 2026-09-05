@@ -3,7 +3,7 @@ import assert from "node:assert";
 import { RpcClient } from "./helpers/rpc-client.js";
 import { makeTestHome, shouldRunE2E, distModuleUrl, type TestHome } from "./helpers/test-home.js";
 import { makeMinimalProjectFiles, seedSenaiConfig, seedCadenceState } from "./helpers/fixtures.js";
-import { D_FLOOR_CLEAN } from "../../src/spawn-cadence.js";
+import { D_FLOOR_CLEAN } from "../../src/implement/cadence.js";
 
 const SKIP_MESSAGE = "E2E tests require pi binary on PATH and RUN_E2E=1";
 

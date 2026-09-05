@@ -63,7 +63,7 @@ describe("e2e/24-community-research", () => {
 	});
 
 	it("LockMode union includes discussion-research (pure unit)", async () => {
-		const mod = await import("../../src/lock.js");
+		const mod = await import("../../src/io/lock.js");
 		// We don't actually acquire — we just confirm the function accepts the new mode.
 		// Use a free cwd by pointing at a fresh tmpdir with no lock.
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "lock-e2e-"));
@@ -106,7 +106,7 @@ describe("e2e/24-community-research", () => {
 	});
 
 	it("doctor report includes the Community research cache section (pure unit)", async (t) => {
-		const mod = await import("../../src/doctor.js");
+		const mod = await import("../../src/doctor/index.js");
 		const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "doctor-e2e-"));
 		try {
 			// Doctor may need other config; we just confirm the section is wired without error.

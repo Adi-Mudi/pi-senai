@@ -3,8 +3,8 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { buildSenaiCompactionSummary } from "../../src/compaction.js";
-import { startRun, advanceStage } from "../../src/state.js";
+import { buildSenaiCompactionSummary } from "../../src/core/compaction-summary.js";
+import { startRun, advanceStage } from "../../src/core/state.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

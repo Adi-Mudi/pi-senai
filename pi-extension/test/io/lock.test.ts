@@ -11,8 +11,8 @@ import {
   withRunLock,
   describeHolder,
   type AcquireOptions,
-} from "../../src/lock.js";
-import { getLockDir, getLockPath } from "../../src/constants.js";
+} from "../../src/io/lock.js";
+import { getLockDir, getLockPath } from "../../src/core/paths.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-lock-"));

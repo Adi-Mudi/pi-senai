@@ -323,3 +323,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Unit tests covering constants, state, prompt, commands, and index modules.
 - TypeScript build setup with `npm run build` and `npm test`.
 - Documentation: README, CHANGELOG, and step-by-step guide.
+
+### Changed (architecture upgrade)
+
+- **Internal:** `pi-extension/src/` reorganized into a layered folder structure matching Pi's own `packages/ai → agent-core → coding-agent` model. No public API change; 25 slash commands unchanged; all artifact paths and config schemas unchanged.
+- `core/` — domain layer (paths, state, mission-brief, compaction-summary)
+- `io/` — I/O helpers (atomic-write, lock, migrate)
+- `hooks/` — one file per Pi lifecycle hook (session-start, session-before-compact, tool-call, input, before-agent-start)
+- `agents/` — sub-agent management (discovery, config, generator, files-config, etc.)
+- `architect/` — architecture factory (tools, drivers, inputs-config)
+- `doctor/` — diagnostic (kept monolithic for now; incremental split is future work)
+- `docs-factory/` — document factory (catalog, selection, ingest)
+- `implement/` — implement stage (signals, discipline, cadence)
+- Tests reorganized under `test/` to mirror `src/`. 2342/2342 tests pass.
+- `commands.ts` (2365 lines) and `architect.ts` (1150 lines) deliberately left as single files; their cross-cutting dependencies make one-shot splitting unsafe (see `.IDE_Plans/architecture_refactor_plan_20260905_1052_v1.0.md`).

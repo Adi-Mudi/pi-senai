@@ -3,7 +3,7 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { discoverProjectFiles, formatSuggestion, isExcluded, looksLikeTestPath, safeReadDir } from "../../src/files-discovery.js";
+import { discoverProjectFiles, formatSuggestion, isExcluded, looksLikeTestPath, safeReadDir } from "../../src/agents/files-discovery.js";
 
 describe("files-discovery", () => {
   it("discovers standard code and document folders", () => {

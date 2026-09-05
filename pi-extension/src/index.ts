@@ -1,9 +1,9 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { registerAgentCommands, registerAgentGeneratorCommand, registerAgentsFilesCommands, registerArchitectCommand, registerArchitectInputsCommands, registerCommands, registerDiscussionCommands, registerDoctorCommand, registerDocsStructureCommand, registerFilesCommands } from "./commands.js";
 import { migrateLegacyArchitectState } from "./architect.js";
-import { migrateLegacyOrchestraDirs } from "./migrate.js";
-import { registerArchitectTools } from "./architect-tools.js";
-import { registerTestDisciplineTools } from "./test-discipline-tool.js";
+import { migrateLegacyOrchestraDirs } from "./io/migrate.js";
+import { registerArchitectTools } from "./architect/tools.js";
+import { registerTestDisciplineTools } from "./implement/discipline-tool.js";
 import { registerBeforeAgentStartHook, registerInputHook, registerSessionBeforeCompactHook, registerSessionStartHook, registerToolCallHook } from "./hooks/index.js";
 
 export default function piSenaiExtension(pi: ExtensionAPI) {

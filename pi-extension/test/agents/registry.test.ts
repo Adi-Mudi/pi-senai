@@ -1,8 +1,8 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { buildAgentRegistryBlock } from "../../src/agent-registry.js";
-import { SENAI_ROLES, DEFAULT_AGENTS } from "../../src/agent-suggestions.js";
-import type { AgentConfig } from "../../src/agent-config.js";
+import { buildAgentRegistryBlock } from "../../src/agents/registry.js";
+import { SENAI_ROLES, DEFAULT_AGENTS } from "../../src/agents/suggestions.js";
+import type { AgentConfig } from "../../src/agents/config.js";
 
 describe("agent-registry", () => {
   it("includes all senai roles", () => {
