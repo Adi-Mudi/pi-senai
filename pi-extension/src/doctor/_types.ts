@@ -75,6 +75,7 @@ export const KNOWN_TOOL_NAMES: Set<string> = new Set([
 	"read", "write", "edit", "bash", "grep", "find", "ls",
 	"askuserquestion", "intercom", "subagent",
 	"taskcreate", "taskexecute", "taskget", "tasklist", "taskoutput", "taskstop", "taskupdate",
+	"websearch", "fetchurl",
 ]);
 
 export const VALID_THINKING_LEVELS: Set<string> = new Set([

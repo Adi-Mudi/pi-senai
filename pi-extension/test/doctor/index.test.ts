@@ -15,6 +15,7 @@ import { getAgentDir } from "@mariozechner/pi-coding-agent";
 import { defaultState, saveState } from "../../src/core/state.js";
 import { generateDocsStructure } from "../../src/docs-factory/selection.js";
 import { getLockDir, getLockPath } from "../../src/core/paths.js";
+import { isKnownToolName } from "../../src/doctor/_helpers.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
@@ -4525,5 +4526,21 @@ describe("doctor testing discipline section", () => {
     assert.strictEqual(completenessItem!.status, "ok");
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("isKnownToolName accepts web tools (generator v7 discussion role)", () => {
+    // Both CamelCase and lowercase forms must be recognized because
+    // isKnownToolName() lowercases on lookup.
+    assert.ok(isKnownToolName("WebSearch"), "WebSearch must be a known tool name");
+    assert.ok(isKnownToolName("FetchURL"), "FetchURL must be a known tool name");
+    assert.ok(isKnownToolName("websearch"), "lowercase websearch must match");
+    assert.ok(isKnownToolName("fetchurl"), "lowercase fetchurl must match");
+    // Existing built-ins still recognized.
+    assert.ok(isKnownToolName("read"));
+    assert.ok(isKnownToolName("bash"));
+    // Random tool names still rejected.
+    assert.ok(!isKnownToolName("nonsense-tool"));
+    // Extension-prefixed names still pass.
+    assert.ok(isKnownToolName("ext:my-tool"));
   });
 });
