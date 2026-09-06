@@ -12,12 +12,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/pi-senai/pi-senai.git"
+    "url": "git+https://github.com/Adi-Mudi/pi-senai.git"
   },
   "bugs": {
-    "url": "https://github.com/pi-senai/pi-senai/issues"
+    "url": "https://github.com/Adi-Mudi/pi-senai/issues"
   },
-  "homepage": "https://github.com/pi-senai/pi-senai#readme",
+  "homepage": "https://github.com/Adi-Mudi/pi-senai#readme",
   "files": [
     "dist/pi-extension/src",
     "dist/index.js",
