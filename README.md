@@ -6,29 +6,15 @@ Stage-gated agent orchestration extension for Pi — **Plan → Implement → Do
 >
 > **Why "Senai"?** Senai (சேனை) is a Tamil word meaning "army," "troop," or "crowd." It describes a disciplined force where every member has a role, follows orders, and advances only when commanded. That matches how Senai works: agents are assigned roles, follow stage-gated slash commands, and obey system-prompt injections and approval gates before moving forward. "Orchestra" is a common English word with no built-in sense of command or discipline, so Senai gives the project a clearer identity.
 
-## Install
-
-Install via Pi's official package loader:
+## Quick install
 
 ```bash
 pi install npm:pi-senai
 ```
 
-For project-local install (committed to your repo's `.pi/settings.json` so the team shares it):
+Then open Pi in any directory and run `/senai-doctor` to verify.
 
-```bash
-pi install -l npm:pi-senai
-```
-
-For development from a local clone (no copy, added as a reference):
-
-```bash
-pi install /path/to/pi-senai
-```
-
-Then open Pi in any directory — the extension auto-loads and registers all `/senai-*` commands.
-
-> Note: the extension and all its slash commands are branded as **Senai** (`/senai-*`). Pi loads it automatically from `package.json`.
+For all install paths (global, project-local, dev), upgrade/uninstall, troubleshooting, and maintainer publishing instructions, see **[INSTALL.md](./INSTALL.md)**.
 
 ## Project layout
 
