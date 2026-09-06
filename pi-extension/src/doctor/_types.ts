@@ -1,5 +1,9 @@
 import type { AgentFrontmatter } from "../agents/discovery.js";
 import { DEFAULT_AGENTS } from "../agents/suggestions.js";
+
+// Re-export so doctor checks can compare against the canonical default
+// without re-importing from suggestions.ts in every file.
+export { DEFAULT_AGENTS };
 import { GENERATED_ROLES } from "../agents/generator.js";
 import { type SenaiRole } from "../agents/suggestions.js";
 
@@ -50,6 +54,18 @@ export const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
 // Currently empty: linter and full-test write report artifacts since
 // generator v3. Keep the mechanism for future read-only roles.
 export const READONLY_ROLES: SenaiRole[] = [];
+
+// Strict web-tool lock. Only the discussion role is allowed to carry
+// WebSearch + FetchURL. Used by /senai-discussion and the plan-stage
+// consolidation. Any other role with web tools is an ERROR — having two
+// agents reach the web confuses the orchestra about who is responsible for
+// external knowledge. The lock is enforced by `checkWebToolLock` below.
+//
+// Tool names are stored lowercase to match the `KNOWN_TOOL_NAMES` convention
+// (see `isKnownToolName()` in _helpers.ts which lowercases on lookup).
+export const WEB_TOOLS: ReadonlySet<string> = new Set(["websearch", "fetchurl"]);
+
+export const WEB_TOOL_ALLOWED_ROLES: ReadonlySet<SenaiRole> = new Set(["discussion"]);
 
 export const CONFLICTING_READONLY_PATTERNS: Array<{ pattern: RegExp; reason: string }> = [
 	{ pattern: /fix only/i, reason: "Agent mandate is 'fix only'" },

@@ -61,6 +61,7 @@ export {
 	checkAgentCapabilities,
 	checkAgentSkillReferences,
 	checkAgentFileIntegrity,
+	checkWebToolLock,
 } from "./checks-agents.js";
 
 export {
@@ -136,6 +137,7 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
 	const resolvedAgents = ChecksAgents.resolveAllAgents(cwd, agentConfig);
 	sections.push(ChecksAgents.checkAgentMappings(resolvedAgents));
 	sections.push(ChecksAgents.checkAgentCapabilities(resolvedAgents));
+	sections.push(ChecksAgents.checkWebToolLock(resolvedAgents));
 	sections.push(ChecksDocs.checkTestingDiscipline(cwd, filesConfig));
 	sections.push(ChecksRunState.checkRunArtifacts(cwd));
 

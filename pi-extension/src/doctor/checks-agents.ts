@@ -9,7 +9,6 @@ import {
 	type AgentFrontmatter,
 } from "../agents/discovery.js";
 import {
-	DEFAULT_AGENTS,
 	ROLE_LABELS,
 	SENAI_ROLES,
 	type SenaiRole,
@@ -18,9 +17,12 @@ import {
 import {
 	BUILTIN_AGENT_NAMES,
 	CONFLICTING_READONLY_PATTERNS,
+	DEFAULT_AGENTS,
 	READONLY_ROLES,
 	ROLE_REQUIRED_TOOLS,
 	VALID_THINKING_LEVELS,
+	WEB_TOOLS,
+	WEB_TOOL_ALLOWED_ROLES,
 	type DiagnosticItem,
 	type DiagnosticSection,
 	type DiagnosticStatus,
@@ -363,4 +365,83 @@ export function checkAgentFileIntegrity(
 	}
 
 	return { title: "Agent file integrity", items };
+}
+
+/**
+ * Strict web-tool lock: ONLY the `discussion` role may carry WebSearch or
+ * FetchURL. Any other role carrying these tools is an ERROR — having two
+ * web-capable agents confuses the orchestra about who owns external research.
+ *
+ * Missing web tools on the discussion role is also an ERROR (post-generator
+ * v7) — without them, /senai-discussion cannot do real web research.
+ *
+ * Architecture-bound roles (scout-1, planner, three reviewers, implementer,
+ * code-review) are skipped here because they are owned by the architecture
+ * factory and not by /senai-generate-sub-agents.
+ */
+export function checkWebToolLock(resolved: Record<SenaiRole, ResolvedAgent>): DiagnosticSection {
+	const items: DiagnosticItem[] = [];
+
+	// Roles that should NOT have web tools but do (LOCK VIOLATION — error).
+	const violators: Array<{ role: SenaiRole; tools: string[] }> = [];
+	// Roles that should have web tools but don't (post-v7 only — error).
+	const missing: Array<SenaiRole> = [];
+
+	for (const role of SENAI_ROLES) {
+		const agent = resolved[role];
+		if (!agent.frontmatter || !agent.frontmatter.tools) continue;
+
+		// Skip built-ins and default mappings (same rationale as
+		// checkAgentCapabilities): the project hasn't customized its
+		// sub-agents for this role, so the lock doesn't apply yet.
+		const isDefaultMapping = agent.name === DEFAULT_AGENTS[role];
+		if (agent.source === "not found" || agent.source === "builtin" || isDefaultMapping) continue;
+
+		const tools = agent.frontmatter.tools;
+		const hasWebTool = tools.some((t) => WEB_TOOLS.has(t.toLowerCase()));
+		const isAllowed = WEB_TOOL_ALLOWED_ROLES.has(role);
+
+		if (hasWebTool && !isAllowed) {
+			violators.push({ role, tools: tools.filter((t) => WEB_TOOLS.has(t.toLowerCase())) });
+		} else if (!hasWebTool && isAllowed) {
+			missing.push(role);
+		}
+	}
+
+	if (violators.length > 0) {
+		items.push({
+			status: "error",
+			message: `Web tool lock VIOLATED — ${violators.length} non-discussion role(s) carry web tools`,
+			details: [
+				`Only the "discussion" role may carry WebSearch / FetchURL.`,
+				`Roles with web tools that must NOT have them:`,
+				...violators.map(
+					(v) => `  - ${v.role}: ${v.tools.join(", ")} (remove from frontmatter)`,
+				),
+				`If the role genuinely needs web access, change WEB_TOOL_ALLOWED_ROLES in doctor/_types.ts.`,
+			],
+		});
+	}
+
+	if (missing.length > 0) {
+		items.push({
+			status: "error",
+			message: `Web tool lock VIOLATED — ${missing.length} allowed role(s) lack web tools`,
+			details: [
+				`These roles are in WEB_TOOL_ALLOWED_ROLES but have no WebSearch / FetchURL in their tools:`,
+				...missing.map((r) => `  - ${r}: regenerate via /senai-generate-sub-agents`),
+				`The discussion sub-agent cannot do real web research without these tools.`,
+			],
+		});
+	}
+
+	if (violators.length === 0 && missing.length === 0) {
+		const allowed = SENAI_ROLES.filter((r) => WEB_TOOL_ALLOWED_ROLES.has(r));
+		items.push({
+			status: "ok",
+			message: `Web tool lock intact — only [${allowed.join(", ")}] carry WebSearch / FetchURL`,
+		});
+	}
+
+	return { title: "Web tool lock (strict — one sub-agent only)", items };
 }
