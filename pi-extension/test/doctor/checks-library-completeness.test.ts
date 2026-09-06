@@ -54,4 +54,53 @@ describe("checkLibraryCompleteness", () => {
 		assert.ok(section.items.some((i) => i.status === "warning" && i.message.includes("malformed") || i.message.includes("frontmatter")));
 		fs.rmSync(tmp, { recursive: true, force: true });
 	});
+
+	it("suggests /senai-suggest-architect for Pi extension projects without architect-inputs.json", () => {
+		const tmp = makeProject();
+		fs.writeFileSync(
+			path.join(tmp, "package.json"),
+			JSON.stringify({
+				name: "@scope/test-pi-ext",
+				version: "1.0.0",
+				keywords: ["pi-package"],
+				peerDependencies: { "@mariozechner/pi-coding-agent": "*" },
+			}),
+		);
+		const libDir = path.join(tmp, ".pi", "architecture-library");
+		fs.mkdirSync(libDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(libDir, "test.md"),
+			"---\nname: test\ndomain: web\n---\n# Test",
+		);
+		const section = checkLibraryCompleteness(tmp);
+		const suggestHint = section.items.find(
+			(i) => i.status === "info" && i.message.includes("/senai-suggest-architect"),
+		);
+		assert.ok(suggestHint, "expected suggest hint for Pi extension project");
+		fs.rmSync(tmp, { recursive: true, force: true });
+	});
+
+	it("does NOT suggest /senai-suggest-architect for non-Pi projects", () => {
+		const tmp = makeProject();
+		fs.writeFileSync(
+			path.join(tmp, "package.json"),
+			JSON.stringify({
+				name: "generic-webapp",
+				version: "1.0.0",
+				keywords: ["react"],
+			}),
+		);
+		const libDir = path.join(tmp, ".pi", "architecture-library");
+		fs.mkdirSync(libDir, { recursive: true });
+		fs.writeFileSync(
+			path.join(libDir, "test.md"),
+			"---\nname: test\ndomain: web\n---\n# Test",
+		);
+		const section = checkLibraryCompleteness(tmp);
+		const suggestHint = section.items.find(
+			(i) => i.status === "info" && i.message.includes("/senai-suggest-architect"),
+		);
+		assert.strictEqual(suggestHint, undefined, "should not show hint for non-Pi project");
+		fs.rmSync(tmp, { recursive: true, force: true });
+	});
 });

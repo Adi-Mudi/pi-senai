@@ -1,6 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { discoverArchitectureLibrary } from "../architect/index.js";
+import { discoverArchitectureLibrary, detectPiExtension } from "../architect/index.js";
 import { loadArchitectInputsConfig } from "../architect/inputs-config.js";
 import type { DiagnosticItem, DiagnosticSection } from "./_types.js";
 
@@ -105,6 +105,25 @@ export function checkLibraryCompleteness(cwd: string): DiagnosticSection {
 			status: "warning",
 			message: `${malformed.length} library entries are missing frontmatter or name: ${malformed.join(", ")}.`,
 		});
+	}
+
+	if (!inputsConfig) {
+		let detection = null;
+		try {
+			detection = detectPiExtension(cwd, null, null);
+		} catch {
+			detection = null;
+		}
+		if (detection?.isPiExtension) {
+			items.push({
+				status: "info",
+				message: "No architect-inputs.json found. Run /senai-suggest-architect to pick architecture from the library without authoring input documents.",
+				details: [
+					`Detected as Pi extension (confidence ${detection.confidence.toFixed(2)}, ${detection.matchedPatterns.length} patterns matched).`,
+					"/senai-suggest-architect asks 4 project questions, scores the library, and runs the factory with your chosen architecture.",
+				],
+			});
+		}
 	}
 
 	return { title: "Library Completeness", items };
