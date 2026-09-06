@@ -11,6 +11,8 @@ import * as ChecksArchitecture from "./checks-architecture.js";
 import * as ChecksEnvironment from "./checks-environment.js";
 import * as ChecksDocs from "./checks-docs.js";
 import * as ChecksBrainstormAudit from "./checks-brainstorm-audit.js";
+import * as ChecksPiExtensionConformance from "./checks-pi-extension-conformance.js";
+import * as ChecksLibraryCompleteness from "./checks-library-completeness.js";
 
 // Public type & constant surface — re-exported so existing consumers of
 // `../doctor/index.js` keep working unchanged.
@@ -93,6 +95,14 @@ export {
 	parseAuditLog,
 	BRAINSTORM_DISPATCH_CAP,
 } from "./checks-brainstorm-audit.js";
+
+export {
+	checkPiExtensionConformance,
+} from "./checks-pi-extension-conformance.js";
+
+export {
+	checkLibraryCompleteness,
+} from "./checks-library-completeness.js";
 
 /** Run every doctor check in a fixed order and return the aggregate report. */
 export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
@@ -184,6 +194,11 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
 	// inline scans, skipped decisions, etc.). Always runs, even when no
 	// other checks fired.
 	sections.push(ChecksBrainstormAudit.checkBrainstormAudit(cwd));
+
+	// Pi extension conformance + library completeness (Phase 6 of the
+	// library/factory upgrade). Always run; both adapt to non-Pi projects.
+	sections.push(ChecksPiExtensionConformance.checkPiExtensionConformance(cwd));
+	sections.push(ChecksLibraryCompleteness.checkLibraryCompleteness(cwd));
 
 	const summary = sections.reduce(
 		(acc, section) => {

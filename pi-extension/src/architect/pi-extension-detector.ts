@@ -148,7 +148,11 @@ export function detectPiExtension(
 
 	const negMatch = piSpecificSignals.filter((s) => PI_NEG.includes(s.pattern));
 	const piMatch = piSpecificSignals.filter((s) => !PI_NEG.includes(s.pattern));
-	const highConfidence = piMatch.filter((s) => HIGH_CONFIDENCE_SIGNALS.includes(s.pattern));
+	const highConfidence = piMatch.filter((s) =>
+		HIGH_CONFIDENCE_SIGNALS.some(
+			(hc) => s.pattern === hc || s.pattern.startsWith(hc),
+		),
+	);
 
 	let score = piMatch.length + highConfidence.length * 2 - negMatch.length * 3;
 	const confidence = Math.max(0, Math.min(1, score / 5));
