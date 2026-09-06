@@ -19,6 +19,12 @@ import { runSimpleConfirm } from "../ui/simple-picker.js";
 import { guardBriefContent, guardSeedInput, BRAINSTORM_DISPATCH_CAP } from "../brainstorm/guard.js";
 import { buildRegistryBlock, loadBrainstormRegistry } from "../brainstorm/registry.js";
 import { BRAINSTORM_DISPATCH_TIMEOUT_MS } from "../brainstorm/dispatcher.js";
+import {
+	buildSummary,
+	countBriefSections,
+	createAuditSession,
+	writeAuditLog,
+} from "../brainstorm/audit.js";
 
 /** Resolve the brief path for the current brainstorm session. Brainstorm
  *  run id wins (new flow); then active run id (mid-run brainstorm);
@@ -266,6 +272,30 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 					if (!recorded.ok) {
 						return { kind: "error" as const, message: recorded.reason };
 					}
+
+					// Phase 5: write the dispatch audit log. The parent LLM
+					// accumulates decisions in the in-memory session; we read
+					// it back at finalize. Decisions start empty for now — the
+					// parent can append via the audit module or write directly
+					// to the file via its Write tool. The summary block + brief
+					// coverage are computed from final state.
+					try {
+						const session = createAuditSession(
+							fresh.brainstormRunId ?? "(no-id)",
+							"(seed unknown — capture at /senai-brainstorm entry)",
+						);
+						const coverage = countBriefSections(raw);
+						const wallClockMs = Date.now() - new Date(event.ts).getTime();
+						const summary = buildSummary(session, {
+							wallClockMs,
+							briefSectionsFilled: coverage.filled,
+							briefSectionsTotal: coverage.total,
+						});
+						writeAuditLog(ctx.cwd, session, summary);
+					} catch {
+						// Best-effort: audit log failure never blocks approve.
+					}
+
 					return {
 						kind: "ok" as const,
 						state: recorded.state,
