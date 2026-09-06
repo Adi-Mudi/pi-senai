@@ -1707,6 +1707,7 @@ describe("commands", () => {
       "scout-2", "scout-3", "scout-4", "discussion", "plan-overview",
       "test-skeleton", "linter", "full-test", "readme-writer", "changelog-writer",
       "api-docs-writer", "other-docs-writer", "security-gate", "archive",
+      "community-researcher",
     ] as SenaiRole[]) {
       custom[role] = DEFAULT_AGENTS[role] === "worker" ? "scout" : "worker";
     }

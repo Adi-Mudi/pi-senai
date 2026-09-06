@@ -13,7 +13,6 @@ import {
 import { withRunLock, describeHolder } from "../io/lock.js";
 import { finalizeMissionBrief, validateBriefSections } from "../core/mission-brief.js";
 import { purgeCache as purgeCommunityCache } from "../scouts/community-research.js";
-import { SOURCE_PICKER_OPTIONS } from "../scouts/web-fetcher.js";
 import { loadSkill } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
 import { guardBriefContent, guardSeedInput, BRAINSTORM_DISPATCH_CAP } from "../brainstorm/guard.js";
@@ -133,19 +132,13 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 				`- Each dispatch has a ${BRAINSTORM_DISPATCH_TIMEOUT_MS}ms wall-clock budget — cancel stalled subagents.`,
 				``,
 				`When calling subagent, pass the prepared payload directly. The dispatcher module formats it for you.`,
-				// Community-research is an optional side-channel inside discussion.
-				// The parent loads this skill on demand when a trigger path matches.
+				// Phase 7: web research is no longer an inline side-channel run
+				// by the parent. The parent dispatches `web-research` (role
+				// community-researcher) when outside info is needed. The skill
+				// below documents the contract — but the parent does NOT call
+				// WebSearch/FetchURL directly. Source picking happens inside
+				// the web-research subagent.
 				loadSkill("community-research"),
-				// Source picker hints for when the parent triggers the community-research
-				// side-channel. These mirror the SOURCE_PICKER_OPTIONS exported by
-				// web-fetcher.ts so the parent can compose the AskUserQuestion options
-				// verbatim and use createWebFetcherPlan(source) to bias WebSearch +
-				// FetchURL toward trusted URLs per source.
-				``,
-				`## Community-research source picker (use only when the side-channel fires)`,
-				SOURCE_PICKER_OPTIONS.map((o, i) => `${i + 1}. ${o.label} — ${o.description}`).join("\n"),
-				``,
-				`For the chosen source, call \`createWebFetcherPlan(source)\` from \`pi-extension/src/scouts/web-fetcher.ts\` (or compose the same prompts inline) to bias WebSearch + FetchURL toward trusted URLs.`,
 			].join("\n");
 			pi.sendUserMessage(prompt);
 		},

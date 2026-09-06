@@ -38,9 +38,10 @@ mission-type question
 2-5 focused AskUserQuestion rounds (≤2 options each, end with `?`)
         │
         ▼
-optional side-channel: parent decides "I need more info" → load skills/senai-community-research.md
-        │     → 4-option source picker (web / official / community / similar)
-        │     → run scout → write transcript + ## External references in brief
+optional: parent decides "I need outside info" → dispatch community-researcher
+        │     → web-research subagent picks a source, runs WebSearch+FetchURL,
+        │       returns inline findings to parent
+        │     → parent uses findings to ask better questions
         ▼
 draft mission-brief.md (top-level sections + each ## Discussion section)
         │
@@ -63,6 +64,38 @@ Ask once at the start of every discussion:
 > - feature — new behavior the project doesn't have yet
 > - bugfix — fix a known broken or misbehaving thing
 > - exploration — investigate before deciding (treat as a research task)
+
+## Specialist dispatch (Phase 3-7)
+
+The parent LLM may dispatch specialist subagents for **read-only** research.
+Dispatch decision tree (one branch per turn):
+
+| User input | Decision |
+| --- | --- |
+| Quick single-file read | inline |
+| Web research (official docs, community posts, library refs) | dispatch **community-researcher** (web-research) |
+| Code scan across multiple files / patterns | dispatch scout-2 |
+| Architecture / system design | dispatch scout-1 |
+| Risk / dependency audit | dispatch scout-3 |
+| PRD / requirements docs | dispatch scout-4 |
+| Trade-off / option comparison | dispatch planner |
+| None of the above | ask another AskUserQuestion round |
+
+**Hard rules** (Phase 2 + 4):
+
+- Parent owns Q&A — never delegate AskUserQuestion to a subagent.
+- Parent owns `mission-brief.md` and the transcript — never delegate writing.
+- Subagents are read-only — no Write, no Edit, no Bash for state mutation.
+- Max 3 subagent dispatches per brainstorm (token budget).
+- Subagents write ONLY inside `.IDE_Plans/pi-senai/Brainstorm/<brainstorm-run-id>/`.
+
+**Web research in particular** (Phase 7):
+
+Before Phase 7, the parent ran WebSearch + FetchURL inline. Now web research
+goes through the same dispatch pipeline: the parent calls the dispatcher
+with `agent: "web-research"` (role `community-researcher`), the dispatcher
+strips Write/Edit/Bash from the tool list, and the subagent handles source
+picking internally. The parent sees only the inline findings.
 
 ## Amendment pattern
 

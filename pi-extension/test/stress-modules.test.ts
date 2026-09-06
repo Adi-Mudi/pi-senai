@@ -601,11 +601,11 @@ describe("generation stress", () => {
     const cwd = makeTmp("stress-write-agents-");
     fs.writeFileSync(path.join(cwd, "package.json"), JSON.stringify({ name: "stress-proj" }), "utf8");
     const plans = planAgentGeneration(cwd, GENERATED_ROLES, [], null);
-    assert.strictEqual(plans.length, 14, "full non-architecture role set");
+    assert.strictEqual(plans.length, 15, "full non-architecture role set (Phase 7 added community-researcher)");
 
     const start = performance.now();
     const first = writeGeneratedAgents(cwd, plans);
-    assert.strictEqual(first.created.length, 14);
+    assert.strictEqual(first.created.length, 15);
     assert.strictEqual(first.skipped.length, 0);
     const snapshot = new Map<string, string>();
     for (const rel of first.created) {
@@ -613,7 +613,7 @@ describe("generation stress", () => {
     }
 
     const second = writeGeneratedAgents(cwd, plans, { regenerate: true });
-    assert.strictEqual(second.regenerated.length, 14, "manifest-proven files regenerate in place");
+    assert.strictEqual(second.regenerated.length, 15, "manifest-proven files regenerate in place");
     assert.strictEqual(second.created.length, 0);
     assert.strictEqual(second.keptDrifted.length, 0);
     assert.strictEqual(second.skipped.length, 0);
