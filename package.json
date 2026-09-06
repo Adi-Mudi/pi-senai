@@ -4,10 +4,20 @@
   "description": "Senai — stage-gated agent orchestration extension for Pi — Plan → Implement → Document → Deliver",
   "type": "module",
   "license": "MIT",
+  "keywords": [
+    "pi-senai",
+    "orchestration",
+    "stage-gated",
+    "pi-package"
+  ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/yourname/pi-senai"
+    "url": "git+https://github.com/pi-senai/pi-senai.git"
   },
+  "bugs": {
+    "url": "https://github.com/pi-senai/pi-senai/issues"
+  },
+  "homepage": "https://github.com/pi-senai/pi-senai#readme",
   "scripts": {
     "build": "tsc",
     "test": "npm run build && node --test $(find dist/pi-extension/test -name '*.test.js' -not -path '*/e2e/*')",
