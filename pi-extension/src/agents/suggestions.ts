@@ -188,6 +188,51 @@ export function isBrainstormEligible(role: SenaiRole): boolean {
   return (BRAINSTORM_ELIGIBLE_ROLES as readonly SenaiRole[]).includes(role);
 }
 
+/** ──────────────────────────────────────────────────────────────────────
+ *  Read-only tool enforcement (Phase 4 dispatcher)
+ *  ────────────────────────────────────────────────────────────────────── */
+
+/** Tool names that mutate persistent state. Stripped from every brainstorm
+ *  dispatch payload so even a misconfigured agent cannot write code or
+ *  config during a discussion. */
+export const FORBIDDEN_TOOLS: readonly string[] = [
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "NotebookEdit",
+  "Bash",
+  "Shell",
+  "Process",
+  "KillBash",
+  "TodoWrite",
+  "WebFetch", // replaced by FetchURL — we want the read-only variant
+];
+
+/** Tool names that are allowed in a brainstorm dispatch. Everything else
+ *  (custom user tools, MCP tools, etc.) is also rejected so the agent stays
+ *  strictly within the read-only contract. */
+export const READ_ONLY_ALLOWED_TOOLS: readonly string[] = [
+  "Read",
+  "Grep",
+  "Glob",
+  "WebSearch",
+  "FetchURL",
+];
+
+/** Strip forbidden tools from an agent's tool list. Returns the cleaned
+ *  list. Used by the dispatcher to harden a subagent's tool allowlist
+ *  before the parent LLM spawns it.
+ *
+ *  Examples:
+ *    enforceReadOnlyTools(["Read", "Write", "Grep"])  → ["Read", "Grep"]
+ *    enforceReadOnlyTools(["Write", "Edit"])          → []
+ *    enforceReadOnlyTools([])                         → []
+ *    enforceReadOnlyTools(["Read", "MCP/foo"])       → ["Read"]  (unknown tools rejected) */
+export function enforceReadOnlyTools(tools: readonly string[]): string[] {
+  const allowed = new Set(READ_ONLY_ALLOWED_TOOLS);
+  return tools.filter((t) => allowed.has(t));
+}
+
 export function suggestAgentForRole(
   role: SenaiRole,
   agents: DiscoveredAgent[],

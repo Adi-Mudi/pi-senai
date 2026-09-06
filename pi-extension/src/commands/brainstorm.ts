@@ -16,8 +16,9 @@ import { purgeCache as purgeCommunityCache } from "../scouts/community-research.
 import { SOURCE_PICKER_OPTIONS } from "../scouts/web-fetcher.js";
 import { loadSkill } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
-import { guardBriefContent, guardSeedInput } from "../brainstorm/guard.js";
+import { guardBriefContent, guardSeedInput, BRAINSTORM_DISPATCH_CAP } from "../brainstorm/guard.js";
 import { buildRegistryBlock, loadBrainstormRegistry } from "../brainstorm/registry.js";
+import { BRAINSTORM_DISPATCH_TIMEOUT_MS } from "../brainstorm/dispatcher.js";
 
 /** Resolve the brief path for the current brainstorm session. Brainstorm
  *  run id wins (new flow); then active run id (mid-run brainstorm);
@@ -84,6 +85,11 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 			// specialists are available for read-only dispatch.
 			const registry = loadBrainstormRegistry(ctx.cwd);
 			const registryBlock = buildRegistryBlock(registry, topic);
+			// Phase 4: surface the dispatch counter + cap so the parent LLM
+			// knows when to stop dispatching. The dispatcher (Phase 4 module)
+			// validates each prepared dispatch before the parent calls subagent.
+			const dispatchCount = state.brainstormDispatchCount ?? 0;
+			const dispatchRemaining = Math.max(0, BRAINSTORM_DISPATCH_CAP - dispatchCount);
 			const prompt = [
 				`<pi-senai stage="discussion">`,
 				`Topic: ${topic || "(no topic — start with the mission-type question)"}`,
@@ -91,6 +97,8 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 				`Active run: ${state.runId || "(none — brainstorm is pre-run)"}`,
 				`Stage: ${state.currentStage}`,
 				`Brief location: ${briefLocation}`,
+				`Dispatch counter: ${dispatchCount} / ${BRAINSTORM_DISPATCH_CAP} (${dispatchRemaining} remaining)`,
+				`Dispatch timeout: ${BRAINSTORM_DISPATCH_TIMEOUT_MS}ms`,
 				`</pi-senai>`,
 				``,
 				loadSkill("brainstorm"),
@@ -101,15 +109,24 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 				``,
 				`Per user turn, the parent picks ONE of:`,
 				`- Quick read (single file) → parent reads inline, log "inline" decision`,
-				`- Web research (official docs, community) → dispatch community-researcher`,
-				`- Code scan (multi-file patterns, refactor) → dispatch scout-2`,
-				`- Architecture / system design → dispatch scout-1`,
-				`- Risk / dependency / breaking → dispatch scout-3`,
-				`- PRD / requirements / docs → dispatch scout-4`,
+				`- Web research (official docs, community) → dispatch community-researcher (web-research)`,
+				`- Code scan (multi-file patterns, refactor) → dispatch scout-2 (scout)`,
+				`- Architecture / system design → dispatch scout-1 (scout)`,
+				`- Risk / dependency / breaking → dispatch scout-3 (scout)`,
+				`- PRD / requirements / docs → dispatch scout-4 (scout)`,
 				`- Trade-off / option comparison → dispatch planner`,
 				`- None of the above → ask another AskUserQuestion round`,
 				``,
-				`Max 3 dispatches per brainstorm. Each dispatch is read-only.`,
+				`## Dispatch contract`,
+				``,
+				`Before each dispatch, validate via the dispatcher rules:`,
+				`- Agent must be brainstorm-eligible (see table above).`,
+				`- Dispatch count must stay under cap (${BRAINSTORM_DISPATCH_CAP}).`,
+				`- Tools allowlist is read-only (Read, Grep, Glob, WebSearch, FetchURL).`,
+				`- All artifact paths (if any) must stay inside the brainstorm folder.`,
+				`- Each dispatch has a ${BRAINSTORM_DISPATCH_TIMEOUT_MS}ms wall-clock budget — cancel stalled subagents.`,
+				``,
+				`When calling subagent, pass the prepared payload directly. The dispatcher module formats it for you.`,
 				// Community-research is an optional side-channel inside discussion.
 				// The parent loads this skill on demand when a trigger path matches.
 				loadSkill("community-research"),

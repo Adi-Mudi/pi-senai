@@ -47,6 +47,11 @@ export interface SenaiState {
    *  brainstorm is active. Multiple brainstorms for the same project each
    *  get their own id, so there is no conflict. */
   brainstormRunId?: string;
+  /** Number of subagent dispatches the parent LLM has made during the
+   *  active brainstorm. Tracked so the parent stays under
+   *  BRAINSTORM_DISPATCH_CAP (3). Reset whenever a new brainstorm run id
+   *  is minted. Doctor + audit log both surface this counter. */
+  brainstormDispatchCount?: number;
 }
 
 const CURRENT_VERSION = 1;
@@ -137,11 +142,31 @@ export function makeBrainstormRunId(seed: string): string {
  *  the id and writes state. */
 export function startBrainstorm(cwd: string, seed: string, state: SenaiState): SenaiState {
   // Reuse the existing brainstorm run id when one is already in flight
-  // (the parent resumed a session mid-discussion). Otherwise mint a fresh one.
+  // (the parent resumed a session mid-discussion). Otherwise mint a fresh one
+  // and reset the dispatch counter so a new session starts from zero.
   const brainstormRunId = state.brainstormRunId || makeBrainstormRunId(seed);
+  const isFresh = !state.brainstormRunId;
   const next: SenaiState = {
     ...state,
     brainstormRunId,
+    brainstormDispatchCount: isFresh ? 0 : state.brainstormDispatchCount,
+    updatedAt: new Date().toISOString(),
+  };
+  saveState(cwd, next);
+  return next;
+}
+
+/** Increment the dispatch counter for the active brainstorm and persist.
+ *  Callers should ALSO call guardDispatchCount BEFORE invoking this — the
+ *  guard refuses when the next count would exceed BRAINSTORM_DISPATCH_CAP.
+ *  This helper assumes the caller has already validated. */
+export function incrementBrainstormDispatchCount(
+  cwd: string,
+  state: SenaiState,
+): SenaiState {
+  const next: SenaiState = {
+    ...state,
+    brainstormDispatchCount: (state.brainstormDispatchCount ?? 0) + 1,
     updatedAt: new Date().toISOString(),
   };
   saveState(cwd, next);
