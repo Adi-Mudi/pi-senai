@@ -14,7 +14,7 @@ Generate a project-specific architecture agent and matching skills.
 
 ## Step 1 — Read inputs
 
-Read `.pi/senai/architect-inputs.json`.
+Read `.pi/senai/architect-inputs.json` if it exists. If it does not exist and this looks like a Pi extension project (per `detectPiExtension`), recommend `/senai-suggest-architect` to the user — it picks architecture from the library without requiring authored input documents.
 
 Note:
 - `documents` — files the user selected.
