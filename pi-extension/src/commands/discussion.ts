@@ -12,6 +12,7 @@ import { withRunLock, describeHolder } from "../io/lock.js";
 import { finalizeMissionBrief, validateBriefSections } from "../core/mission-brief.js";
 import { recordDiscussion, type DiscussionEvent } from "../core/state.js";
 import { purgeCache as purgeCommunityCache } from "../scouts/community-research.js";
+import { SOURCE_PICKER_OPTIONS } from "../scouts/web-fetcher.js";
 import { loadSkill } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
 
@@ -49,6 +50,16 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 				// Community-research is an optional side-channel inside discussion.
 				// The parent loads this skill on demand when a trigger path matches.
 				loadSkill("community-research"),
+				// Source picker hints for when the parent triggers the community-research
+				// side-channel. These mirror the SOURCE_PICKER_OPTIONS exported by
+				// web-fetcher.ts so the parent can compose the AskUserQuestion options
+				// verbatim and use createWebFetcherPlan(source) to bias WebSearch +
+				// FetchURL toward trusted URLs per source.
+				``,
+				`## Community-research source picker (use only when the side-channel fires)`,
+				SOURCE_PICKER_OPTIONS.map((o, i) => `${i + 1}. ${o.label} — ${o.description}`).join("\n"),
+				``,
+				`For the chosen source, call \`createWebFetcherPlan(source)\` from \`pi-extension/src/scouts/web-fetcher.ts\` (or compose the same prompts inline) to bias WebSearch + FetchURL toward trusted URLs.`,
 			].join("\n");
 			pi.sendUserMessage(prompt);
 		},
