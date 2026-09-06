@@ -36,14 +36,14 @@ Pick **one** of the three paths below. All three install the same package; only 
 Installs to `~/.pi/agent/settings.json`. Available in every directory you open with Pi.
 
 ```bash
-pi install npm:pi-senai
+pi install npm:@adi-mudi/pi-senai
 ```
 
 Verify:
 
 ```bash
 pi list | grep pi-senai
-# Expected: npm:pi-senai
+# Expected: npm:@adi-mudi/pi-senai
 ```
 
 ### 2.2 — Project-local install (recommended for teams)
@@ -52,7 +52,7 @@ Installs to `.pi/settings.json` inside the current project. The team shares the 
 
 ```bash
 cd /path/to/your/project
-pi install -l npm:pi-senai
+pi install -l npm:@adi-mudi/pi-senai
 ```
 
 Then commit `.pi/settings.json` so your teammates pick it up:
@@ -149,21 +149,21 @@ If you skip steps 1–4, Pi Senai will prompt you inline when the missing config
 To update to the latest published version:
 
 ```bash
-pi update npm:pi-senai
+pi update npm:@adi-mudi/pi-senai
 ```
 
 To pin a specific version (recommended in CI):
 
 ```bash
-pi install npm:pi-senai@0.2.5
+pi install npm:@adi-mudi/pi-senai@0.2.5
 ```
 
 Check which version you have installed:
 
 ```bash
 pi list | grep pi-senai
-# Example output: npm:pi-senai    /home/you/.pi/agent/npm/node_modules/pi-senai
-cat ~/.pi/agent/npm/node_modules/pi-senai/package.json | grep '"version"'
+# Example output: npm:@adi-mudi/pi-senai    /home/you/.pi/agent/npm/node_modules/@adi-mudi/pi-senai
+cat ~/.pi/agent/npm/node_modules/@adi-mudi/pi-senai/package.json | grep '"version"'
 ```
 
 ---
@@ -173,7 +173,7 @@ cat ~/.pi/agent/npm/node_modules/pi-senai/package.json | grep '"version"'
 ### 6.1 — Global
 
 ```bash
-pi remove npm:pi-senai
+pi remove npm:@adi-mudi/pi-senai
 ```
 
 This removes the entry from `~/.pi/agent/settings.json`. **It does not delete files under `.IDE_Plans/pi-senai/`** — your run history stays intact if you reinstall later.
@@ -189,7 +189,7 @@ rm -rf ~/.pi/senai/              # global Senai cache (if it exists)
 
 ```bash
 cd /path/to/your/project
-pi remove -l npm:pi-senai
+pi remove -l npm:@adi-mudi/pi-senai
 git add .pi/settings.json
 git commit -m "chore: remove pi-senai from project settings"
 ```
@@ -206,11 +206,11 @@ The clone directory is untouched; you can keep working on it or `rm -rf` it.
 
 ## 7. Troubleshooting
 
-### 7.1 — `pi install npm:pi-senai` fails with "command not found"
+### 7.1 — `pi install npm:@adi-mudi/pi-senai` fails with "command not found"
 
 Pi is not on `PATH`. Install it first per https://pi.dev, then retry.
 
-### 7.2 — `pi install npm:pi-senai` fails with "no such package"
+### 7.2 — `pi install npm:@adi-mudi/pi-senai` fails with "no such package"
 
 Your npm registry might be private. Check:
 
@@ -221,7 +221,7 @@ npm config get registry
 
 If it's a private registry (e.g., `https://npm.mycompany.com/`), set `npm-public-registry=https://registry.npmjs.org/` for the install:
 ```bash
-pi install npm:pi-senai --registry=https://registry.npmjs.org/
+pi install npm:@adi-mudi/pi-senai --registry=https://registry.npmjs.org/
 ```
 
 ### 7.3 — `/senai-brainstorm` returns "command not found" after install
@@ -230,14 +230,14 @@ Pi hasn't picked up the new package. Restart Pi, or run:
 
 ```bash
 pi list                 # confirm pi-senai is listed
-pi -p "Reload extension npm:pi-senai"
+pi -p "Reload extension npm:@adi-mudi/pi-senai"
 ```
 
 If still not found, remove and reinstall:
 
 ```bash
-pi remove npm:pi-senai
-pi install npm:pi-senai
+pi remove npm:@adi-mudi/pi-senai
+pi install npm:@adi-mudi/pi-senai
 ```
 
 ### 7.4 — `/senai-doctor` reports missing config files
@@ -262,8 +262,8 @@ Pi Senai uses POSIX file locks (`mkdir`-based). On Windows, enable [Developer Mo
 
 | Path | Command | Stored in | Auto-installs for team? | Survives uninstall? |
 |---|---|---|---|---|
-| Global | `pi install npm:pi-senai` | `~/.pi/agent/settings.json` | No (per-user) | Run artifacts stay in `.IDE_Plans/` |
-| Project-local | `pi install -l npm:pi-senai` | `.pi/settings.json` | **Yes** (commit it) | Run artifacts stay in `.IDE_Plans/` |
+| Global | `pi install npm:@adi-mudi/pi-senai` | `~/.pi/agent/settings.json` | No (per-user) | Run artifacts stay in `.IDE_Plans/` |
+| Project-local | `pi install -l npm:@adi-mudi/pi-senai` | `.pi/settings.json` | **Yes** (commit it) | Run artifacts stay in `.IDE_Plans/` |
 | Development | `pi install /path/to/pi-senai` | `~/.pi/agent/settings.json` (as path ref) | No | Source tree untouched |
 
 ---
@@ -273,11 +273,11 @@ Pi Senai uses POSIX file locks (`mkdir`-based). On Windows, enable [Developer Mo
 If something is broken beyond recovery and you want a clean slate:
 
 ```bash
-pi remove npm:pi-senai -l    # remove project-local
-pi remove npm:pi-senai        # remove global
+pi remove npm:@adi-mudi/pi-senai -l    # remove project-local
+pi remove npm:@adi-mudi/pi-senai        # remove global
 rm -rf .IDE_Plans/pi-senai/   # delete run history
 rm -rf .pi/senai/             # delete doctor / config cache
-pi install npm:pi-senai       # fresh install
+pi install npm:@adi-mudi/pi-senai       # fresh install
 ```
 
 Your project source files are never touched by Pi Senai.
@@ -324,7 +324,7 @@ npm version patch   # or minor / major
 npm publish --access public
 
 # 5. Users upgrade with:
-#    pi update npm:pi-senai
+#    pi update npm:@adi-mudi/pi-senai
 ```
 
 ### Optional: GitHub Actions auto-publish
@@ -361,7 +361,7 @@ Add `NPM_TOKEN` as a GitHub Actions secret. Then every `git tag vX.Y.Z && git pu
 
 ```bash
 # Remove Pi Senai
-pi remove npm:pi-senai
+pi remove npm:@adi-mudi/pi-senai
 rm -rf .IDE_Plans/pi-senai/
 
 # Remove Pi itself (macOS / Linux via npm)
@@ -374,13 +374,13 @@ npm uninstall -g @mariozechner/pi-coding-agent
 
 ```bash
 # Install
-pi install npm:pi-senai
+pi install npm:@adi-mudi/pi-senai
 
 # Upgrade
-pi update npm:pi-senai
+pi update npm:@adi-mudi/pi-senai
 
 # Uninstall
-pi remove npm:pi-senai
+pi remove npm:@adi-mudi/pi-senai
 
 # Verify
 pi list | grep pi-senai

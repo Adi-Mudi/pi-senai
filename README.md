@@ -9,7 +9,7 @@ Stage-gated agent orchestration extension for Pi — **Plan → Implement → Do
 ## Quick install
 
 ```bash
-pi install npm:pi-senai
+pi install npm:@adi-mudi/pi-senai
 ```
 
 Then open Pi in any directory and run `/senai-doctor` to verify.
