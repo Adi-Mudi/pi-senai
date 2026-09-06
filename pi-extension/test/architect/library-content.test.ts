@@ -182,4 +182,51 @@ describe("architecture library content", () => {
 			assert.ok(hasConcept, `pi entry ${entry.name} has no Pi-specific concept in body`);
 		}
 	});
+
+	it("all 4 extension skeleton template directories exist with required files", () => {
+		const templatesDir = path.join(PROJECT_ROOT, "resources", "extension-templates");
+		const templates: Record<string, string[]> = {
+			"extension-skeleton": ["package.json", "src/index.ts", "tsconfig.json", "README.md", ".gitignore"],
+			"skill-skeleton": ["SKILL.md"],
+			"agent-skeleton": ["AGENT.md"],
+			"package-skeleton": ["package.json"],
+		};
+		for (const [dir, files] of Object.entries(templates)) {
+			const fullDir = path.join(templatesDir, dir);
+			assert.ok(fs.existsSync(fullDir), `missing template dir: ${dir}`);
+			for (const file of files) {
+				const fullPath = path.join(fullDir, file);
+				assert.ok(fs.existsSync(fullPath), `missing file: ${dir}/${file}`);
+			}
+		}
+	});
+
+	it("extension-skeleton package.json has peerDependencies + pi manifest", () => {
+		const pkgPath = path.join(PROJECT_ROOT, "resources/extension-templates/extension-skeleton/package.json");
+		const pkg = JSON.parse(fs.readFileSync(pkgPath, "utf8")) as Record<string, unknown>;
+		const peer = pkg.peerDependencies as Record<string, string>;
+		assert.ok(peer["@mariozechner/pi-coding-agent"], "missing pi-coding-agent peer dep");
+		assert.ok(peer["@sinclair/typebox"], "missing typebox peer dep");
+		const piManifest = pkg.pi as Record<string, unknown>;
+		assert.ok(Array.isArray(piManifest.extensions), "missing pi.extensions array");
+		const keywords = pkg.keywords as string[];
+		assert.ok(keywords.includes("pi-package"), "missing pi-package keyword");
+	});
+
+	it("skill-skeleton SKILL.md has required frontmatter", () => {
+		const skillPath = path.join(PROJECT_ROOT, "resources/extension-templates/skill-skeleton/SKILL.md");
+		const content = fs.readFileSync(skillPath, "utf8");
+		assert.ok(content.startsWith("---"), "skill must start with YAML frontmatter");
+		assert.ok(content.includes("name:"), "skill frontmatter must include name");
+		assert.ok(content.includes("description:"), "skill frontmatter must include description");
+	});
+
+	it("agent-skeleton AGENT.md has required frontmatter", () => {
+		const agentPath = path.join(PROJECT_ROOT, "resources/extension-templates/agent-skeleton/AGENT.md");
+		const content = fs.readFileSync(agentPath, "utf8");
+		assert.ok(content.startsWith("---"), "agent must start with YAML frontmatter");
+		assert.ok(content.includes("name:"), "agent frontmatter must include name");
+		assert.ok(content.includes("description:"), "agent frontmatter must include description");
+		assert.ok(content.includes("tools:"), "agent frontmatter must include tools");
+	});
 });
