@@ -22,6 +22,7 @@ export const SENAI_ROLES = [
   "other-docs-writer",
   "security-gate",
   "archive",
+  "community-researcher",
 ] as const;
 
 export type SenaiRole = (typeof SENAI_ROLES)[number];
@@ -67,6 +68,7 @@ export const DEFAULT_AGENTS: Record<SenaiRole, string> = {
   "other-docs-writer": "worker",
   "security-gate": "security-auditor",
   archive: "worker",
+  "community-researcher": "web-research",
 };
 
 export const ROLE_LABELS: Record<SenaiRole, string> = {
@@ -91,6 +93,7 @@ export const ROLE_LABELS: Record<SenaiRole, string> = {
   "other-docs-writer": "Other docs writer",
   "security-gate": "Security gate",
   archive: "Archive",
+  "community-researcher": "Community researcher (web)",
 };
 
 /** Guidance tag shown per role in the agents-files picker (user-approved
@@ -128,6 +131,107 @@ export const SEQUENCE_ROLES: SenaiRole[] = [
 export const PICKER_ROLES: SenaiRole[] = DOCUMENT_ROLES.filter(
   (role) => !SEQUENCE_ROLES.includes(role),
 );
+
+/** Roles that may be dispatched from /senai-brainstorm. Each one has a
+ *  read-only mandate and never writes to the active run state. Roles NOT in
+ *  this list (implementer, all doc-writers, security-gate, code-review,
+ *  archive, linter, full-test) belong to later stages and must not be
+ *  invoked mid-discussion.
+ *
+ *  The list is the single source of truth — used by:
+ *  - brainstorm/registry.ts (filter eligible agents)
+ *  - commands/brainstorm.ts (inject registry block into the stage prompt)
+ *  - tests/brainstorm/registry.test.ts (verify eligibility)
+ *  - doctor/checks-brainstorm-audit.ts (Phase 6: flag ineligible dispatches)
+ */
+export const BRAINSTORM_ELIGIBLE_ROLES: readonly SenaiRole[] = [
+  "scout-1",
+  "scout-2",
+  "scout-3",
+  "scout-4",
+  "planner",
+  "community-researcher",
+] as const;
+
+/** Default agent name + keyword set for each brainstorm-eligible role.
+ *  Used by registry.ts matchSpecialist to score topics. */
+export const BRAINSTORM_ROLE_KEYWORDS: Record<SenaiRole, readonly string[]> = {
+  "scout-1": ["architecture", "system", "big-picture", "overview", "component", "service"],
+  "scout-2": ["code", "file", "module", "pattern", "refactor", "deadlock", "lock", "function"],
+  "scout-3": ["risk", "dependency", "breaking", "security-impact", "vulnerability", "audit"],
+  "scout-4": ["prd", "requirement", "spec", "doc", "manual", "documentation"],
+  planner: ["trade-off", "tradeoff", "option", "approach", "design", "compare", "choice", "alternative"],
+  "community-researcher": ["official", "docs", "community", "web", "external", "library", "framework"],
+  // Roles outside BRAINSTORM_ELIGIBLE_ROLES get empty keyword sets so
+  // matchSpecialist never picks them.
+  "plan-overview": [],
+  "reviewer-correctness": [],
+  "reviewer-security": [],
+  "reviewer-tests": [],
+  "test-skeleton": [],
+  implementer: [],
+  linter: [],
+  "code-review": [],
+  "full-test": [],
+  "readme-writer": [],
+  "changelog-writer": [],
+  "api-docs-writer": [],
+  "other-docs-writer": [],
+  "security-gate": [],
+  archive: [],
+  discussion: [],
+};
+
+/** True when a role is in BRAINSTORM_ELIGIBLE_ROLES. The registry layer uses
+ *  this to filter agents before they can be dispatched. */
+export function isBrainstormEligible(role: SenaiRole): boolean {
+  return (BRAINSTORM_ELIGIBLE_ROLES as readonly SenaiRole[]).includes(role);
+}
+
+/** ──────────────────────────────────────────────────────────────────────
+ *  Read-only tool enforcement (Phase 4 dispatcher)
+ *  ────────────────────────────────────────────────────────────────────── */
+
+/** Tool names that mutate persistent state. Stripped from every brainstorm
+ *  dispatch payload so even a misconfigured agent cannot write code or
+ *  config during a discussion. */
+export const FORBIDDEN_TOOLS: readonly string[] = [
+  "Write",
+  "Edit",
+  "MultiEdit",
+  "NotebookEdit",
+  "Bash",
+  "Shell",
+  "Process",
+  "KillBash",
+  "TodoWrite",
+  "WebFetch", // replaced by FetchURL — we want the read-only variant
+];
+
+/** Tool names that are allowed in a brainstorm dispatch. Everything else
+ *  (custom user tools, MCP tools, etc.) is also rejected so the agent stays
+ *  strictly within the read-only contract. */
+export const READ_ONLY_ALLOWED_TOOLS: readonly string[] = [
+  "Read",
+  "Grep",
+  "Glob",
+  "WebSearch",
+  "FetchURL",
+];
+
+/** Strip forbidden tools from an agent's tool list. Returns the cleaned
+ *  list. Used by the dispatcher to harden a subagent's tool allowlist
+ *  before the parent LLM spawns it.
+ *
+ *  Examples:
+ *    enforceReadOnlyTools(["Read", "Write", "Grep"])  → ["Read", "Grep"]
+ *    enforceReadOnlyTools(["Write", "Edit"])          → []
+ *    enforceReadOnlyTools([])                         → []
+ *    enforceReadOnlyTools(["Read", "MCP/foo"])       → ["Read"]  (unknown tools rejected) */
+export function enforceReadOnlyTools(tools: readonly string[]): string[] {
+  const allowed = new Set(READ_ONLY_ALLOWED_TOOLS);
+  return tools.filter((t) => allowed.has(t));
+}
 
 export function suggestAgentForRole(
   role: SenaiRole,

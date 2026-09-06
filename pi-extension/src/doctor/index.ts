@@ -10,6 +10,7 @@ import * as ChecksAgents from "./checks-agents.js";
 import * as ChecksArchitecture from "./checks-architecture.js";
 import * as ChecksEnvironment from "./checks-environment.js";
 import * as ChecksDocs from "./checks-docs.js";
+import * as ChecksBrainstormAudit from "./checks-brainstorm-audit.js";
 
 // Public type & constant surface — re-exported so existing consumers of
 // `../doctor/index.js` keep working unchanged.
@@ -86,6 +87,12 @@ export {
 	checkDocsFactory,
 	checkCommunityResearchCache,
 } from "./checks-docs.js";
+
+export {
+	checkBrainstormAudit,
+	parseAuditLog,
+	BRAINSTORM_DISPATCH_CAP,
+} from "./checks-brainstorm-audit.js";
 
 /** Run every doctor check in a fixed order and return the aggregate report. */
 export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
@@ -171,6 +178,12 @@ export function runSenaiDiagnostic(cwd: string): DiagnosticReport {
 	// Docs factory + community research cache.
 	sections.push(ChecksDocs.checkDocsFactory(cwd));
 	sections.push(ChecksDocs.checkCommunityResearchCache(cwd));
+
+	// Phase 6: brainstorm audit — read every brainstorm-dispatch.md the
+	// project has produced and surface findings (cap exceeded, suspicious
+	// inline scans, skipped decisions, etc.). Always runs, even when no
+	// other checks fired.
+	sections.push(ChecksBrainstormAudit.checkBrainstormAudit(cwd));
 
 	const summary = sections.reduce(
 		(acc, section) => {

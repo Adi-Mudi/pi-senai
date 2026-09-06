@@ -6,7 +6,9 @@ import * as path from "node:path";
 import {
   defaultState,
   loadState,
+  makeBrainstormRunId,
   saveState,
+  startBrainstorm,
   startRun,
   advanceStage,
   resetState,
@@ -475,5 +477,49 @@ describe("state — discussion fields", () => {
     assert.strictEqual(state.discussions, 0);
     assert.deepStrictEqual(state.discussionEvents, []);
     assert.strictEqual(state.missionBriefPath, undefined);
+  });
+
+  // ─── Phase 1: brainstorm run id ─────────────────────────────────────
+
+  it("makeBrainstormRunId produces an id with the brainstorm- prefix", () => {
+    const id = makeBrainstormRunId("refactor lock");
+    assert.ok(id.includes("brainstorm-refactor-lock"), `id should include brainstorm- slug, got: ${id}`);
+  });
+
+  it("makeBrainstormRunId falls back to brainstorm-session when seed is empty", () => {
+    const id = makeBrainstormRunId("");
+    assert.ok(id.includes("brainstorm-session"), `id should include brainstorm-session fallback, got: ${id}`);
+  });
+
+  it("startBrainstorm mints a fresh brainstorm run id when state has none", () => {
+    const state = defaultState();
+    const after = startBrainstorm(tmpDir, "refactor lock", state);
+    assert.ok(after.brainstormRunId, "brainstormRunId must be set");
+    assert.ok(after.brainstormRunId!.includes("brainstorm-"));
+    const persisted = loadState(tmpDir);
+    assert.strictEqual(persisted.brainstormRunId, after.brainstormRunId);
+  });
+
+  it("startBrainstorm reuses an existing brainstorm run id across calls", () => {
+    const state = defaultState();
+    const first = startBrainstorm(tmpDir, "refactor lock", state);
+    const second = startBrainstorm(tmpDir, "different seed", loadState(tmpDir));
+    assert.strictEqual(second.brainstormRunId, first.brainstormRunId, "must reuse the same brainstorm id");
+  });
+
+  it("startBrainstorm does NOT mutate currentStage (orthogonal to stage machine)", () => {
+    const state = defaultState();
+    state.currentStage = "planning";
+    state.runId = "2026-01-01-00-00-existing";
+    const after = startBrainstorm(tmpDir, "new seed", state);
+    assert.strictEqual(after.currentStage, "planning", "stage must be untouched");
+    assert.strictEqual(after.runId, "2026-01-01-00-00-existing", "runId must be untouched");
+  });
+
+  it("loadState preserves brainstormRunId across save/load", () => {
+    const state = defaultState();
+    const after = startBrainstorm(tmpDir, "test seed", state);
+    const loaded = loadState(tmpDir);
+    assert.strictEqual(loaded.brainstormRunId, after.brainstormRunId);
   });
 });

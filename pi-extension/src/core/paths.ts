@@ -118,10 +118,44 @@ export function getRunDir(cwd: string, runId: string): string {
 
 export const PRE_RUN_DISCUSSION_DIR = ".IDE_Plans/pi-senai/discussions/pre-run";
 
-/** Absolute path to the pre-run discussion directory (used when no run is
- *  active yet). */
+/** Brainstorm folder root. Brainstorm always owns its own run-id and writes
+ *  to .IDE_Plans/pi-senai/Brainstorm/<brainstorm-run-id>/. When /senai-plan
+ *  adopts a brainstorm run id, it copies the brief into the matching
+ *  .IDE_Plans/pi-senai/runs/<run-id>/ folder for the rest of the pipeline.
+ *  This prevents the "multiple brainstorms for one project" conflict that
+ *  the single shared pre-run/ folder used to create. */
+export const BRAINSTORM_DIR_NAME = "Brainstorm";
+
+/** Absolute path to the legacy pre-run discussion directory. Kept for
+ *  backward-compat reads of old briefs; new writes go to the brainstorm
+ *  folder. Will be removed after the next migration pass. */
 export function getPreRunDiscussionDir(cwd: string): string {
   return path.join(cwd, PRE_RUN_DISCUSSION_DIR);
+}
+
+/** Absolute path to a brainstorm folder. The brainstorm command creates this
+ *  on entry and persists the id in state.json. */
+export function getBrainstormDir(cwd: string, brainstormRunId: string): string {
+  return path.join(getSenaiDir(cwd), BRAINSTORM_DIR_NAME, brainstormRunId);
+}
+
+/** Absolute path to the brainstorm mission-brief.md. */
+export function getBrainstormMissionBriefPath(cwd: string, brainstormRunId: string): string {
+  return path.join(getBrainstormDir(cwd, brainstormRunId), "mission-brief.md");
+}
+
+/** Absolute path to the brainstorm discussion folder. Each brainstorm run id
+ *  has its own discussion folder, so multiple brainstorms for the same
+ *  project never overwrite each other. */
+export function getBrainstormDiscussionDir(cwd: string, brainstormRunId: string): string {
+  return path.join(getBrainstormDir(cwd, brainstormRunId), "discussions");
+}
+
+/** Absolute path to the brainstorm dispatch audit log. Filled by the audit
+ *  layer (Phase 5). Created on demand; never required for brainstorm to
+ *  start. */
+export function getBrainstormDispatchLogPath(cwd: string, brainstormRunId: string): string {
+  return path.join(getBrainstormDir(cwd, brainstormRunId), "brainstorm-dispatch.md");
 }
 
 /** Absolute path to a run's discussion directory. Created on demand by the
@@ -137,8 +171,8 @@ export function getRunMissionBriefPath(cwd: string, runId: string): string {
   return path.join(getRunDir(cwd, runId), "mission-brief.md");
 }
 
-/** Absolute path to a pre-run mission-brief.md (only one exists at a time —
- *  a new discussion overwrites it after the previous one is approved). */
+/** Absolute path to a pre-run mission-brief.md. Legacy; new writes go to
+ *  the brainstorm folder via getBrainstormMissionBriefPath. */
 export function getPreRunMissionBriefPath(cwd: string): string {
   return path.join(getPreRunDiscussionDir(cwd), "mission-brief.md");
 }

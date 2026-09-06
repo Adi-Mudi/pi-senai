@@ -11,7 +11,12 @@ import { type SenaiRole } from "../agents/suggestions.js";
 import { D_FLOOR_CLEAN, PROMOTE_AFTER_CLEAN, loadCadenceState } from "../implement/cadence.js";
 import { lockInfo } from "../io/lock.js";
 import { artifactMissing } from "./_helpers.js";
-import { getArtifactPaths, getPreRunDiscussionDir, getSenaiDir, STAGE_RANK } from "../core/paths.js";
+import {
+	getArtifactPaths,
+	getPreRunDiscussionDir,
+	getSenaiDir,
+	STAGE_RANK,
+} from "../core/paths.js";
 import { loadState, type SenaiState } from "../core/state.js";
 import { validateBriefSections } from "../core/mission-brief.js";
 
@@ -456,7 +461,7 @@ export function checkDiscussions(cwd: string): DiagnosticSection {
 		}
 	}
 
-	// Pre-run folder
+	// Pre-run folder (legacy)
 	const preRunDir = getPreRunDiscussionDir(cwd);
 	let preRunEntries: string[] = [];
 	try {
@@ -485,6 +490,53 @@ export function checkDiscussions(cwd: string): DiagnosticSection {
 				message: `Pre-run mission brief is missing ${missing.length} required section(s)`,
 				details: [...missing.map((m) => `  ${m}`), "Run /senai-brainstorm to add the missing sections."],
 			});
+		}
+	}
+
+	// Brainstorm folder (current). Each brainstorm run id gets its own subdir.
+	const brainstormRoot = getSenaiDir(cwd) + "/Brainstorm";
+	let brainstormDirs: string[] = [];
+	try {
+		brainstormDirs = fs.readdirSync(brainstormRoot, { withFileTypes: true })
+			.filter((e) => e.isDirectory())
+			.map((e) => path.join(brainstormRoot, e.name));
+	} catch {
+		brainstormDirs = [];
+	}
+
+	for (const brainstormDir of brainstormDirs) {
+		const discussionsDir = path.join(brainstormDir, "discussions");
+		let activeFolders: string[] = [];
+		try {
+			activeFolders = fs.readdirSync(discussionsDir, { withFileTypes: true })
+				.filter((e) => e.isDirectory())
+				.map((e) => e.name)
+				.filter((n) => /^discussion-/.test(n));
+		} catch {
+			activeFolders = [];
+		}
+		if (activeFolders.length > 1) {
+			items.push({
+				status: "warning",
+				message: `Brainstorm ${path.basename(brainstormDir)} has ${activeFolders.length} active discussion folders`,
+				details: [
+					...activeFolders.map((a) => `  ${a}`),
+					"Multiple active discussions on one brainstorm usually means a stale parent left a folder open. Archive the older ones.",
+				],
+			});
+		}
+
+		const briefPath = path.join(brainstormDir, "mission-brief.md");
+		if (fs.existsSync(briefPath)) {
+			const brief = fs.readFileSync(briefPath, "utf8");
+			const missing = validateBriefSections(brief);
+			if (missing.length > 0) {
+				items.push({
+					status: "warning",
+					message: `Brainstorm ${path.basename(brainstormDir)} brief is missing ${missing.length} required section(s)`,
+					details: [...missing.map((m) => `  ${m}`), "Run /senai-brainstorm to add the missing sections."],
+				});
+			}
 		}
 	}
 

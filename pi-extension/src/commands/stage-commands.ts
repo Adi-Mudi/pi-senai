@@ -1,8 +1,17 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { advanceStage, loadState, setMissionBriefPath, startRun } from "../core/state.js";
-import { getPreRunMissionBriefPath } from "../core/paths.js";
+import {
+	advanceStage,
+	loadState,
+	setBrainstormBriefPath,
+	setMissionBriefPath,
+	startRun,
+} from "../core/state.js";
+import {
+	getBrainstormMissionBriefPath,
+	getPreRunMissionBriefPath,
+} from "../core/paths.js";
 import { buildStagePrompt } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
 import {
@@ -13,6 +22,50 @@ import {
 
 /** /senai-plan and /senai-implement — extracted from registerCommands
  *  in commands/index.ts during Phase 3l.2. */
+
+/** Adopt a brainstorm run id: reuse it as the plan run id and copy the
+ *  brief from Brainstorm/<id>/ into runs/<id>/ so the rest of the pipeline
+ *  (which only knows about runs/) can pick it up. Returns the new state
+ *  with runId + missionBriefPath set, or null if no brainstorm id is in
+ *  state. */
+function adoptBrainstormRunId(
+	cwd: string,
+	state: ReturnType<typeof loadState>,
+	mission: string,
+): ReturnType<typeof loadState> | null {
+	if (!state.brainstormRunId) return null;
+	const brainstormBrief = getBrainstormMissionBriefPath(cwd, state.brainstormRunId);
+	if (!fs.existsSync(brainstormBrief)) return null;
+
+	// The brainstorm run id becomes the plan run id. Mint plan folders next
+	// to it and copy the brief in.
+	const runId = state.brainstormRunId;
+	const runDir = path.join(cwd, ".IDE_Plans/pi-senai/runs", runId);
+	fs.mkdirSync(path.join(runDir, "plan/scouts"), { recursive: true });
+	fs.mkdirSync(path.join(runDir, "plan/reviews"), { recursive: true });
+	fs.mkdirSync(path.join(runDir, "implement"), { recursive: true });
+	fs.mkdirSync(path.join(runDir, "document"), { recursive: true });
+	fs.mkdirSync(path.join(runDir, "deliver"), { recursive: true });
+
+	const runBrief = path.join(runDir, "mission-brief.md");
+	fs.copyFileSync(brainstormBrief, runBrief);
+
+	const adopted: ReturnType<typeof loadState> = {
+		...state,
+		version: 1,
+		mission,
+		runId,
+		startedAt: state.startedAt || new Date().toISOString(),
+		updatedAt: new Date().toISOString(),
+		stageResults: state.stageResults ?? {},
+	};
+	const withBrief = setBrainstormBriefPath(
+		cwd,
+		adopted,
+		path.relative(cwd, runBrief),
+	);
+	return withBrief;
+}
 
 export function registerPlanCommand(pi: ExtensionAPI) {
 	pi.registerCommand("senai-plan", {
@@ -48,24 +101,32 @@ export function registerPlanCommand(pi: ExtensionAPI) {
 				}
 			}
 
-			const state = startRun(ctx.cwd, mission);
+			// Adopt the brainstorm run id when one is in flight and the brief
+			// is on disk. Falls back to minting a fresh plan run id otherwise.
+			const adopted = adoptBrainstormRunId(ctx.cwd, existing, mission);
 
-			// Consume a pre-run discussion if one exists; reference it in state.
-			const preRunBrief = getPreRunMissionBriefPath(ctx.cwd);
-			let nextState = state;
-			if (fs.existsSync(preRunBrief)) {
-				nextState = setMissionBriefPath(ctx.cwd, state, path.relative(ctx.cwd, preRunBrief));
+			let state: ReturnType<typeof loadState>;
+			let briefNote = "";
+			if (adopted) {
+				state = adopted;
+				briefNote = `\nAdopted brainstorm run ${state.runId}. Brief copied to ${state.missionBriefPath}.`;
+			} else {
+				state = startRun(ctx.cwd, mission);
+
+				// Consume a legacy pre-run discussion if one exists; reference it in state.
+				const preRunBrief = getPreRunMissionBriefPath(ctx.cwd);
+				if (fs.existsSync(preRunBrief)) {
+					state = setMissionBriefPath(ctx.cwd, state, path.relative(ctx.cwd, preRunBrief));
+					briefNote = `\nPre-run mission brief consumed: ${state.missionBriefPath}`;
+				}
 			}
 
-			const advance = advanceStage(ctx.cwd, nextState, "planning");
+			const advance = advanceStage(ctx.cwd, state, "planning");
 			if (!advance.ok) {
 				ctx.ui.notify(advance.reason, "error");
 				return;
 			}
 
-			const briefNote = advance.state.missionBriefPath
-				? `\nPre-run mission brief consumed: ${advance.state.missionBriefPath}`
-				: "";
 			ctx.ui.notify(
 				`Plan stage started for: ${mission}\n` +
 					`When the plan is ready and you approve it, run /senai-approve to continue.` +

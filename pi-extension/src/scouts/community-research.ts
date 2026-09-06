@@ -571,3 +571,75 @@ function appendBriefSection(briefPath: string, output: CommunityResearchOutput):
   }
   fs.appendFileSync(briefPath, lines.join("\n"), "utf8");
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Phase 7: web-researcher wrapper
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Slim input shape used by the web-researcher subagent. The subagent
+ *  doesn't pass a transcript/brief path — it just returns inline results
+ *  to the parent LLM, which records the decision in the audit log. */
+export interface WebResearcherInput {
+  topic: string;
+  projectKeywords: readonly string[];
+  source: ResearchSource;
+  cwd: string;
+  /** Optional override for the wall-clock cap (ms). Default 30_000. */
+  timeoutMs?: number;
+  /** Optional override for the token cap. Default 1500. */
+  tokenCap?: number;
+  /** Optional override for results-per-category. Default 5. */
+  maxPerCategory?: number;
+  /** Inject a fetcher for unit tests. Default uses the stub fetcher. */
+  fetcher?: ResearchFetcher;
+}
+
+/** Slim return shape used by the web-researcher subagent. The subagent
+ *  reports the inline findings; the parent LLM uses them to ask better
+ *  brainstorm questions. */
+export interface WebResearcherResult {
+  source: ResearchSource;
+  confidence: Confidence;
+  cached: boolean;
+  official: Array<Pick<ResearchSourceEntry, "title" | "url" | "summary">>;
+  community: Array<Pick<ResearchSourceEntry, "title" | "url" | "summary">>;
+  similar: Array<Pick<ResearchSourceEntry, "title" | "url" | "summary">>;
+  /** True when the scout returned no useful findings. The parent LLM
+   *  should fall back to inline answers in that case. */
+  empty: boolean;
+}
+
+/** Web-researcher entry point. Used by the brainstorm `community-researcher`
+ *  subagent (and by tests). Internally calls `runCommunityResearch` with
+ *  the same cache + caps, but trims the output to a minimal shape that
+ *  the subagent can return inline without bloating the parent context.
+ *
+ *  Caps still apply: 5 per category, 1500 tokens, 30s wall-clock. The
+ *  cache is keyed on (topic, keywords, source, UTC day) — see
+ *  `cacheKey()`. */
+export async function runWebResearcher(
+  input: WebResearcherInput,
+): Promise<WebResearcherResult> {
+  const full = await runCommunityResearch({
+    topic: input.topic,
+    projectKeywords: [...input.projectKeywords],
+    source: input.source,
+    cwd: input.cwd,
+    timeoutMs: input.timeoutMs,
+    tokenCap: input.tokenCap,
+    maxPerCategory: input.maxPerCategory,
+    fetcher: input.fetcher,
+  });
+  const trim = (entries: ResearchSourceEntry[]) =>
+    entries.map((e) => ({ title: e.title, url: e.url, summary: e.summary }));
+  const totalCount = full.official.length + full.community.length + full.similar.length;
+  return {
+    source: full.source,
+    confidence: full.confidence,
+    cached: full.cached,
+    official: trim(full.official),
+    community: trim(full.community),
+    similar: trim(full.similar),
+    empty: totalCount === 0,
+  };
+}

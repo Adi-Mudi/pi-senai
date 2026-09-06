@@ -1,6 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import {
+  getBrainstormDiscussionDir,
+  getBrainstormMissionBriefPath,
   getPreRunDiscussionDir,
   getPreRunMissionBriefPath,
   getRunDiscussionsDir,
@@ -14,7 +16,7 @@ import { atomicWriteFile } from "../io/atomic-write.js";
 export const BRIEF_DRAFT_MARKER = "<!-- pi-senai mission-brief: draft -->\n";
 
 /** Top-level sections every mission-brief.md must contain, in order. Doctor
- *  uses this list to validate both pre-run and run-scoped briefs. */
+ *  uses this list to validate both brainstorm-scoped and run-scoped briefs. */
 export const REQUIRED_BRIEF_SECTIONS: readonly string[] = [
   "## Problem statement",
   "## Mission type",
@@ -55,13 +57,20 @@ export function slugifyLabel(input: string): string {
 export interface DiscussionLocation {
   transcriptPath: string;
   briefPath: string;
-  /** Monotonic sequence number within the run (or pre-run), 2-digit padded. */
+  /** Monotonic sequence number within the run (or brainstorm), 2-digit padded. */
   sequence: string;
+  /** Brainstorm run id when the brief lives under .IDE_Plans/pi-senai/Brainstorm/. */
+  brainstormRunId?: string;
 }
 
 export interface RecordDiscussionInput {
   cwd: string;
-  /** Pass a runId to record under that run; omit to record under pre-run. */
+  /** Brainstorm run id — preferred path. Lives under
+   *  .IDE_Plans/pi-senai/Brainstorm/<brainstormRunId>/. When present, takes
+   *  precedence over legacy `runId`. */
+  brainstormRunId?: string;
+  /** Pass a runId to record under that active run; omit to record under the
+   *  legacy pre-run folder (backward compat only). */
   runId?: string;
   label: string;
   /** Body of the transcript (the parent's Q&A log + free-form notes). */
@@ -71,18 +80,41 @@ export interface RecordDiscussionInput {
   discussionSection: string;
 }
 
+/** Resolve the brief and transcript directories based on which id is set.
+ *  Brainstorm run id wins (new flow); then run id (mid-run brainstorm);
+ *  finally pre-run folder (legacy). */
+function resolveDiscussionPaths(input: RecordDiscussionInput): {
+  transcriptsDir: string;
+  briefPath: string;
+  brainstormRunId?: string;
+} {
+  if (input.brainstormRunId) {
+    return {
+      transcriptsDir: getBrainstormDiscussionDir(input.cwd, input.brainstormRunId),
+      briefPath: getBrainstormMissionBriefPath(input.cwd, input.brainstormRunId),
+      brainstormRunId: input.brainstormRunId,
+    };
+  }
+  if (input.runId) {
+    return {
+      transcriptsDir: getRunDiscussionsDir(input.cwd, input.runId),
+      briefPath: getRunMissionBriefPath(input.cwd, input.runId),
+    };
+  }
+  return {
+    transcriptsDir: getPreRunDiscussionDir(input.cwd),
+    briefPath: getPreRunMissionBriefPath(input.cwd),
+  };
+}
+
 /** Append a discussion transcript + a "## Discussion — <stamp>" section to
  *  the brief, then return the absolute paths the caller records into
  *  state.discussionEvents. The brief is created on first call; the draft
  *  marker stays at the top until /senai-brainstorm-approve clears it. */
 export function recordDiscussion(input: RecordDiscussionInput): DiscussionLocation {
-  const runId = input.runId;
-  const transcriptsDir = runId
-    ? getRunDiscussionsDir(input.cwd, runId)
-    : getPreRunDiscussionDir(input.cwd);
-  const briefPath = runId
-    ? getRunMissionBriefPath(input.cwd, runId)
-    : getPreRunMissionBriefPath(input.cwd);
+  const resolved = resolveDiscussionPaths(input);
+  const { transcriptsDir, briefPath } = resolved;
+  const { brainstormRunId } = resolved;
 
   fs.mkdirSync(transcriptsDir, { recursive: true });
   fs.mkdirSync(path.dirname(briefPath), { recursive: true });
@@ -125,7 +157,7 @@ export function recordDiscussion(input: RecordDiscussionInput): DiscussionLocati
     }
   }
 
-  return { transcriptPath, briefPath, sequence };
+  return { transcriptPath, briefPath, sequence, brainstormRunId };
 }
 
 /**
@@ -181,4 +213,46 @@ export function validateBriefSections(brief: string): string[] {
     cursor = idx + section.length;
   }
   return missing;
+}
+
+/** Placeholder marker for unfilled brief sections. Recognized by
+ *  validateBriefContent below. */
+export const BRIEF_CONTENT_PLACEHOLDER = "_TBD_";
+
+/** True when the body between two section headers is empty or contains only
+ *  the placeholder marker. Pure — no side effects. */
+function bodyIsPlaceholder(body: string): boolean {
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return true;
+  return lines.every((l) => l === BRIEF_CONTENT_PLACEHOLDER);
+}
+
+/** Validate that every required section has REAL content — not `_TBD_` and
+ *  not empty. Returns the list of unfilled section names; empty list = ok.
+ *  This is stricter than validateBriefSections, which only checks that the
+ *  section heading exists. The brainstorm guard layer (Phase 2) wraps this
+ *  to hard-reject finalize when the brief is still skeletal. */
+export function validateBriefContent(brief: string): string[] {
+  const unfilled: string[] = [];
+  for (const section of REQUIRED_BRIEF_SECTIONS) {
+    const idx = brief.indexOf(section);
+    if (idx === -1) {
+      // Missing heading is also "unfilled" — caller can decide whether to
+      // call this "missing" or "placeholder", but the user-facing guard
+      // treats both the same way.
+      unfilled.push(section);
+      continue;
+    }
+    const bodyStart = idx + section.length;
+    const nextHeader = brief.slice(bodyStart).match(/\n##\s/);
+    const bodyEnd = nextHeader ? bodyStart + nextHeader.index! : brief.length;
+    const body = brief.slice(bodyStart, bodyEnd);
+    if (bodyIsPlaceholder(body)) {
+      unfilled.push(section);
+    }
+  }
+  return unfilled;
 }

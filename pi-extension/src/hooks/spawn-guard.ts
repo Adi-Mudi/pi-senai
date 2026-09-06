@@ -7,7 +7,7 @@ const GUARDED_TOOLS = new Set(["subagent", "subagent_resume"]);
 
 /** Pi's built-in agent names. Spawning one of these by accident loads a
  *  generic read-only agent without the role's mandate and tools. */
-const BUILTIN_AGENT_NAMES = new Set(["scout", "planner", "worker", "reviewer", "security-auditor"]);
+const BUILTIN_AGENT_NAMES = new Set(["scout", "planner", "worker", "reviewer", "security-auditor", "web-research"]);
 
 export interface SpawnGuardBlock {
   block: true;

@@ -30,6 +30,13 @@ export interface GeneratedRoleDef {
   interactive?: boolean;
   /** Doc-writer roles carry a documentation contract from the catalog. */
   docType?: DocTypeId;
+  /** When set, the generator loads the file at this path (relative to the
+   *  agents source directory) and uses ITS content as the agent body —
+   *  replacing the standard mandate + outOfScope + completion contract
+   *  template. Used for specialists whose contract is too specific to
+   *  fit the standard template (e.g. community-researcher). The file
+   *  MUST be valid markdown with frontmatter (name + description + tools). */
+  bodyFile?: string;
 }
 
 // The 14 non-architecture Senai roles. The 7 architecture-bound roles are
@@ -211,6 +218,25 @@ export const GENERATED_ROLES: GeneratedRoleDef[] = [
       "Do not run the security audit — that is the security-gate agent's job.",
     ],
   },
+  {
+    role: "community-researcher",
+    label: "Community Researcher (web)",
+    // Phase 7: web tools are the specialist's exclusive tools. The
+    // brainstorm parent never runs WebSearch/FetchURL inline — it
+    // dispatches this agent via prepareDispatch in brainstorm/dispatcher.ts.
+    tools: ["WebSearch", "FetchURL", "Read"],
+    mandate: "Read-only web research for brainstorm. Picks a source (web / official / community / similar), runs WebSearch + FetchURL via the runWebResearcher helper, returns slim inline findings.",
+    invocationHint: "Spawn from brainstorm when the user asks something that needs outside info — official docs, community posts, library references, framework patterns.",
+    outOfScope: [
+      "Do not write files outside the dedicated brainstorm folder.",
+      "Do not call other subagents (you are a leaf specialist).",
+      "Do not run shell commands or modify code.",
+      "Do not improvise outside web research — if the user's question is not a web lookup, say so and return immediately.",
+    ],
+    // Body comes from the canonical web-researcher-body.md shipped with
+    // the extension — see generateCustomBody / loadCustomBody helpers below.
+    bodyFile: "web-researcher-body.md",
+  },
 ];
 
 export interface TechnologyResource {
@@ -246,7 +272,10 @@ export interface WriteAgentsResult {
 //     code examples (prevents doc drift from breaking the test suite).
 // v7: brainstorm role is the ONLY role with WebSearch + FetchURL (web tool
 //     lock). Used by /senai-brainstorm and the plan-stage consolidation.
-export const GENERATOR_VERSION = 7;
+// v8: community-researcher (web-research) is a generated subagent with its
+//     own canonical body file (web-researcher-body.md). The brainstorm
+//     parent dispatches it instead of running WebSearch + FetchURL inline.
+export const GENERATOR_VERSION = 8;
 
 // Returns the sha256 of a file, or null when it cannot be read.
 function hashFile(filePath: string): string | null {
@@ -265,6 +294,44 @@ export function getBundledTechnologiesDir(): string {
     return sourceLayout;
   }
   return path.resolve(__dirname, "../../../..", "resources", "technologies");
+}
+
+/** Locate the canonical body file for a GeneratedRoleDef.bodyFile entry.
+ *  Resolution order:
+ *    1. Same directory as this generator file (source layout)
+ *    2. process.cwd() + pi-extension/src/agents/ (when running tests from repo root)
+ *  Returns null when the file cannot be found — the caller falls back to
+ *  the standard template body. */
+export function resolveBodyFilePath(bodyFile: string): string | null {
+  const candidates = [
+    path.resolve(__dirname, bodyFile),
+    path.resolve(process.cwd(), "pi-extension", "src", "agents", bodyFile),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return null;
+}
+
+/** Load a canonical body file and return its content (frontmatter stripped).
+ *  Used by `buildGeneratedAgentMarkdown` when a role carries `bodyFile`. */
+export function loadCanonicalBody(bodyFile: string): string | null {
+  const filePath = resolveBodyFilePath(bodyFile);
+  if (!filePath) return null;
+  let raw: string;
+  try {
+    raw = fs.readFileSync(filePath, "utf8");
+  } catch {
+    return null;
+  }
+  // Strip frontmatter (---...---) at the top of the file.
+  if (raw.startsWith("---")) {
+    const end = raw.indexOf("\n---", 3);
+    if (end !== -1) {
+      return raw.slice(end + 4).trim();
+    }
+  }
+  return raw.trim();
 }
 
 export function getProjectTechnologiesDir(cwd: string): string {
@@ -443,6 +510,27 @@ export function buildGeneratedAgentMarkdown(
   const contextBlock = buildProjectContextBlock(report);
   if (contextBlock) {
     lines.push("", contextBlock);
+  }
+
+  // Canonical-body roles (Phase 7 community-researcher): replace the
+  // standard mandate/outOfScope/completion-contract template with the body
+  // from the canonical file shipped with the extension. The frontmatter
+  // above is still generator-controlled, but the body comes from the
+  // specialist's own contract.
+  if (def.bodyFile) {
+    const customBody = loadCanonicalBody(def.bodyFile);
+    if (customBody) {
+      lines.push("");
+      lines.push(customBody);
+      lines.push(
+        "",
+        "---",
+        `_Generated by pi-senai (generator v${GENERATOR_VERSION}) from canonical body file: ${def.bodyFile}._`,
+      );
+      return lines.join("\n");
+    }
+    // Fall through to the standard template if the body file is missing —
+    // the generator's contract is "always produce an agent, never dead-end".
   }
 
   for (const resource of resources) {
