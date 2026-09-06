@@ -130,8 +130,8 @@ Reset the current run:
 Refine the mission in a conversational pass before planning (parent LLM only, no subagents; invocable from any state):
 
 ```
-/senai-discussion "<topic>"
-/senai-discussion-approve
+/senai-brainstorm "<topic>"
+/senai-brainstorm-approve
 ```
 
 ## Agent configuration

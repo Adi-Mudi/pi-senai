@@ -12,7 +12,7 @@
 
 Pi Senai is a stage-gated agent orchestration extension for Pi. Each stage is a sequence of specialized subagents. Every stage ends with a parent approval gate. Running `/senai-approve` advances the run through the completed stage **and** automatically starts the next stage.
 
-**Discussion entry point.** Before the Plan stage, a user can run `/senai-discussion "<topic>"` to refine the mission in a conversational pass (parent LLM only, no subagents). The discussion writes a draft `mission-brief.md` and a transcript (`discussions/discussion-NN-<slug>.md`); `/senai-discussion-approve` finalizes the brief. Discussions are orthogonal to the stage machine — they do NOT mutate `state.json.stage` and can be opened from any state (`none`, active stages, `delivered`). `/senai-plan` warns before replacing an active run and, when a pre-run brief exists, references it from `state.missionBriefPath`.
+**Brainstorm entry point.** Before the Plan stage, a user can run `/senai-brainstorm "<topic>"` to refine the mission in a conversational pass (parent LLM only, no subagents). The brainstorm writes a draft `mission-brief.md` and a transcript (`discussions/discussion-NN-<slug>.md`); `/senai-brainstorm-approve` finalizes the brief. Brainstorms are orthogonal to the stage machine — they do NOT mutate `state.json.stage` and can be opened from any state (`none`, active stages, `delivered`). `/senai-plan` warns before replacing an active run and, when a pre-run brief exists, references it from `state.missionBriefPath`.
 
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
@@ -42,7 +42,7 @@ Pi Senai is a stage-gated agent orchestration extension for Pi. Each stage is a 
 
 Use `/senai-approve` to approve a finished stage and automatically run the next stage. Manual stage commands (`/senai-implement`, `/senai-document`, `/senai-deliver`) can still be used, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
 
-`/senai-approve` and `/senai-discussion-approve` share a project-wide run lock at `.IDE_Plans/pi-senai/.lock/meta.json` (PID + heartbeat). They mutually exclude each other so a double-click inside one session or two Pi sessions in the same project cannot race-write `state.json`. Stale locks (dead pid or heartbeat older than `SENAI_LOCK_STALE_MS`, default 60s) are auto-stolen by the next acquire. The full environment contract: `SENAI_LOCK_TIMEOUT_MS` (default 5000), `SENAI_LOCK_STALE_MS` (default 60000), `SENAI_LOCK_HEARTBEAT_MS` (default 5000). `/senai-discussion-approve` is also idempotent: a second call on the same already-finalized brief short-circuits with "already finalized" instead of bumping the `discussions` counter.
+`/senai-approve` and `/senai-brainstorm-approve` share a project-wide run lock at `.IDE_Plans/pi-senai/.lock/meta.json` (PID + heartbeat). They mutually exclude each other so a double-click inside one session or two Pi sessions in the same project cannot race-write `state.json`. Stale locks (dead pid or heartbeat older than `SENAI_LOCK_STALE_MS`, default 60s) are auto-stolen by the next acquire. The full environment contract: `SENAI_LOCK_TIMEOUT_MS` (default 5000), `SENAI_LOCK_STALE_MS` (default 60000), `SENAI_LOCK_HEARTBEAT_MS` (default 5000). `/senai-brainstorm-approve` is also idempotent: a second call on the same already-finalized brief short-circuits with "already finalized" instead of bumping the `discussions` counter.
 
 Configuration commands:
 
@@ -61,8 +61,8 @@ Other commands:
 
 - `/senai-status` — show current stage, mission, run ID, artifact paths, and next command.
 - `/senai-reset` — clear the active run state (artifacts are preserved).
-- `/senai-discussion "<topic>"` — open a conversational mission-refinement pass (parent LLM only, no subagents). Invocable from any state. Writes a draft `mission-brief.md` and a transcript `discussions/discussion-NN-<slug>.md`.
-- `/senai-discussion-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Discussion — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md`.
+- `/senai-brainstorm "<topic>"` — open a conversational mission-refinement pass (parent LLM only, no subagents). Invocable from any state. Writes a draft `mission-brief.md` and a transcript `discussions/discussion-NN-<slug>.md`.
+- `/senai-brainstorm-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Brainstorm — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md`.
 
 ---
 
