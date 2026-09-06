@@ -4346,13 +4346,13 @@ describe("doctor checkDiscussions", () => {
     );
   });
 
-  it("setup-progress includes the optional /senai-discussion note", () => {
+  it("setup-progress includes the optional /senai-brainstorm note", () => {
     const report = runSenaiDiagnostic(tmpDir);
     const setup = findSection(report, "Setup progress");
     assert.ok(setup);
     assert.ok(
       setup!.items.some(
-        (i) => i.message.includes("8. Optional: /senai-discussion"),
+        (i) => i.message.includes("8. Optional: /senai-brainstorm"),
       ),
       "setup progress must list the optional step 8",
     );
@@ -4428,10 +4428,10 @@ describe("doctor lock state", () => {
       JSON.stringify({
         pid: process.pid,
         host: "host",
-        command: "/senai-discussion-approve",
+        command: "/senai-brainstorm-approve",
         startedAt: longAgo,
         heartbeatAt: longAgo,
-        mode: "discussion-approve",
+        mode: "brainstorm-approve",
       }),
       "utf8",
     );

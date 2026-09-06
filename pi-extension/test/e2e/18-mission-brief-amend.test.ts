@@ -36,9 +36,9 @@ describe("e2e/18-mission-brief-amend", () => {
 		assert.ok(client && home, "test setup missing");
 		try {
 			// First discussion + finalize — writes the initial brief.
-			await client.request("prompt", { text: "/senai-discussion pick React for the frontend" });
+			await client.request("prompt", { text: "/senai-brainstorm pick React for the frontend" });
 			await client.waitForIdle();
-			await client.request("prompt", { text: "/senai-discussion-approve" });
+			await client.request("prompt", { text: "/senai-brainstorm-approve" });
 			await client.waitForIdle();
 
 			const briefPath = getPreRunMissionBriefPath(home.cwd);

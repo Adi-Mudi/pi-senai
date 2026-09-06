@@ -10,7 +10,7 @@ import { makeMinimalProjectFiles, seedSenaiConfig } from "./helpers/fixtures.js"
 const SKIP_MESSAGE = "E2E tests require pi binary on PATH and RUN_E2E=1";
 
 // E2E tests for the community-research scout side-channel inside
-// /senai-discussion. Most tests are stubbed (no real LLM) and only the
+// /senai-brainstorm. Most tests are stubbed (no real LLM) and only the
 // pure-function surface is exercised. The real-LLM variant at the end
 // requires RUN_E2E_REAL_LLM=1 plus a valid provider key.
 describe("e2e/24-community-research", () => {
@@ -70,7 +70,7 @@ describe("e2e/24-community-research", () => {
 		try {
 			const result = mod.acquireLock({
 				cwd: tmp,
-				mode: "discussion-research",
+				mode: "brainstorm-research",
 				command: "/senai-purge-community-cache",
 				timeoutMs: 100,
 				staleMs: 1000,

@@ -1,11 +1,11 @@
 ---
 name: senai-community-research
-description: Optional side-channel inside /senai-discussion that gathers web/official/community/similar references for the current mission-brief. Standalone scout, parent-driven, opt-in only.
+description: Optional side-channel inside /senai-brainstorm that gathers web/official/community/similar references for the current mission-brief. Standalone scout, parent-driven, opt-in only.
 ---
 
 # Community Research Side-Channel
 
-This is an **optional side-channel** inside `/senai-discussion`. It is NOT a new stage. It does NOT fire from `/senai-plan`, `/senai-implement`, `/senai-document`, or `/senai-deliver`. It only runs when the parent LLM decides the discussion needs external references the parent cannot supply from its own knowledge.
+This is an **optional side-channel** inside `/senai-brainstorm`. It is NOT a new stage. It does NOT fire from `/senai-plan`, `/senai-implement`, `/senai-document`, or `/senai-deliver`. It only runs when the parent LLM decides the discussion needs external references the parent cannot supply from its own knowledge.
 
 ## Goal
 
@@ -125,12 +125,12 @@ Failed entries are dropped from user-facing output but logged in the transcript.
 
 ## Commands the user may run
 
-- `/senai-discussion "<topic>"` — opens discussion (this skill is loaded when the parent decides to fire the scout)
+- `/senai-brainstorm "<topic>"` — opens brainstorm (this skill is loaded when the parent decides to fire the scout)
 - `/senai-purge-community-cache` — clears all community-research cache (manual)
 
 ## Plan supersede
 
-If the scout's findings reveal the plan needs replacement, follow the same Plan supersede (ADR) pattern as `/senai-discussion`:
+If the scout's findings reveal the plan needs replacement, follow the same Plan supersede (ADR) pattern as `/senai-brainstorm`:
 1. Write new plan as `plan-vN.md`
 2. Add banner to `plan.md` pointing to it
 3. Re-run `/senai-approve` as normal
