@@ -31,6 +31,9 @@ export {
 	type CodebaseDiscoveryResult,
 } from "./inputs-config.js";
 
+// Re-export Pi extension detector so commands can branch on detection result
+export { detectPiExtension, type PiExtensionDetection, type PiSpecificSignal } from "./pi-extension-detector.js";
+
 export interface ArchitectureLibraryEntry {
   id: string;
   name: string;

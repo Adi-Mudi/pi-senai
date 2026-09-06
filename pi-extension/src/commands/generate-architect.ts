@@ -3,6 +3,7 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadDrivers } from "../architect/drivers.js";
 import {
 	areDriversStale,
+	detectPiExtension,
 } from "../architect/index.js";
 import { loadArchitectInputsConfig, getSelectedInputPaths } from "../architect/inputs-config.js";
 import { resolveSkillPath } from "../prompt.js";
@@ -14,10 +15,23 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
 		handler: async (_args, ctx) => {
 			const inputsConfig = loadArchitectInputsConfig(ctx.cwd);
 			if (!inputsConfig) {
-				ctx.ui.notify(
-					"No architect inputs configured. Run /senai-configure-architect-inputs first.",
-					"warning",
-				);
+				let detection;
+				try {
+					detection = detectPiExtension(ctx.cwd, null, null);
+				} catch {
+					detection = null;
+				}
+				if (detection?.isPiExtension) {
+					ctx.ui.notify(
+						"No architect-inputs.json found, but this looks like a Pi extension project.\n\nRecommended: run /senai-suggest-architect — it picks the right architecture from the library by asking 4 project questions, no input docs required.\n\nOther options:\n  /senai-configure-architect-inputs — pick documents manually (existing flow)",
+						"info",
+					);
+				} else {
+					ctx.ui.notify(
+						"No architect inputs configured. Run /senai-configure-architect-inputs first.",
+						"warning",
+					);
+				}
 				return;
 			}
 
