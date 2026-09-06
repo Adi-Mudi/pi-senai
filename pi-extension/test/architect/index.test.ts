@@ -23,6 +23,7 @@ import {
   saveArchitectProfile,
   saveArchitectReport,
   selectArchitecture,
+  selectArchitectureWithContext,
   slugify,
   writeGeneratedManifest,
 } from "../../src/architect/index.js";
@@ -485,6 +486,46 @@ describe("architect", () => {
 
     const selected = selectArchitecture(drivers, library);
     assert.strictEqual(selected?.name, "modular-monolith");
+  });
+
+  it("selectArchitectureWithContext biases toward pi-architecture when Pi extension detected", () => {
+    const drivers = createEmptyDrivers();
+    drivers.constraints.push({ id: "C-1", category: "team-size", description: "small team" });
+    drivers.technicalConcerns.push({ id: "TC-1", description: "web app" });
+
+    const library: ArchitectureLibraryEntry[] = [
+      {
+        id: "modular-monolith",
+        name: "modular-monolith",
+        filePath: "",
+        domain: ["web"],
+        teamSize: "small",
+        complexity: "low",
+        bestForDrivers: ["small team"],
+        notForDrivers: [],
+        content: "",
+      },
+      {
+        id: "pi-architecture",
+        name: "pi-architecture",
+        filePath: "",
+        domain: ["agent-toolkit"],
+        teamSize: "small",
+        complexity: "medium",
+        bestForDrivers: ["extension system", "skill system"],
+        notForDrivers: [],
+        content: "",
+      },
+    ];
+
+    const withoutContext = selectArchitecture(drivers, library);
+    assert.strictEqual(withoutContext?.name, "modular-monolith");
+
+    const withContext = selectArchitectureWithContext(drivers, library, {
+      isPiExtension: true,
+      confidence: 0.9,
+    });
+    assert.strictEqual(withContext?.name, "pi-architecture");
   });
 
   it("generateAgentFiles creates files with correct names", () => {

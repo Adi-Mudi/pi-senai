@@ -379,6 +379,14 @@ export function selectArchitecture(
   drivers: ArchitecturalDrivers,
   library: ArchitectureLibraryEntry[],
 ): ArchitectureLibraryEntry | null {
+  return selectArchitectureWithContext(drivers, library, null);
+}
+
+export function selectArchitectureWithContext(
+  drivers: ArchitecturalDrivers,
+  library: ArchitectureLibraryEntry[],
+  piExtensionDetection: { isPiExtension: boolean; confidence: number } | null,
+): ArchitectureLibraryEntry | null {
   if (library.length === 0) return null;
 
   const driverText = buildDriverText(drivers).toLowerCase();
@@ -390,6 +398,9 @@ export function selectArchitecture(
     }
     for (const driver of entry.notForDrivers) {
       if (driverText.includes(driver.toLowerCase())) score -= 2;
+    }
+    if (piExtensionDetection?.isPiExtension && entry.id === "pi-architecture") {
+      score += 10 * Math.max(0.5, piExtensionDetection.confidence);
     }
     return { entry, score };
   });
