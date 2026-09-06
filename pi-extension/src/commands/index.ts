@@ -31,6 +31,32 @@ export {
 
 export { registerBrainstormCommands } from "./brainstorm.js";
 
+// Phase 8: re-export the brainstorm module's public API so callers
+// (tests, doctor, future commands) can import guard / registry /
+// dispatcher / audit helpers from one place.
+export {
+	BRAINSTORM_DISPATCH_CAP,
+	BRAINSTORM_DISPATCH_TIMEOUT_MS,
+	buildSummary,
+	countBriefSections,
+	createAuditSession,
+	guardArtifactPath,
+	guardBriefContent,
+	guardDispatchCount,
+	guardSeedInput,
+	loadBrainstormRegistry,
+	matchSpecialist,
+	prepareDispatch,
+	readAuditLog,
+	rankSpecialists,
+	validateBriefContent,
+	writeAuditLog,
+	type BrainstormEligibleAgent,
+	type DispatchPrepResult,
+	type DispatchRequest,
+	type PreparedDispatch,
+} from "../brainstorm/index.js";
+
 export { registerAgentCommands } from "./configure-agents.js";
 
 export { registerFilesCommands } from "./configure-files.js";
