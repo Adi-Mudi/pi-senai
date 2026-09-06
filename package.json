@@ -19,7 +19,9 @@
   },
   "homepage": "https://github.com/pi-senai/pi-senai#readme",
   "files": [
-    "dist",
+    "dist/pi-extension/src",
+    "dist/index.js",
+    "dist/index.d.ts",
     "skills",
     "resources",
     "README.md",
