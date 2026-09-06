@@ -17,6 +17,7 @@ import { SOURCE_PICKER_OPTIONS } from "../scouts/web-fetcher.js";
 import { loadSkill } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
 import { guardBriefContent, guardSeedInput } from "../brainstorm/guard.js";
+import { buildRegistryBlock, loadBrainstormRegistry } from "../brainstorm/registry.js";
 
 /** Resolve the brief path for the current brainstorm session. Brainstorm
  *  run id wins (new flow); then active run id (mid-run brainstorm);
@@ -78,6 +79,11 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 				"info",
 			);
 			const briefLocation = resolveBriefPath(ctx.cwd, state);
+			// Phase 3: load the brainstorm-eligible agent registry + render it
+			// as a stage-prompt block so the parent LLM can see which
+			// specialists are available for read-only dispatch.
+			const registry = loadBrainstormRegistry(ctx.cwd);
+			const registryBlock = buildRegistryBlock(registry, topic);
 			const prompt = [
 				`<pi-senai stage="discussion">`,
 				`Topic: ${topic || "(no topic — start with the mission-type question)"}`,
@@ -88,6 +94,22 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 				`</pi-senai>`,
 				``,
 				loadSkill("brainstorm"),
+				``,
+				registryBlock,
+				``,
+				`## Specialist dispatch decision tree`,
+				``,
+				`Per user turn, the parent picks ONE of:`,
+				`- Quick read (single file) → parent reads inline, log "inline" decision`,
+				`- Web research (official docs, community) → dispatch community-researcher`,
+				`- Code scan (multi-file patterns, refactor) → dispatch scout-2`,
+				`- Architecture / system design → dispatch scout-1`,
+				`- Risk / dependency / breaking → dispatch scout-3`,
+				`- PRD / requirements / docs → dispatch scout-4`,
+				`- Trade-off / option comparison → dispatch planner`,
+				`- None of the above → ask another AskUserQuestion round`,
+				``,
+				`Max 3 dispatches per brainstorm. Each dispatch is read-only.`,
 				// Community-research is an optional side-channel inside discussion.
 				// The parent loads this skill on demand when a trigger path matches.
 				loadSkill("community-research"),

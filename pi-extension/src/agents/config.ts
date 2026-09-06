@@ -73,7 +73,7 @@ export function validateMappedAgents(cwd: string, config: AgentConfig): string[]
 
     const projectPath = path.join(cwd, ".pi", "agents", `${agentName}.md`);
     const userPath = path.join(getUserAgentsDir(), `${agentName}.md`);
-    const isBuiltin = ["scout", "planner", "worker", "reviewer", "security-auditor"].includes(
+    const isBuiltin = ["scout", "planner", "worker", "reviewer", "security-auditor", "web-research"].includes(
       agentName,
     );
 
