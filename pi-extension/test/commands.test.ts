@@ -3353,17 +3353,21 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     );
   });
 
-  it("/senai-brainstorm with no active run emits the skill and pre-run notify", async () => {
+  it("/senai-brainstorm with no active run emits the skill and brainstorm notify", async () => {
     registerBrainstormCommands(makeApi());
     notifications.length = 0;
     sentMessages.length = 0;
 
     await commandHandlers["senai-brainstorm"]("refine", makeCtx());
 
-    assert.ok(notifications[0].message.includes("pre-run"));
+    assert.ok(
+      notifications[0].message.includes("brainstorm"),
+      `notify should mention brainstorm run, got: ${notifications[0].message}`,
+    );
     assert.strictEqual(sentMessages.length, 1);
     assert.ok(sentMessages[0].includes("Brainstorm Stage"));
     assert.ok(sentMessages[0].includes("Brief location:"));
+    assert.ok(sentMessages[0].includes("Brainstorm run id:"));
   });
 
   it("/senai-brainstorm-approve with no brief warns and skips", async () => {

@@ -1,8 +1,10 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { loadState } from "../core/state.js";
+import { loadState, recordDiscussion, startBrainstorm, type DiscussionEvent } from "../core/state.js";
 import {
+	getBrainstormDiscussionDir,
+	getBrainstormMissionBriefPath,
 	getPreRunDiscussionDir,
 	getPreRunMissionBriefPath,
 	getRunDiscussionsDir,
@@ -10,11 +12,38 @@ import {
 } from "../core/paths.js";
 import { withRunLock, describeHolder } from "../io/lock.js";
 import { finalizeMissionBrief, validateBriefSections } from "../core/mission-brief.js";
-import { recordDiscussion, type DiscussionEvent } from "../core/state.js";
 import { purgeCache as purgeCommunityCache } from "../scouts/community-research.js";
 import { SOURCE_PICKER_OPTIONS } from "../scouts/web-fetcher.js";
 import { loadSkill } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
+
+/** Resolve the brief path for the current brainstorm session. Brainstorm
+ *  run id wins (new flow); then active run id (mid-run brainstorm);
+ *  finally the legacy pre-run folder (backward compat reads only). */
+function resolveBriefPath(cwd: string, state: { runId?: string; brainstormRunId?: string }): string {
+	if (state.brainstormRunId) {
+		return getBrainstormMissionBriefPath(cwd, state.brainstormRunId);
+	}
+	if (state.runId) {
+		return getRunMissionBriefPath(cwd, state.runId);
+	}
+	return getPreRunMissionBriefPath(cwd);
+}
+
+/** Resolve the discussions directory for the current brainstorm session.
+ *  Same precedence as resolveBriefPath. */
+function resolveDiscussionsDir(
+	cwd: string,
+	state: { runId?: string; brainstormRunId?: string },
+): string {
+	if (state.brainstormRunId) {
+		return getBrainstormDiscussionDir(cwd, state.brainstormRunId);
+	}
+	if (state.runId) {
+		return getRunDiscussionsDir(cwd, state.runId);
+	}
+	return getPreRunDiscussionDir(cwd);
+}
 
 export function registerBrainstormCommands(pi: ExtensionAPI) {
 	// /senai-brainstorm is conversational: the parent LLM runs the
@@ -26,8 +55,13 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 		description: "Open a brainstorm with the user to refine the mission: /senai-brainstorm <topic>",
 		handler: async (args, ctx) => {
 			const topic = args.trim();
-			const state = loadState(ctx.cwd);
-			const location = state.runId ? `run ${state.runId}` : "pre-run";
+			const loaded = loadState(ctx.cwd);
+			// Mint (or resume) the brainstorm run id and persist it. The id is
+			// stable across multiple turns of the same session, so the parent
+			// LLM and /senai-brainstorm-approve both see the same folder.
+			const state = startBrainstorm(ctx.cwd, topic, loaded);
+			const brainstormRunId = state.brainstormRunId || "(none)";
+			const location = state.runId ? `run ${state.runId}` : `brainstorm ${brainstormRunId}`;
 			const stage = state.currentStage;
 			ctx.ui.notify(
 				`Opening /senai-brainstorm (${location}, stage '${stage}').\n` +
@@ -35,13 +69,12 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 					`Use /senai-brainstorm-approve to finalize the mission-brief.md.`,
 				"info",
 			);
-			const briefLocation = state.runId
-				? getRunMissionBriefPath(ctx.cwd, state.runId)
-				: getPreRunMissionBriefPath(ctx.cwd);
+			const briefLocation = resolveBriefPath(ctx.cwd, state);
 			const prompt = [
 				`<pi-senai stage="discussion">`,
 				`Topic: ${topic || "(no topic — start with the mission-type question)"}`,
-				`Run: ${state.runId || "(none — pre-run)"}`,
+				`Brainstorm run id: ${brainstormRunId}`,
+				`Active run: ${state.runId || "(none — brainstorm is pre-run)"}`,
 				`Stage: ${state.currentStage}`,
 				`Brief location: ${briefLocation}`,
 				`</pi-senai>`,
@@ -69,9 +102,7 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 		description: "Finalize the current mission-brief.md (clears the draft marker, logs the event)",
 		handler: async (_args, ctx) => {
 			const state = loadState(ctx.cwd);
-			const briefPath = state.runId
-				? getRunMissionBriefPath(ctx.cwd, state.runId)
-				: getPreRunMissionBriefPath(ctx.cwd);
+			const briefPath = resolveBriefPath(ctx.cwd, state);
 
 			if (!fs.existsSync(briefPath)) {
 				ctx.ui.notify(
@@ -112,9 +143,7 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 					// Re-read both state and brief under the lock so concurrent
 					// finalize calls cannot race.
 					const fresh = loadState(ctx.cwd);
-					const liveBriefPath = fresh.runId
-						? getRunMissionBriefPath(ctx.cwd, fresh.runId)
-						: getPreRunMissionBriefPath(ctx.cwd);
+					const liveBriefPath = resolveBriefPath(ctx.cwd, fresh);
 					if (!fs.existsSync(liveBriefPath)) {
 						return { kind: "missing" as const };
 					}
@@ -149,9 +178,7 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 					// Log the event. Re-read the transcript directory under the lock
 					// to find the most recent transcript file (the parent just wrote
 					// one). The directory may be missing if no transcript was written.
-					const transcriptsDir = fresh.runId
-						? getRunDiscussionsDir(ctx.cwd, fresh.runId)
-						: getPreRunDiscussionDir(ctx.cwd);
+					const transcriptsDir = resolveDiscussionsDir(ctx.cwd, fresh);
 					let transcriptPath = "";
 					try {
 						const files = fs
@@ -168,6 +195,7 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 						ts: new Date().toISOString(),
 						transcriptPath: path.relative(ctx.cwd, transcriptPath) || transcriptPath,
 						briefPath: path.relative(ctx.cwd, liveBriefPath),
+						brainstormRunId: fresh.brainstormRunId,
 						afterStage: fresh.runId ? fresh.currentStage : undefined,
 					};
 
@@ -179,6 +207,7 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 						kind: "ok" as const,
 						state: recorded.state,
 						runId: fresh.runId,
+						brainstormRunId: fresh.brainstormRunId,
 					};
 				},
 			);
@@ -217,11 +246,12 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 				return;
 			}
 			// outcome.kind === "ok"
+			const nextHint = outcome.runId
+				? "Next: run /senai-plan again or /senai-approve to continue the run."
+				: "Next: run /senai-plan <mission> to start a run that consumes this brief.";
 			ctx.ui.notify(
 				`Mission brief finalized. Discussions so far: ${outcome.state.discussions ?? 1}.\n` +
-					(outcome.runId
-						? "Next: run /senai-plan again or /senai-approve to continue the run."
-						: "Next: run /senai-plan <mission> to start a run that consumes this brief."),
+					nextHint,
 				"info",
 			);
 		},
