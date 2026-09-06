@@ -35,7 +35,7 @@ This selects:
 
 - Code paths.
 - Input documents.
-- Test paths.
+- Test paths. (Senai scans these — see [How testing works](#how-testing-works).)
 - Excluded paths.
 
 ### 2. Select architect inputs
@@ -76,7 +76,7 @@ This assigns truth documents and comparison documents to each role. The picker s
 /senai-doctor
 ```
 
-This checks all config files, mapped agents, file scopes, and runtime setup. The report opens with a **Setup progress** section that shows which steps are done and names the one next command — so you can run `/senai-doctor` after every step and follow the arrow. It saves a full report to `.IDE_Plans/senai/doctor-report.md`.
+This checks all config files, mapped agents, file scopes, and runtime setup. The report opens with a **Setup progress** section that shows which steps are done and names the one next command — so you can run `/senai-doctor` after every step and follow the arrow. It saves a full report to `.IDE_Plans/pi-senai/doctor-report.md`.
 
 ### Optional: manual agent mapping
 
@@ -149,6 +149,90 @@ Clears the current run state so you can begin a new mission.
 
 ---
 
+## How testing works
+
+Senai writes tests for you during the **Implement** stage. You do not need to do anything extra. But it helps to know what is happening.
+
+### Tests are written first
+
+The Implement stage runs in this order:
+
+```text
+test skeleton → write code → lint → run tests → review → full test
+```
+
+The test files are created **before** the real code. They start empty. Then the code is written to make them pass.
+
+This way "done" is decided before the work starts.
+
+### What a good test looks like
+
+Every test has three parts. Set up, run, check.
+
+```js
+const age = 17;                 // set up
+const result = isAdult(age);    // run
+expect(result).toBe(false);     // check
+```
+
+That is the whole shape. Nothing else belongs in a test.
+
+### Which values get tested
+
+Senai does not test every number. It tests the edge.
+
+If the rule is "18 and over is an adult", it writes three tests:
+
+| Input | Expected |
+| --- | --- |
+| 17 | false |
+| 18 | true |
+| 19 | true |
+
+The edge is where bugs live. Testing 1, 2, 3, 4, 5 proves nothing extra.
+
+### Senai checks your tests
+
+When you run `/senai-approve` at the end of the Implement stage, Senai scans the test files for weak tests. It looks for eight problems. Two of them are marked **blocking**:
+
+| Problem | Why it is bad |
+| --- | --- |
+| A test with no check | It runs, it always passes, it proves nothing. |
+| More than three fake objects in one test | The test is checking the fakes, not your code. |
+
+The other six are warnings — mirror-logic, flaky timing, hidden setup data, testing private methods, one test doing many things, and missing set-up/run/check structure.
+
+You always see the full list in the approval summary.
+
+### How much is enough
+
+- 80% of changed code should have tests.
+- 100% for login, payment, and password code.
+
+The coverage number is shown in the approval summary too.
+
+### Making the checks strict
+
+By default the findings are advisory. You see them and you decide.
+
+Turn on strict mode to be asked for a confirmation before advancing when a blocking finding is present:
+
+```bash
+export SENAI_TEST_DISCIPLINE_STRICT=1
+```
+
+Change the 80% target:
+
+```bash
+export SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR=90
+```
+
+### Full rules
+
+The complete rule list lives in [`skills/senai-implement.md`](../skills/senai-implement.md) under **Testing discipline**.
+
+---
+
 ## Command quick reference
 
 | Command | Purpose |
@@ -175,7 +259,7 @@ Clears the current run state so you can begin a new mission.
 Each run creates a folder under:
 
 ```text
-.IDE_Plans/senai/runs/<run-id>/
+.IDE_Plans/pi-senai/runs/<run-id>/
 ```
 
 Inside you will find:
@@ -194,4 +278,4 @@ deliver/
   deliver-summary.md
 ```
 
-Run state is stored in `.IDE_Plans/senai/state.json`.
+Run state is stored in `.IDE_Plans/pi-senai/state.json`.

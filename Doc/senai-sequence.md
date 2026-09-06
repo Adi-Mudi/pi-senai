@@ -12,6 +12,8 @@
 
 Pi Senai is a stage-gated agent orchestration extension for Pi. Each stage is a sequence of specialized subagents. Every stage ends with a parent approval gate. Running `/senai-approve` advances the run through the completed stage **and** automatically starts the next stage.
 
+**Brainstorm entry point.** Before the Plan stage, a user can run `/senai-brainstorm "<topic>"` to refine the mission in a conversational pass (parent LLM only, no subagents). The brainstorm writes a draft `mission-brief.md` and a transcript (`discussions/discussion-NN-<slug>.md`); `/senai-brainstorm-approve` finalizes the brief. Brainstorms are orthogonal to the stage machine — they do NOT mutate `state.json.stage` and can be opened from any state (`none`, active stages, `delivered`). `/senai-plan` warns before replacing an active run and, when a pre-run brief exists, references it from `state.missionBriefPath`.
+
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
 │  PLAN   │ ──▶ │  IMPLEMENT  │ ──▶ │  DOCUMENT   │ ──▶ │  DELIVER  │
@@ -40,6 +42,8 @@ Pi Senai is a stage-gated agent orchestration extension for Pi. Each stage is a 
 
 Use `/senai-approve` to approve a finished stage and automatically run the next stage. Manual stage commands (`/senai-implement`, `/senai-document`, `/senai-deliver`) can still be used, but they require the preceding stage to be in the exact completed state and its artifacts to exist.
 
+`/senai-approve` and `/senai-brainstorm-approve` share a project-wide run lock at `.IDE_Plans/pi-senai/.lock/meta.json` (PID + heartbeat). They mutually exclude each other so a double-click inside one session or two Pi sessions in the same project cannot race-write `state.json`. Stale locks (dead pid or heartbeat older than `SENAI_LOCK_STALE_MS`, default 60s) are auto-stolen by the next acquire. The full environment contract: `SENAI_LOCK_TIMEOUT_MS` (default 5000), `SENAI_LOCK_STALE_MS` (default 60000), `SENAI_LOCK_HEARTBEAT_MS` (default 5000). `/senai-brainstorm-approve` is also idempotent: a second call on the same already-finalized brief short-circuits with "already finalized" instead of bumping the `discussions` counter.
+
 Configuration commands:
 
 - `/senai-configure-agents` — interactively map Senai roles to subagent names and save `.pi/senai/agents.json`.
@@ -57,15 +61,17 @@ Other commands:
 
 - `/senai-status` — show current stage, mission, run ID, artifact paths, and next command.
 - `/senai-reset` — clear the active run state (artifacts are preserved).
+- `/senai-brainstorm "<topic>"` — open a conversational mission-refinement pass (parent LLM only, no subagents). Invocable from any state. Writes a draft `mission-brief.md` and a transcript `discussions/discussion-NN-<slug>.md`.
+- `/senai-brainstorm-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Brainstorm — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md`.
 
 ---
 
 ## 3. Artifact Layout
 
-All runtime artifacts are stored under `.IDE_Plans/senai/`:
+All runtime artifacts are stored under `.IDE_Plans/pi-senai/`:
 
 ```text
-.IDE_Plans/senai/
+.IDE_Plans/pi-senai/
 ├── state.json
 └── runs/<run-id>/
     ├── plan/
@@ -178,8 +184,13 @@ full-test
 - One writer at a time.
 - The stage must not start until `plan.md` exists.
 
+### Testing discipline (summary)
+
+This stage enforces a testing discipline: AAA structure, equivalence partitioning + boundary value analysis, table-driven cases, property-based tests for pure functions, coverage target 80% / 100% on security-critical paths. The deterministic scanner (`pi-extension/src/test-discipline.ts`) flags 8 anti-patterns — `zero-assertion` and `over-mocking` are blocking; `mirror-logic`, `flaky-timing`, `mystery-guest`, `private-method` are actionable; `no-aaa` is informational. The scanner is exposed as `senai_scan_test_smells`. Strict mode is OFF by default; set `SENAI_TEST_DISCIPLINE_STRICT=1` to promote blocking findings + below-floor coverage to hard gates. Failed required verification steps always block regardless. See `Doc/senai-full-sequence.md` for the full rule set, and `/senai-doctor` for a single-glance audit (the **Testing discipline** section surfaces strict mode, coverage floor, test paths, scanner availability, stage skills, and agent version distribution).
+
 ### Approval Gate
 
+- Before prompting, the orchestrator collects three signals: scan report + coverage + mission verification re-run.
 - If all checks pass → run `/senai-approve` to approve implementation and automatically start the Document stage.
 - If any check fails → fix and re-run the stage.
 
@@ -189,24 +200,24 @@ full-test
 
 ### Purpose
 
-Produce and update all project documentation.
+Fill the documentation skeleton created by `/senai-generate-docs-structure` — few, short, standard-formatted docs.
 
 ### Sequence
 
 ```
-readme-writer      ──┐
-changelog-writer   ──┤
-api-docs-writer    ──┼──▶ All complete
-other-docs-writer  ──┘
+Batch 1 (≤4 writers) ──▶ all artifacts verified ──▶ Batch 2 ──▶ ...
          │
          ▼
   /senai-approve ──▶ auto-starts Deliver
 ```
 
+The stage prompt's **Document writers for this run** block lists each task with its target path, template id, and length cap, grouped into explicit batches. Writers fill the template stub at their target path — they never invent new documents.
+
 ### Notes
 
-- All four writers run in parallel.
-- Each writer works on a different output, so there is no conflict.
+- Writers run in batches of max 4; batch N+1 starts only after every batch-N artifact is verified on disk. Enforcement is the stage prompt plus the completion guard — pi.dev has no official concurrency/locking.
+- Templates and caps come from the doc catalog (`doc-catalog.ts`): Standard Readme (~150 lines), Keep a Changelog (~15 lines/entry), Nygard ADR (~120 lines), Google API style reference pages (~60 lines/symbol), Diátaxis how-to/tutorial/explanation (~150 lines), arc42-lite architecture (~250 lines).
+- Selected types only: a solo project gets a README, not a 123KB CONTRIBUTING.md.
 - No source code edits in this stage.
 
 ### Approval Gate
@@ -243,10 +254,10 @@ archive
 
 ## 8. Runtime Artifacts
 
-All auto-generated files go into `.IDE_Plans/senai/`:
+All auto-generated files go into `.IDE_Plans/pi-senai/`:
 
 ```text
-.IDE_Plans/senai/
+.IDE_Plans/pi-senai/
 ├── state.json
 └── runs/<run-id>/
     ├── plan/

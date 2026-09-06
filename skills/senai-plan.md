@@ -40,6 +40,8 @@ Use the `subagent` tool (provided by `pi-interactive-subagents`) with pi.dev bes
   3. Re-run only the affected reviewers after the fix.
   4. Go back to `AskUserQuestion` only if the issue reveals a requirement only the user can answer.
 - **No isolation parameter** — The subagent tool has no `isolation`/`worktree` parameter; never pass one. Plan-stage agents are read-only on source and each writes only its own artifact file, so parallel writes never collide.
+- **Only real tools** — Call only tools that exist in your toolset. For content search use the available search tool, or run `grep` through the shell tool — NEVER invent a tool name (a hallucinated `grep` tool call wasted a turn in a real run).
+- **The pane's "N denied" counter is NOT missing tools** — it counts the spawning tools (`subagent`, `subagent_resume`, `subagent_interrupt`, `subagents_list`), which generated agents never get by design (`spawning: false`). It does not mean `write` or `bash` is missing. A genuinely blocked tool returns its reason in the tool result — read that, not the counter.
 
 ## Synchronization and checkpoint rules
 
@@ -52,7 +54,11 @@ Use the `subagent` tool (provided by `pi-interactive-subagents`) with pi.dev bes
    - If the agent is `stalled`, or you received a failure / `caller_ping`, interrupt it with `subagent_interrupt({ name: "<name>" })` and wait once.
    - `subagent_interrupt` is soft (turn-level) — if the agent stays alive after the interrupt, tell the user to close its pane manually, then respawn with a unique name (e.g. `-retry` suffix). Never leave two agents of the same role running at once.
    - Only respawn after confirming the original run is no longer healthy.
-4. **Verify every artifact.** After any writer subagent reports completion, confirm its artifact file exists before spawning the next agent. If it is missing, respawn the agent with the failure as feedback.
+4. **Verify every artifact — a "completed" notice is NOT proof.** Process exit does not mean the artifact was written. On EVERY completion notification, immediately run `test -s <artifactPath>` (bash) for the artifact that subagent was assigned:
+   - File exists and is non-empty → proceed to the next step.
+   - File missing or empty → do NOT respawn cold. Call `subagent_resume` with the session path from the result message and instruct the agent to write the file. Cold-respawn only if resume fails.
+   - Never wait after a completed notification — act on it in the same turn.
+   - NEVER ask the user to say "its completed" or to confirm a subagent finished; you own this check.
 5. **Never write a subagent's artifact yourself.** If it cannot finish, fix the spawn (agent, tools, task) and relaunch.
 6. **Strict checkpoints:**
    - Do not start the discussion agent until **all four** `scout-angle_*.md` files exist.
@@ -62,7 +68,12 @@ Use the `subagent` tool (provided by `pi-interactive-subagents`) with pi.dev bes
 
 ## 1. Parallel scouts
 
-Spawn four scouts in parallel. Each must write its own report.
+Read the **Spawn Cadence** block in your stage prompt — it tells you the current tier (A = parallel burst, B = staggered, C = batch-2, D = fully serial) and the exact dispatch rule for this run. The block is generated from `.IDE_Plans/pi-senai/spawn-cadence.json` and demotes automatically on rate-limit errors. Each scout must write its own report.
+
+**429 playbook:** if a result says `Sub-agent "X" failed ... 429` (rate limit / provider overload):
+1. Wait about 60 seconds (e.g. `sleep 60` via bash) before retrying.
+2. Resume the session with `subagent_resume` using the session path from the result — do NOT cold-respawn; a fresh spawn restarts the whole agent and wastes tokens.
+3. Only cold-respawn (with a unique `-retry` name) if resume also fails.
 
 - **scout-1** (agent `scout`): Architecture / big-picture reconnaissance for mission `"<mission>"`. Write to `<scoutAngle1>`.
 - **scout-2** (agent `scout`): Coder Search. Write to `<scoutAngle2>`.
@@ -79,6 +90,11 @@ Spawn one discussion agent (agent `planner`) that reads the four scout reports a
 
 Read `<discussionNotes>` and ask the drafted questions using the **AskUserQuestion** tool. Wait for the answers. Do not proceed until the user answers.
 
+**AskUserQuestion format rules (the tool rejects violations):**
+- Every question MUST end with `?`.
+- The `header` field MUST be at most 12 characters — one short word or acronym (e.g. `Dedup`, `TC-L6`, `Scope`). A real run had calls rejected twice for headers like `isSameDay_ dedup` and `TC-L6 windows`; put the detail in the question text, not the header.
+- Keep question text short; long background belongs in `<discussionNotes>`, not the dialog.
+
 ## 4. Update discussion notes
 
 Append the user's answers to `<discussionNotes>`.
@@ -89,17 +105,29 @@ Append the user's answers to `<discussionNotes>`.
 
 Spawn the planner (agent `planner`) with the mission, the four scout reports, and `<discussionNotes>`. Write the implementation plan to `<plan>`. The plan must contain concrete, executable tasks.
 
+**Size cap:** keep `<plan>` focused — at most ~15KB. The plan is injected into every later stage prompt, so bloat costs tokens on every turn. Move long detail (full file listings, exhaustive code snippets, long rationales) into referenced files under the plan directory (e.g. `plan/notes-<topic>.md`) and link them from the plan.
+
+**Verification section (required):** `<plan>` MUST end with a `## Verification` section listing the exact commands or steps that prove the mission succeeded (e.g. `npm test`, a named test case, a manual check with expected output). The Deliver stage runs this section as the final gate. A plan without it is incomplete — if a reviewer or you find it missing, send the plan back to the planner.
+
 ## 6. Plan overview writer
 
 Spawn the plan-overview writer (agent `planner`) to read `<plan>` and `<discussionNotes>` and write a user-friendly summary to `<planOverview>`.
 
 ## 7. Parallel reviewers
 
-Spawn three reviewers in parallel. Each writes to its assigned path. Wait for all three to finish and confirm their files exist before the approval gate.
+Spawn three reviewers, using the dispatch rule from the **Spawn Cadence** block (same cadence as the scouts — the cadence applies to every parallel subagent burst in this stage). Each writes to its assigned path. On a rate-limit failure (429 / 5xx / stopReason:error), apply the 429 playbook from section 1 (wait ~60s, then `subagent_resume`). Wait for all three to finish and confirm their files exist (non-empty) before the approval gate.
 
 - **reviewer-correctness** → `<reviewCorrectness>`: Is the plan technically correct and complete?
 - **reviewer-security** → `<reviewSecurity>`: Security and privacy concerns?
-- **reviewer-tests** → `<reviewTests>`: Is the test strategy adequate?
+- **reviewer-tests** → `<reviewTests>`: Validate the plan's test strategy against this checklist. Write a blocking issue to `<reviewTests>` if any item is missing:
+  1. `<plan>` ends with a `## Verification` section listing specific commands or named test cases (not "tests pass").
+  2. High-risk areas (auth, money, data loss, concurrency) name explicit test cases.
+  3. Input validation tests are listed (empty, null, max-length, invalid encoding).
+  4. Boundary and edge cases are listed for every numeric / length / range contract.
+  5. The test framework name and test path are named (so the implementer does not have to guess).
+  6. No public contract is left untested.
+  7. Property-based tests are mentioned for pure functions.
+  8. Coverage floor (default 80%) and security-critical paths are named.
 
 ## 8. Approval gate
 

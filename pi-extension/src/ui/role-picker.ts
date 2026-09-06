@@ -1,6 +1,6 @@
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { Key, matchesKey, truncateToWidth } from "@mariozechner/pi-tui";
-import type { RoleGuidance } from "../agent-suggestions.js";
+import type { RoleGuidance } from "../agents/suggestions.js";
 
 export interface RolePickerItem {
   id: string;

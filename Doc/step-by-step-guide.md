@@ -90,7 +90,7 @@ Check the current settings anytime with `/senai-agents`, `/senai-files`, and `/s
 
 What happens:
 
-1. The extension creates `.IDE_Plans/senai/state.json` with the mission and a run ID.
+1. The extension creates `.IDE_Plans/pi-senai/state.json` with the mission and a run ID.
 2. It sets the current stage to `planning`.
 3. It sends the Plan stage skill prompt to the main agent.
 4. The main agent spawns four scouts in parallel:
@@ -102,10 +102,10 @@ What happens:
 6. The main agent asks you those questions live using the **AskUserQuestion** tool.
 7. You answer the questions.
 8. The main agent writes your answers into `discussion-notes.md`.
-9. The planner writes `plan.md` under `.IDE_Plans/senai/runs/<run-id>/plan/`.
-10. The planner also writes `plan-overview.md` under `.IDE_Plans/senai/runs/<run-id>/plan/` for user-friendly reading.
-11. Scout reports are saved under `.IDE_Plans/senai/runs/<run-id>/plan/scouts/`.
-12. Review reports are saved under `.IDE_Plans/senai/runs/<run-id>/plan/reviews/`.
+9. The planner writes `plan.md` under `.IDE_Plans/pi-senai/runs/<run-id>/plan/`.
+10. The planner also writes `plan-overview.md` under `.IDE_Plans/pi-senai/runs/<run-id>/plan/` for user-friendly reading.
+11. Scout reports are saved under `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/`.
+12. Review reports are saved under `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/`.
 
 ### Approve the plan
 
@@ -156,6 +156,45 @@ When the main agent reports that tests and review pass, run:
 ```
 
 Stage advances from `implementing` to `implemented`, then the extension automatically starts the Document stage (`documenting`).
+
+The approve handler now collects three signals before prompting: a test-smell scan report (from `senai_scan_test_smells`), a coverage number (if your project writes `coverage/coverage-summary.json`), and a mission verification re-run (executes each step from `<plan>` `## Verification` via `bash`). Failed required verification steps always block. Coverage and smell findings block only under strict mode — see "Setting up the testing discipline" below for the env vars.
+
+### Setting up the testing discipline
+
+The Implement stage enforces a testing discipline that is opt-in by default. Two environment variables control the strictness:
+
+| # | Variable | Default | Effect |
+|---|---|---|---|
+| 1 | `SENAI_TEST_DISCIPLINE_STRICT=1` | unset | Promote blocking findings + below-floor coverage to hard gates. Without it, all signals are advisory. |
+| 2 | `SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR` | `80` | Minimum line + branch coverage % on changed files. `0` disables the floor. |
+
+To turn on strict mode in your shell for one session:
+
+```bash
+export SENAI_TEST_DISCIPLINE_STRICT=1
+export SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR=80
+```
+
+Or set them in your CI environment so every run enforces the discipline.
+
+The deterministic scanner checks for 8 anti-patterns in test files: `zero-assertion`, `over-mocking` (both blocking), `mirror-logic`, `flaky-timing`, `mystery-guest`, `private-method`, `god-test` (all actionable), and `no-aaa` (informational). It is a pure-TypeScript module at `pi-extension/src/test-discipline.ts` and is registered as the `senai_scan_test_smells` tool — any agent can call it.
+
+After implementing, run `/senai-doctor` to see two new sections in the report:
+
+```
+Testing discipline
+- Strict mode: on / off
+- Coverage floor: 80%
+- Test paths configured: 3 entries in files.json.
+- Scanner module compiled (test-discipline.js present in dist/).
+- Stage skills carry ## Testing discipline: implement, document, deliver.
+- Generated agents on v6: 12 of 14.
+
+Sub-agent generator completeness
+- All 14 GENERATED_ROLES rows have invocationHint + outOfScope.
+```
+
+If the scanner reports stale agents or missing fields, regenerate with `/senai-generate-sub-agents`.
 
 ---
 
@@ -253,7 +292,7 @@ If you want to start over:
 /senai-reset
 ```
 
-This deletes `.IDE_Plans/senai/state.json`. Artifacts under `.IDE_Plans/senai/runs/<run-id>/` are preserved.
+This deletes `.IDE_Plans/pi-senai/state.json`. Artifacts under `.IDE_Plans/pi-senai/runs/<run-id>/` are preserved.
 
 ---
 
@@ -282,5 +321,82 @@ If you prefer to control each stage manually, you can still run `/senai-implemen
 - **Use `/senai-approve` to move forward.** It approves the current stage and automatically runs the next one.
 - **Manual stage commands still work.** `/senai-implement`, `/senai-document`, and `/senai-deliver` are available as overrides.
 - **Each stage is user-driven.** The main agent pauses at each approval gate and waits for you.
-- **Artifacts are local.** Everything lives inside `.IDE_Plans/senai/` in this project directory.
+- **Artifacts are local.** Everything lives inside `.IDE_Plans/pi-senai/` in this project directory.
 - **Subagents need a multiplexer.** Make sure you run Pi inside tmux, zellij, or another supported terminal multiplexer so `pi-interactive-subagents` can spawn subagents.
+
+## Run lock and atomic writes
+
+`/senai-approve` and `/senai-brainstorm-approve` are guarded by a project-wide advisory lock at `.IDE_Plans/pi-senai/.lock/meta.json`. Two Pi sessions in the same project — or a double-click in one session — surface as a clear "Lock busy" error with the holder pid, host, command, and heartbeat age; the second caller waits up to `SENAI_LOCK_TIMEOUT_MS` (default 5000) before failing. A holder whose pid is dead, or whose heartbeat is older than `SENAI_LOCK_STALE_MS` (default 60000), is auto-stolen on the next acquire. Every config and state file the extension writes goes through an atomic helper (temp file + `fsync` + atomic `rename`), so a crash mid-write never leaves a half-written file. `/senai-brainstorm-approve` is also idempotent: a second call on the same already-finalized brief short-circuits with "already finalized" instead of bumping the `discussions` counter.
+
+`/senai-doctor` shows a "Lock state" section that reports the current holder and warns when the heartbeat is older than the stale threshold. Run it any time you suspect a stuck lock.
+
+---
+
+## Running E2E tests
+
+`pi-extension/test/e2e/` contains a Tier-1 end-to-end suite that spawns a real
+`pi --mode rpc` subprocess, drives the slash commands, and asserts the result.
+The suite catches integration regressions that the in-process unit tests miss:
+registration drift, prompt-injection drift, hook wiring, and the full
+Plan → Implement → Document → Deliver state machine.
+
+### Prerequisites
+
+1. `pi` must be on your `PATH`. The RPC harness calls `command -v pi` to
+   confirm. The default symlink at `~/.pi/agent/extensions/pi-orchestra`
+   (kept for backward compatibility) points at this checkout.
+2. `RUN_E2E=1` must be exported. Without it the suite skips every test with
+   the message `"E2E tests require pi binary on PATH and RUN_E2E=1"`.
+
+### Running
+
+```bash
+# unit tests only (fast; default; no prereqs)
+npm test
+
+# end-to-end tests
+RUN_E2E=1 npm run test:e2e
+
+# refresh golden prompts (writes __golden_prompts__/planning.b64)
+RUN_E2E=1 npm run test:e2e:update-snapshots
+```
+
+The suite creates a temporary HOME per test so it never touches your real
+`~/.pi/agent/extensions/` directory. Temp directories are removed on teardown
+even when assertions fail.
+
+### What the suite covers
+
+- `01-registration` — every slash command registered by `pi-senai` shows up
+  in the RPC `get_commands` response (20 commands; names listed in the test).
+- `02-full-lifecycle` — drives the state machine from `planning` to
+  `delivered` and asserts every artifact lands on disk.
+- `03-state-machine` — covers every forward transition in
+  `STAGE_TRANSITIONS` plus the warn-and-ask path when artifacts are missing.
+- `04-prompt-injection` — captures the plan-stage prompt from `get_messages`
+  and matches it against a base64-encoded golden; refresh with
+  `test:e2e:update-snapshots` when the prompt legitimately changes.
+- `05-compaction` — exercises `session_before_compact` and asserts the
+  deterministic summary.
+- `06-spawn-guard` — blocks an untyped `subagent` call and accepts one with
+  `agent: scout-1`.
+- `07-completion-guard` — drives a completion notice through the input
+  hook with a missing artifact and asserts the resume warning is appended.
+- `08-architect-tools` — covers `/senai-configure-architect-inputs` and the
+  warn-and-ask guard in `/senai-generate-architect`.
+- `09-discussion` — pins the pre-run `mission-brief.md` shape consumed by
+  `/senai-plan`.
+
+### Snapshot workflow
+
+The plan-stage golden lives at
+`pi-extension/test/e2e/__golden_prompts__/planning.b64`. It is base64-encoded
+so secrets never leak into git history. To refresh it:
+
+```bash
+RUN_E2E=1 npm run test:e2e:update-snapshots
+git add pi-extension/test/e2e/__golden_prompts__/planning.b64
+```
+
+Diff the change carefully — drift is usually a real prompt regression, not
+a flake.

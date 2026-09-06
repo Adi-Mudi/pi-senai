@@ -13,12 +13,12 @@ Stage-gated agent orchestration extension for Pi — **Plan → Implement → Do
 
 ## What it does
 
-Pi Senai splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/senai/runs/<run-id>/`, and requires user approval before the next stage starts.
+Pi Senai splits software work into four explicit stages. Each stage runs a dedicated skill, produces artifacts in `.IDE_Plans/pi-senai/runs/<run-id>/`, and requires user approval before the next stage starts.
 
-- **Plan** — Spawn four scout agents, interview the user, write an approved `plan.md`.
+- **Plan** — Spawn four scout agents, interview the user, write an approved `plan.md` (capped at ~15KB and ending with a `## Verification` section that proves the mission).
 - **Implement** — Build and test the feature according to the plan.
-- **Document** — Update README, CHANGELOG, API docs, and other project docs.
-- **Deliver** — Run a final security audit and package the deliverable.
+- **Document** — Update README, CHANGELOG, API docs, and other project docs — only the writers a deterministic per-project selection says this project needs.
+- **Deliver** — Re-run the plan's verification steps as a blocking gate, run a final security audit, and package the deliverable.
 
 ## Install
 
@@ -63,6 +63,14 @@ Run these commands in order. The generate commands create your sub-agent team an
    /senai-configure-agents-files
    ```
 
+Optionally, create the documentation skeleton up front — otherwise the Document stage will ask for it when it runs:
+
+```
+/senai-generate-docs-structure
+```
+
+This creates only the docs your project needs: template stubs with fixed section order and hard length caps (Standard Readme, Keep a Changelog, Nygard ADR, Google API style, Diátaxis, arc42-lite), under `docs/tutorials|how-to|reference|explanation|adr/` (only for selected types) with `README.md`/`CHANGELOG.md`/`CONTRIBUTING.md` at the root. Existing hand-written docs are never overwritten.
+
 You can check the current settings with `/senai-agents`, `/senai-files`, and `/senai-agents-files`.
 
 `/senai-configure-agents` is optional: use it only to hand-pick your own agents instead of the generated ones. Pi Senai requires all three configuration files (`agents.json`, `files.json`, `agents_files.json`) before any stage command will run.
@@ -77,9 +85,9 @@ This checks that all config files exist, every mapped agent is found in the righ
 
 Once an architecture is generated, doctor also validates it: the seven architecture-bound roles (`scout-1`, `planner`, `implementer`, `reviewer-correctness`, `reviewer-security`, `reviewer-tests`, `code-review`) must map to the generated agents, each generated agent file must be intact (tools, a working skill link, and references to `architecture.md`, the ADRs, and the forbidden patterns), and no generated file may be modified after generation (drift warning).
 
-Doctor is the final authority on your setup. Every report opens with a **Setup progress** section that shows which of the 7 setup steps are done and names the one next command — run `/senai-doctor` after every step and follow the arrow. Beyond the basics it also checks: generated team agents (mandate and technology craft present), technology resources (valid frontmatter, `generic` fallback present), every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), document misassignments (artifact-driven roles carrying truth/comparison documents, a truth document that contradicts the role's expected document type, or a document that does not match the agent's mandate — all errors, with an explicit warning when an assignment cannot be verified), and secrets accidentally committed in agent, skill, or config files.
+Doctor is the final authority on your setup. Every report opens with a **Setup progress** section that shows which of the 7 setup steps are done and names the one next command — run `/senai-doctor` after every step and follow the arrow. Beyond the basics it also checks: generated team agents (mandate and technology craft present), technology resources (valid frontmatter, `generic` fallback present), every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), document misassignments (artifact-driven roles carrying truth/comparison documents, a truth document that contradicts the role's expected document type, or a document that does not match the agent's mandate — all errors, with an explicit warning when an assignment cannot be verified), and secrets accidentally committed in agent, skill, or config files. It also audits the subagent extension setup (pi-interactive-subagents present and up to date, no competing subagent providers, no dead package entries), flags stray `tmp_*` helper files left by subagent workarounds, recommends retry/compaction settings for long runs, and treats a run whose stage state disagrees with its artifacts (delivered but missing reports, empty `document/`, implement files in `deliver/`, oversized plan.md) as an error. When a docs skeleton was generated, doctor also validates it: missing stubs warn, filled docs must contain their template's required sections and stay within the length cap, and stray non-stub files in factory docs folders are reported as info.
 
-Every run saves the full report to `.IDE_Plans/senai/doctor-report.md` (overwritten each run).
+Every run saves the full report to `.IDE_Plans/pi-senai/doctor-report.md` (overwritten each run).
 
 ## Usage
 
@@ -95,7 +103,11 @@ The agent will run the Plan stage. When the plan is ready, approve it:
 /senai-approve
 ```
 
-`/senai-approve` marks the current stage complete and automatically starts the next stage. You can also run stages manually when the previous stage is already approved:
+`/senai-approve` marks the current stage complete and automatically starts the next stage. Before advancing it verifies the stage's artifacts — if any are missing or empty it asks whether to advance anyway — and records the outcome in the run's `state.json` (`stageResults`). While a run is active, a completion guard also watches subagent completion notices: if a subagent reports "completed" but its artifact file was never written, the guard appends a resume instruction so the run cannot stall on an empty deliverable.
+
+The Document stage runs as a factory: doc writers fill the template stubs created by `/senai-generate-docs-structure`, working in batches of at most 4 concurrent writers (batch N+1 waits for batch N; enforced by the stage prompt plus the completion guard — pi.dev has no official concurrency/locking). Every write task carries its target path, template id, and length cap, so docs stay few, short, and standard-formatted. Generated doc-writer agents embed the same contract (target, template, cap) in their agent body.
+
+You can also run stages manually when the previous stage is already approved:
 
 ```
 /senai-implement
@@ -113,6 +125,13 @@ Reset the current run:
 
 ```
 /senai-reset
+```
+
+Refine the mission in a conversational pass before planning (parent LLM only, no subagents; invocable from any state):
+
+```
+/senai-brainstorm "<topic>"
+/senai-brainstorm-approve
 ```
 
 ## Agent configuration
@@ -188,6 +207,75 @@ Check the current settings:
 /senai-agents-files
 ```
 
+## Testing discipline
+
+Pi Senai enforces a testing discipline across the four stages. It is opt-in by default — strict mode is off, so all checks are advisory until you opt in.
+
+### What is enforced
+
+Every test written in the **Implement** stage follows these rules:
+
+- **AAA** structure — Arrange, Act, Assert, separated by blank lines or comments
+- **Equivalence partitioning** — one representative value per input class
+- **Boundary value analysis** — boundary, just-below, just-above for every numeric / length / range contract
+- **Naming** — one convention everywhere (`should_<expected>_<when>_<condition>`)
+- **Table-driven / parameterized** cases for repeated logic
+- **Property-based** tests for pure functions (Hypothesis, fast-check, jqwik, proptest, FsCheck)
+- **FIRST** quality — Fast, Independent, Repeatable, Self-validating, Timely
+- **Coverage target** — 80% line + branch on changed files, 100% on security-critical paths
+
+### Anti-patterns the scanner rejects
+
+The deterministic scanner (`pi-extension/src/test-discipline.ts`) flags:
+
+| # | Anti-pattern | Severity | Description |
+|---|---|---|---|
+| 1 | `zero-assertion` | blocking | Test runs but has no assert/expect/should |
+| 2 | `over-mocking` | blocking | More than 3 test doubles in one test |
+| 3 | `mirror-logic` | actionable | Assertion duplicates the production expression (e.g. `assert(add(a,b), a+b)`) |
+| 4 | `flaky-timing` | actionable | `sleep`/`setTimeout` not wrapped in a polling helper |
+| 5 | `no-aaa` | informational | Test body has no blank lines or Arrange/Act/Assert comments |
+| 6 | `mystery-guest` | actionable | Test reads a file from outside the configured fixture paths |
+| 7 | `private-method` | actionable | Test calls a method starting with `_` or `@private` |
+| 8 | `god-test` | actionable | More than 5 asserts or body longer than 50 lines |
+
+### Tool: `senai_scan_test_smells`
+
+Call the scanner on test paths:
+
+```
+senai_scan_test_smells
+```
+
+Or from Node:
+
+```typescript
+import { scanTestFilesOnDisk } from "./dist/pi-extension/src/test-discipline.js";
+const report = scanTestFilesOnDisk(["tests/", "src/**/*.test.ts"]);
+console.log(report.blockingCount, report.findings);
+```
+
+### Environment variables
+
+| # | Variable | Default | Purpose |
+|---|---|---|---|
+| 1 | `SENAI_TEST_DISCIPLINE_STRICT=1` | unset | Promote blocking findings + below-floor coverage to hard gates (otherwise advisory) |
+| 2 | `SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR` | 80 | Minimum line + branch coverage % on changed files (0 disables the floor) |
+
+### Where the discipline shows up
+
+| # | Where | What |
+|---|---|---|
+| 1 | `skills/senai-implement.md` | `## Testing discipline` block tells the orchestrator what good tests look like; `## Approval gate` requires scan + coverage + verification before prompting |
+| 2 | `skills/senai-document.md` | Orchestrator must run `npm test` AND `senai_scan_test_smells` before presenting the doc-stage approval gate |
+| 3 | `skills/senai-deliver.md` | Orchestrator must re-scan and block on any NEW blocking finding not seen at implement-end (drift detection) |
+| 4 | Generated `<project>-test-skeleton.md` | Carries the discipline rules in its `## Your mandate`; its `## Out of scope` forbids implementing source code |
+| 5 | Generated `<project>-linter.md` | Flags the 8 anti-patterns alongside style violations |
+| 6 | Generated `<project>-full-test.md` | Refuses to declare success when there are skipped tests without TODO comments |
+| 7 | Generated doc-writer agents | `## Out of scope` forbids modifying test files or tested code examples |
+| 8 | Architecture-generated `implementer` / `reviewer-tests` / `reviewer-correctness` | `## Testing discipline` / `## Review checklist` / `## Anti-pattern scan` sections |
+| 9 | `/senai-doctor` | Two new sections: **Testing discipline** (strict mode, coverage, scanner, skills, version distribution) and **Sub-agent generator completeness** (every GENERATED_ROLES row has the v5 fields) |
+
 ## Architecture generation
 
 Pi Senai can generate project-specific architecture agents and skills from your requirements documents.
@@ -253,7 +341,7 @@ To add a technology: copy `resources/technologies/_template.md` to `<technology>
 ## Artifact layout
 
 ```
-.IDE_Plans/senai/
+.IDE_Plans/pi-senai/
   state.json
   runs/
     YYYY-MM-DD-HH-MM-<mission-slug>/

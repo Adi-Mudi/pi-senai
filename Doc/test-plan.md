@@ -356,7 +356,7 @@ Suite total after this round: **978 tests, 0 fail**.
 
 ### Known issue — FIXED (2026-08-20)
 
-- ~~A corrupted `.IDE_Plans/senai/state.json` makes `loadState` throw, and the
+- ~~A corrupted `.IDE_Plans/pi-senai/state.json` makes `loadState` throw, and the
   throw propagates through `buildSenaiCompactionSummary` into pi's compaction
   pipeline.~~ Fixed: `buildSenaiCompactionSummary` now catches the throw and
   returns null, so pi's default compaction applies and the pipeline never
@@ -386,3 +386,65 @@ Suite total after this round: **978 tests, 0 fail**.
   branches).
 
 Suite total after closing: **999 tests, 0 fail**.
+
+## 15. Senai-fix + doc-factory coverage round (2026-08-28)
+
+Scope: unit + stress coverage for the features shipped by
+`.IDE_Plans/pi-senai-fix_plan_20260827_1415_v1.1.md` (completion guard,
+approve-time artifact verification, `stageResults` recording, run-id
+sanitization, doctor subagent-extension and stray-files checks) and
+`.IDE_Plans/doc-factory_plan_20260828_v1.0.md` (doc catalog, doc selection,
+`/senai-generate-docs-structure`, doctor docs-factory validation).
+No source changes — tests pin current behavior. Plan:
+`.IDE_Plans/test-coverage_plan_20260828_v1.0.md`.
+
+### Unit tests added per module
+
+| Test file | New tests | Coverage |
+|---|---|---|
+| `completion-guard.test.ts` | 8 | `subagent_resume` spawn recording; empty name/task record nothing; delivered-stage spawns not recorded; multi-artifact partial-missing warning lists only the missing file; re-spawn overwrites the record; `extractArtifactPaths` with a regex-char runId (lookalike path NOT matched) |
+| `doc-selection.test.ts` | 5 | full 5-task project batches 4+1; block shows `Batch 2:` and the `max 250 lines` architecture line; corrupt `architect-profile.json` → no architecture task, no throw; `pkg.types`/string `exports` add api-docs-writer, numeric `version` does not add changelog-writer; manifest `docType`/`maxLines` fields + byte-identical second run |
+| `doc-catalog.test.ts` | 3 | every template's own line count ≤ its `maxLines`; folder-owning types end with `/`, single-file types do not; `isDocStub` rejects mid-file marker and empty string |
+| `constants.test.ts` | 3 | `makeRunId` strips Windows paths; `./relative` keeps the name (see deviation below); unicode-only mission → `run` fallback |
+| `prompt.test.ts` | 2 | document-stage prompt includes `## Document writers for this run`, plan stage does not; `substituteArtifactPaths` replaces all 12 artifact placeholders |
+| `state.test.ts` | 1 | `advanceStage` with a stageResult on an illegal transition → `ok: false`, nothing recorded |
+| `commands.test.ts` | 4 | approve at `documenting` with empty `document/` → warn-and-ask, decline keeps the stage; compaction at exactly 40% (80000/200000, percent null) compacts; 79999/200000 does not; `/senai-generate-docs-structure` with a real README notifies `kept 1 existing doc(s)` and never touches the bytes |
+| `index.test.ts` | 4 | input hook appends `[pi-senai artifact guard]` to extension-source completions with a missing artifact; non-extension source ignored even when text matches; tool_call → input round trip (incl. `subagent_resume`); `senai-generate-docs-structure` command registered |
+| `doctor.test.ts` | 11 | corrupt docs-structure manifest warning; required sections out of order warn as missing; exactly-at-cap no warning, one line over warns; unknown `docType` skipped silently; delivered + empty `document/` error; `deliver/lint-report.md` misplaced error; plan.md 51KB warns, exactly 50KB does not; stray `tmp_*` files in root + run dirs named, clean project ok; `compareVersions` numeric segment compare; Subagent extension section exists and matches the machine's real settings.json |
+| `agent-generator.test.ts` | 3 | api-docs-writer contract `Target: docs/reference/` + api-reference template; other-docs-writer contract uses the how-to template; a `generator v3`-footered team agent is flagged stale by doctor |
+| `smoke.test.ts` | 1 | after the full lifecycle, `stageResults` has `planning`/`implementing`/`documenting`/`delivering` entries, each recording the approval |
+
+### Stress tests added (stress.test.ts)
+
+| Scenario | Volume | Asserts |
+|---|---|---|
+| completion-guard volume | 2,000 spawn+completion pairs | every decision correct (warning iff artifact missing) |
+| completion-guard corruption storm | 1,000 cycles, corrupt state.json | never throws, always steps aside |
+| doc-selection determinism | 500-file project x 500 iterations | byte-identical plan JSON every time |
+| doc-catalog render storm | 9 templates x 1,000 renders | every render is a stub, has required sections, within cap |
+| generateDocsStructure idempotency | 50 consecutive runs | kept set identical, non-stub bytes hash-stable, manifest identical |
+| approve verification | 100 sibling run folders x 100 iterations | exact missing-artifact labels, siblings ignored |
+| makeRunId fuzz | 10,000 pathological missions | format regex, slug ≤ 40, no UUID/hex residue |
+| doctor docs-factory | 200 filled docs (100 over cap + 100 missing sections) x 10 runs | exactly 200 warnings, each file named once, deterministic output |
+
+### Excluded / untestable this round
+
+- None new. `compareVersions` is exported and tested directly;
+  `checkSubagentExtension` is not exported and reads the real
+  `getAgentDir()/settings.json`, so it is covered section-level through
+  `runSenaiDiagnostic` with assertions that branch on the machine's real
+  settings (same precedent as the retry-environment test).
+- The Windows-separator arm of `extractArtifactPaths`
+  (`runDirRel.replace(/\\/g, "/")`) is not exercisable on Linux —
+  `path.join` never emits `\`; the test pins the forward-slash behavior and
+  carries a comment noting the limitation.
+
+### Deviation recorded during this round
+
+- The gap analysis expected `makeRunId("./relative")` to fall back to `run`.
+  Actual behavior (verified against `dist/`): the path-token regex requires a
+  letter before the slash, so `./` is dropped by the generic non-alphanumeric
+  stripper and the slug is `relative`. The test pins the real behavior with a
+  `// NOTE` comment.
+
+Suite total after this round: **1182 tests, 0 fail** (+53: 45 unit + 8 stress).

@@ -6,10 +6,12 @@ import * as path from "node:path";
 import {
   checkStageArtifact,
   registerCommands,
+  registerBrainstormCommands,
   registerAgentCommands,
   registerFilesCommands,
   registerAgentsFilesCommands,
   registerDoctorCommand,
+  registerDocsStructureCommand,
   registerArchitectInputsCommands,
   registerArchitectCommand,
   registerAgentGeneratorCommand,
@@ -19,22 +21,23 @@ import {
   isPathConflict,
   isFolderLike,
   defaultArchitectSkill,
-} from "../src/commands.js";
-import { loadState, startRun, advanceStage } from "../src/state.js";
-import type { SenaiState } from "../src/state.js";
-import type { Stage } from "../src/constants.js";
+  listMissingStageArtifacts,
+} from "../src/commands/index.js";
+import { loadState, startRun, advanceStage } from "../src/core/state.js";
+import type { SenaiState } from "../src/core/state.js";
+import type { Stage } from "../src/core/paths.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { saveAgentConfig, CONFIG_COMMENT } from "../src/agent-config.js";
-import { saveFilesConfig, loadFilesConfig, FILES_CONFIG_COMMENT } from "../src/files-config.js";
-import { saveAgentsFilesConfig, loadAgentsFilesConfig, AGENTS_FILES_CONFIG_COMMENT } from "../src/agents-files-config.js";
+import { saveAgentConfig, CONFIG_COMMENT } from "../src/agents/config.js";
+import { saveFilesConfig, loadFilesConfig, FILES_CONFIG_COMMENT } from "../src/agents/files-config.js";
+import { saveAgentsFilesConfig, loadAgentsFilesConfig, AGENTS_FILES_CONFIG_COMMENT } from "../src/agents/agents-files-config.js";
 import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
   ARCHITECT_INPUTS_CONFIG_COMMENT,
-} from "../src/architect-inputs-config.js";
-import { saveArchitectReport, slugify } from "../src/architect.js";
+} from "../src/architect/inputs-config.js";
+import { saveArchitectReport, slugify } from "../src/architect/index.js";
 import { resolveSkillPath } from "../src/prompt.js";
-import { DEFAULT_AGENTS, type SenaiRole } from "../src/agent-suggestions.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "../src/agents/suggestions.js";
 
 describe("commands", () => {
   let tmpDir: string;
@@ -125,6 +128,7 @@ describe("commands", () => {
 
   it("registerCommands registers all senai commands", () => {
     registerCommands(makeApi());
+    registerBrainstormCommands(makeApi());
 
     [
       "senai-plan",
@@ -134,6 +138,8 @@ describe("commands", () => {
       "senai-status",
       "senai-approve",
       "senai-reset",
+      "senai-brainstorm",
+      "senai-brainstorm-approve",
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
   });
 
@@ -398,6 +404,121 @@ describe("commands", () => {
     assert.ok(sentMessages.some((m) => m.includes("Implement Stage")));
   });
 
+  it("senai-approve compacts on absolute tokens when percent is null", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    sentMessages.length = 0;
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    // percent null (e.g. right after a provider gap), but tokens known and
+    // above 40% of the window — the gate must still fire.
+    ctx.getContextUsage = () => ({ tokens: 90000, contextWindow: 200000, percent: null });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 1);
+  });
+
+  function writePlanArtifacts(cwd: string, runId: string): void {
+    const runDir = path.join(cwd, ".IDE_Plans", "pi-senai", "runs", runId);
+    fs.writeFileSync(path.join(runDir, "plan", "plan.md"), "# plan\n", "utf8");
+    for (let i = 1; i <= 4; i++) {
+      fs.writeFileSync(path.join(runDir, "plan", "scouts", `scout-angle_${i}.md`), "scout\n", "utf8");
+    }
+  }
+
+  it("senai-approve warns about missing artifacts and does not advance when declined", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    // plan.md and the scout reports were never written.
+    const confirmTitles: string[] = [];
+    let confirmCount = 0;
+    const ctx = makeCtx();
+    ctx.ui.confirm = async (title: string) => {
+      confirmTitles.push(title);
+      confirmCount += 1;
+      return confirmCount === 1; // approve the stage, decline the missing-artifacts override
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.deepStrictEqual(confirmTitles, ["Approve stage", "Artifacts missing"]);
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+    assert.strictEqual(sentMessages.length, 1, "no next-stage prompt should be sent");
+  });
+
+  it("senai-approve advances with artifacts verified and records the stage result", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    const runId = loadState(tmpDir).runId;
+    writePlanArtifacts(tmpDir, runId);
+
+    const confirmTitles: string[] = [];
+    const ctx = makeCtx();
+    ctx.ui.confirm = async (title: string) => {
+      confirmTitles.push(title);
+      return true;
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.deepStrictEqual(confirmTitles, ["Approve stage"], "no missing-artifacts confirm");
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.currentStage, "implementing");
+    assert.match(state.stageResults.planning ?? "", /^approved .*; artifacts: verified$/);
+  });
+
+  it("senai-approve advances on confirmed missing artifacts and records the outcome", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const ctx = makeCtx(); // confirm always true: approve + advance anyway
+    await commandHandlers["senai-approve"]("", ctx);
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.currentStage, "implementing");
+    assert.match(state.stageResults.planning ?? "", /artifacts: missing 5 \(user confirmed\)$/);
+  });
+
+  it("listMissingStageArtifacts reports per-stage expectations", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    const runId = loadState(tmpDir).runId;
+    const runDir = path.join(tmpDir, ".IDE_Plans", "pi-senai", "runs", runId);
+
+    // plan: plan.md + 4 scouts required.
+    assert.strictEqual(listMissingStageArtifacts(tmpDir, runId, "plan").length, 5);
+    writePlanArtifacts(tmpDir, runId);
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "plan"), []);
+
+    // implement/document: any file in the directory satisfies the check.
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "implement"), [
+      "implement/ (no files)",
+    ]);
+    fs.writeFileSync(path.join(runDir, "implement", "notes.md"), "done\n", "utf8");
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "implement"), []);
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "document"), [
+      "document/ (no files)",
+    ]);
+
+    // deliver: both report files required and non-empty.
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "deliver"), [
+      "deliver/security-report.md",
+      "deliver/deliver-summary.md",
+    ]);
+    fs.writeFileSync(path.join(runDir, "deliver", "security-report.md"), "ok\n", "utf8");
+    fs.writeFileSync(path.join(runDir, "deliver", "deliver-summary.md"), "", "utf8");
+    assert.deepStrictEqual(listMissingStageArtifacts(tmpDir, runId, "deliver"), [
+      "deliver/deliver-summary.md",
+    ]);
+  });
+
   it("senai-approve does not compact on the final approval (no next stage)", async () => {
     registerCommands(makeApi());
     await commandHandlers["senai-plan"]("Mission", makeCtx());
@@ -481,12 +602,12 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create the required plan artifacts for implement to proceed.
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -523,8 +644,8 @@ describe("commands", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -542,8 +663,8 @@ describe("commands", () => {
     const state = startRun(tmpDir, "Mission");
     advanceStage(tmpDir, state, "planning");
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -564,7 +685,7 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "implemented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     notifications.length = 0;
@@ -583,7 +704,7 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "documented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     notifications.length = 0;
@@ -602,14 +723,14 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create plan and implement artifacts so only the stage restriction is tested.
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
@@ -629,11 +750,11 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
-    const scoutsDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "scouts");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
+    const scoutsDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
     fs.writeFileSync(path.join(scoutsDir, "scout-angle_1.md"), "# Scout 1\n");
@@ -659,14 +780,14 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "implemented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const planPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan", "plan.md");
+    const planPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan", "plan.md");
     fs.mkdirSync(path.dirname(planPath), { recursive: true });
     fs.writeFileSync(planPath, "# Plan\n");
 
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
@@ -688,14 +809,14 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "documented";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
-    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
@@ -720,7 +841,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
 
@@ -742,7 +863,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
 
@@ -760,7 +881,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "planned");
     state = advanceTo(tmpDir, state, "implementing");
 
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Notes\n");
 
@@ -776,7 +897,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "implemented");
     state = advanceTo(tmpDir, state, "documenting");
 
-    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
@@ -794,7 +915,7 @@ describe("commands", () => {
     state = advanceTo(tmpDir, state, "documented");
     state = advanceTo(tmpDir, state, "delivering");
 
-    const deliverDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "deliver");
+    const deliverDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "deliver");
     fs.mkdirSync(deliverDir, { recursive: true });
     fs.writeFileSync(path.join(deliverDir, "security-report.md"), "# Security\n");
     fs.writeFileSync(path.join(deliverDir, "deliver-summary.md"), "# Summary\n");
@@ -822,6 +943,58 @@ describe("commands", () => {
     registerCommands(makeApi());
     await commandHandlers["senai-approve"]("", makeCtx());
     assert.ok(notifications[0].message.includes("No active senai run"));
+  });
+
+  it("senai-approve surfaces a busy lock without mutating state", async () => {
+    // Plant a fake lock held by a live pid (process.pid) so acquire blocks.
+    // Use a very short timeout via env to keep the test fast.
+    const previousTimeout = process.env.SENAI_LOCK_TIMEOUT_MS;
+    process.env.SENAI_LOCK_TIMEOUT_MS = "100";
+    try {
+      registerCommands(makeApi());
+      // Start a run so the command does not short-circuit on "no run".
+      await commandHandlers["senai-plan"]("Mission", makeCtx());
+      // Confirm flow: the first dialog answers true.
+      const ctx = makeCtx();
+      ctx.ui.confirm = async () => true;
+      // Plant the lock AFTER the user's confirm so the acquire is the step
+      // that fails.
+      const lockDir = path.join(tmpDir, ".IDE_Plans/pi-senai/.lock");
+      fs.mkdirSync(lockDir, { recursive: true });
+      const now = new Date().toISOString();
+      fs.writeFileSync(
+        path.join(lockDir, "meta.json"),
+        JSON.stringify({
+          pid: process.pid, // live, fresh heartbeat → must block, not steal
+          host: "test",
+          command: "/senai-brainstorm-approve",
+          startedAt: now,
+          heartbeatAt: now,
+          mode: "brainstorm-approve",
+          runId: "other-run",
+        }),
+        "utf8",
+      );
+
+      const stateBefore = loadState(tmpDir);
+      notifications.length = 0;
+      await commandHandlers["senai-approve"]("", ctx);
+
+      // The command must surface a Lock busy error and not advance the stage.
+      const errorMsg = notifications.find((n) => n.type === "error");
+      assert.ok(errorMsg, "expected an error notification");
+      assert.match(errorMsg!.message, /Lock busy/);
+      assert.match(errorMsg!.message, /\/senai-brainstorm-approve/);
+      const stateAfter = loadState(tmpDir);
+      assert.strictEqual(stateAfter.currentStage, stateBefore.currentStage);
+      assert.strictEqual(stateAfter.stageResults["planning"], stateBefore.stageResults["planning"]);
+    } finally {
+      if (previousTimeout === undefined) delete process.env.SENAI_LOCK_TIMEOUT_MS;
+      else process.env.SENAI_LOCK_TIMEOUT_MS = previousTimeout;
+      // Clean up the planted lock dir so it does not leak between tests.
+      const lockDir = path.join(tmpDir, ".IDE_Plans/pi-senai/.lock");
+      fs.rmSync(lockDir, { recursive: true, force: true });
+    }
   });
 
   it("senai-implement rejects from planning stage", async () => {
@@ -1331,6 +1504,17 @@ describe("commands", () => {
     assert.ok(sentMessages.some((m) => m.includes("Architecture setup")));
   });
 
+  it("registerDocsStructureCommand creates stubs and notifies the counts", async () => {
+    registerDocsStructureCommand(makeApi());
+    assert.ok(commandHandlers["senai-generate-docs-structure"]);
+
+    await commandHandlers["senai-generate-docs-structure"]("", makeCtx());
+    assert.ok(fs.existsSync(path.join(tmpDir, "README.md")));
+    assert.ok(fs.existsSync(path.join(tmpDir, ".pi", "senai", "docs-structure.json")));
+    assert.ok(notifications.some((n) => n.message.includes("created 1 stub(s)")));
+    assert.ok(notifications.some((n) => n.message.includes("Next: /senai-plan")));
+  });
+
   it("registerArchitectInputsCommands cancels when main menu is dismissed", async () => {
     registerArchitectInputsCommands(makeApi());
     assert.ok(commandHandlers["senai-configure-architect-inputs"]);
@@ -1822,11 +2006,11 @@ describe("commands", () => {
   it("senai-doctor writes the report artifact", async () => {
     registerDoctorCommand(makeApi());
     await commandHandlers["senai-doctor"]("", makeCtx());
-    const reportPath = path.join(tmpDir, ".IDE_Plans", "senai", "doctor-report.md");
+    const reportPath = path.join(tmpDir, ".IDE_Plans", "pi-senai", "doctor-report.md");
     assert.ok(fs.existsSync(reportPath), "report artifact should be written");
     const content = fs.readFileSync(reportPath, "utf8");
     assert.ok(content.includes("Pi Senai Diagnostic Report"));
-    assert.ok(sentMessages.some((m) => m.includes("Report saved to .IDE_Plans/senai/doctor-report.md")));
+    assert.ok(sentMessages.some((m) => m.includes("Report saved to .IDE_Plans/pi-senai/doctor-report.md")));
   });
 
   it("senai-generate-agents is not registered after the rename", async () => {
@@ -1893,7 +2077,7 @@ describe("commands", () => {
     (ctx.ui as any).confirm = async () => false;
     await commandHandlers["senai-reset"]("", ctx);
 
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     assert.ok(fs.existsSync(statePath), "state file must still exist");
     assert.strictEqual(loadState(tmpDir).currentStage, "planning");
   });
@@ -1907,7 +2091,7 @@ describe("commands", () => {
   });
 
   it("senai-status omits the artifacts section when the run ID is empty", async () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -1937,11 +2121,11 @@ describe("commands", () => {
     let state = loadState(tmpDir);
     state.currentStage = "planned";
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
 
     // Create implement artifacts so only the stage restriction is tested.
-    const implementPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "notes.md");
+    const implementPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "notes.md");
     fs.mkdirSync(path.dirname(implementPath), { recursive: true });
     fs.writeFileSync(implementPath, "# Implement notes\n");
 
@@ -1960,7 +2144,7 @@ describe("commands", () => {
 
     const state = loadState(tmpDir);
     // Create document artifacts so only the stage restriction is tested.
-    const documentPath = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "document", "README.md");
+    const documentPath = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "document", "README.md");
     fs.mkdirSync(path.dirname(documentPath), { recursive: true });
     fs.writeFileSync(documentPath, "# Docs\n");
 
@@ -2243,7 +2427,7 @@ describe("commands", () => {
     advanceStage(tmpDir, state, "planning");
 
     // dirHasFiles counts any entry, so a lone subdirectory is enough.
-    const nestedDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "implement", "nested");
+    const nestedDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "implement", "nested");
     fs.mkdirSync(nestedDir, { recursive: true });
 
     const result = checkStageArtifact(loadState(tmpDir), "implement", makeCtx());
@@ -2371,13 +2555,13 @@ describe("coverage audit gaps", () => {
     const state = loadState(tmpDir);
     state.currentStage = stage;
     state.updatedAt = new Date().toISOString();
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.writeFileSync(statePath, JSON.stringify(state, null, 2));
     return state;
   }
 
   function writePlanArtifacts(state: SenaiState): void {
-    const planDir = path.join(tmpDir, ".IDE_Plans/senai/runs", state.runId, "plan");
+    const planDir = path.join(tmpDir, ".IDE_Plans/pi-senai/runs", state.runId, "plan");
     const scoutsDir = path.join(planDir, "scouts");
     fs.mkdirSync(scoutsDir, { recursive: true });
     fs.writeFileSync(path.join(planDir, "plan.md"), "# Plan\n");
@@ -2826,7 +3010,7 @@ describe("coverage audit gaps", () => {
   });
 
   it("checkStageArtifact treats a missing implement directory as no artifacts", () => {
-    const statePath = path.join(tmpDir, ".IDE_Plans/senai/state.json");
+    const statePath = path.join(tmpDir, ".IDE_Plans/pi-senai/state.json");
     fs.mkdirSync(path.dirname(statePath), { recursive: true });
     fs.writeFileSync(
       statePath,
@@ -2939,5 +3123,360 @@ describe("coverage audit gaps", () => {
     assert.ok(backOffered, "Back should be the first option in the role list");
     assert.strictEqual(fs.readFileSync(configPath, "utf8"), before, "file must be unchanged");
     assert.ok(notifications.some((n) => n.message.includes("cancelled")));
+  });
+});
+
+describe("senai-fix v1.1 approve/docs-structure coverage", () => {
+  let tmpDir: string;
+  let notifications: Array<{ message: string; type: string }>;
+  let sentMessages: string[];
+  let commandHandlers: Record<string, (args: string, ctx: ExtensionContext) => Promise<void>>;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-senai-cmd-cov-"));
+    notifications = [];
+    sentMessages = [];
+    commandHandlers = {};
+    saveAgentConfig(tmpDir, { version: 1, agents: { ...DEFAULT_AGENTS } });
+    saveFilesConfig(tmpDir, {
+      version: 2,
+      codePaths: [],
+      inputDocuments: [],
+      testPaths: [],
+      excludedPaths: [],
+    });
+    saveAgentsFilesConfig(tmpDir, { version: 2, documents: {} });
+  });
+
+  function makeCtx(): ExtensionContext {
+    return {
+      cwd: tmpDir,
+      ui: {
+        notify: (message: string, type: string) => {
+          notifications.push({ message, type });
+        },
+        confirm: async (_title: string, _message: string) => true,
+        input: async () => "",
+        select: async () => "",
+      },
+      getContextUsage: () => undefined,
+      compact: () => {},
+    } as unknown as ExtensionContext;
+  }
+
+  function makeApi(): ExtensionAPI {
+    return {
+      registerCommand: (name: string, cmd: { handler: (args: string, ctx: ExtensionContext) => Promise<void> }) => {
+        commandHandlers[name] = cmd.handler;
+      },
+      registerTool: () => {},
+      on: () => {},
+      registerMessageRenderer: () => {},
+      sendUserMessage: (message: string) => {
+        sentMessages.push(message);
+      },
+      sendMessage: () => {},
+    } as unknown as ExtensionAPI;
+  }
+
+  function writePlanArtifacts(cwd: string, runId: string): void {
+    const runDir = path.join(cwd, ".IDE_Plans", "pi-senai", "runs", runId);
+    fs.writeFileSync(path.join(runDir, "plan", "plan.md"), "# plan\n", "utf8");
+    for (let i = 1; i <= 4; i++) {
+      fs.writeFileSync(path.join(runDir, "plan", "scouts", `scout-angle_${i}.md`), "scout\n", "utf8");
+    }
+  }
+
+  it("senai-approve at documenting with an empty document/ warns and declining keeps the stage", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    const runId = loadState(tmpDir).runId;
+    writePlanArtifacts(tmpDir, runId);
+
+    // Approve planning → implementing (artifacts verified).
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+
+    // Write implement output, approve → documenting.
+    const runDir = path.join(tmpDir, ".IDE_Plans", "pi-senai", "runs", runId);
+    fs.writeFileSync(path.join(runDir, "implement", "notes.md"), "done\n", "utf8");
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "documenting");
+
+    // Approve documenting with an empty document/ dir: warn-and-ask; decline.
+    const confirmTitles: string[] = [];
+    let confirmCount = 0;
+    const ctx = makeCtx();
+    ctx.ui.confirm = async (title: string) => {
+      confirmTitles.push(title);
+      confirmCount += 1;
+      return confirmCount === 1; // approve the stage, decline the missing-artifacts override
+    };
+    sentMessages.length = 0;
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.deepStrictEqual(confirmTitles, ["Approve stage", "Artifacts missing"]);
+    assert.strictEqual(loadState(tmpDir).currentStage, "documenting", "stage must not advance when declined");
+    assert.strictEqual(sentMessages.length, 0, "no next-stage prompt should be sent");
+  });
+
+  it("senai-approve compacts at exactly 40% of the context window (percent null)", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 80000, contextWindow: 200000, percent: null });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 1, "80000/200000 is exactly 40% — must compact");
+  });
+
+  it("senai-approve does not compact just below 40% (79999/200000, percent null)", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const compactCalls: unknown[] = [];
+    const ctx = makeCtx();
+    ctx.getContextUsage = () => ({ tokens: 79999, contextWindow: 200000, percent: null });
+    ctx.compact = (options?: unknown) => {
+      compactCalls.push(options);
+    };
+
+    await commandHandlers["senai-approve"]("", ctx);
+
+    assert.strictEqual(loadState(tmpDir).currentStage, "implementing");
+    assert.strictEqual(compactCalls.length, 0, "79999/200000 is below 40% — must not compact");
+  });
+
+  it("senai-generate-docs-structure notifies kept docs on a second run with a real README", async () => {
+    fs.writeFileSync(path.join(tmpDir, "README.md"), "# My real README\n", "utf8");
+    registerDocsStructureCommand(makeApi());
+
+    await commandHandlers["senai-generate-docs-structure"]("", makeCtx());
+
+    assert.ok(
+      notifications.some((n) => n.message.includes("created 0 stub(s), kept 1 existing doc(s)")),
+      `expected the kept count in the notification, got: ${notifications.map((n) => n.message).join(" | ")}`,
+    );
+    assert.ok(
+      notifications.some((n) => n.message.includes("Kept (existing, not overwritten):")),
+      "kept block listed",
+    );
+    assert.strictEqual(
+      fs.readFileSync(path.join(tmpDir, "README.md"), "utf8"),
+      "# My real README\n",
+      "real README must be untouched",
+    );
+  });
+
+  // /senai-brainstorm command cases — share closure with the main describe so
+  // tmpDir / makeApi / makeCtx / commandHandlers / notifications / sentMessages
+  // are all in scope.
+  it("/senai-plan does NOT warn when state is none", async () => {
+    registerCommands(makeApi());
+    notifications.length = 0;
+    sentMessages.length = 0;
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+    assert.ok(!notifications.some((n) => n.message.includes("Active run in progress")));
+  });
+
+  it("/senai-plan does NOT warn when state is delivered", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+    // Approve through all stages to reach delivered.
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    await commandHandlers["senai-approve"]("", makeCtx());
+    assert.strictEqual(loadState(tmpDir).currentStage, "delivered");
+
+    notifications.length = 0;
+    await commandHandlers["senai-plan"]("New", makeCtx());
+    assert.ok(!notifications.some((n) => n.message.includes("Active run in progress")));
+    assert.strictEqual(loadState(tmpDir).currentStage, "planning");
+    assert.strictEqual(loadState(tmpDir).mission, "New");
+  });
+
+  it("/senai-plan warns and cancels when a run is active and the user declines", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("First", makeCtx());
+    // Now in 'planning' (active). Try to start another.
+    notifications.length = 0;
+
+    const ctx = makeCtx();
+    ctx.ui.confirm = async () => false;
+    await commandHandlers["senai-plan"]("Second", ctx);
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.currentStage, "planning", "state must not advance");
+    assert.strictEqual(state.mission, "First", "mission must not change");
+    assert.ok(
+      notifications.some((n) =>
+        n.message.includes("Active run in progress") ||
+        n.message.includes("Cancelled"),
+      ),
+    );
+  });
+
+  it("/senai-plan warns and proceeds when the user confirms", async () => {
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("First", makeCtx());
+
+    const ctx = makeCtx();
+    ctx.ui.confirm = async () => true;
+    await commandHandlers["senai-plan"]("Second", ctx);
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.mission, "Second", "mission replaced on confirm");
+    assert.strictEqual(state.currentStage, "planning");
+  });
+
+  it("/senai-plan consumes a pre-run mission-brief.md and stores missionBriefPath", async () => {
+    const briefRel = ".IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md";
+    fs.mkdirSync(path.dirname(path.join(tmpDir, briefRel)), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, briefRel), "## Refined mission\nfoo\n", "utf8");
+
+    registerCommands(makeApi());
+    await commandHandlers["senai-plan"]("Mission", makeCtx());
+
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.missionBriefPath, briefRel);
+    assert.ok(
+      notifications[0].message.includes(`Pre-run mission brief consumed: ${briefRel}`),
+    );
+  });
+
+  it("/senai-brainstorm with no active run emits the skill and pre-run notify", async () => {
+    registerBrainstormCommands(makeApi());
+    notifications.length = 0;
+    sentMessages.length = 0;
+
+    await commandHandlers["senai-brainstorm"]("refine", makeCtx());
+
+    assert.ok(notifications[0].message.includes("pre-run"));
+    assert.strictEqual(sentMessages.length, 1);
+    assert.ok(sentMessages[0].includes("Brainstorm Stage"));
+    assert.ok(sentMessages[0].includes("Brief location:"));
+  });
+
+  it("/senai-brainstorm-approve with no brief warns and skips", async () => {
+    registerBrainstormCommands(makeApi());
+    notifications.length = 0;
+
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
+
+    assert.ok(notifications[0].message.includes("No mission-brief.md found"));
+  });
+
+  it("/senai-brainstorm-approve finalizes a brief and appends a discussionEvents entry", async () => {
+    // Pre-create a brief AND a transcript file under pre-run, so the
+    // approve command has something to record against.
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    const briefPath = path.join(preDir, "mission-brief.md");
+    fs.writeFileSync(
+      briefPath,
+      [
+        "<!-- pi-senai mission-brief: draft -->",
+        "## Problem statement\nx",
+        "## Mission type\nfeature",
+        "## Success criteria\n- ok",
+        "## Out-of-scope\n- n/a",
+        "## Open questions\n- none",
+        "## Refined mission\nm",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(preDir, "discussion-01-refine.md"), "t", "utf8");
+
+    registerBrainstormCommands(makeApi());
+    notifications.length = 0;
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
+
+    const after = fs.readFileSync(briefPath, "utf8");
+    assert.ok(!after.startsWith("<!-- pi-senai mission-brief: draft -->"));
+    const state = loadState(tmpDir);
+    assert.strictEqual(state.discussions, 1);
+    assert.strictEqual(state.discussionEvents?.length, 1);
+    assert.strictEqual(state.discussionEvents?.[0].transcriptPath, ".IDE_Plans/pi-senai/discussions/pre-run/discussion-01-refine.md");
+    assert.strictEqual(state.discussionEvents?.[0].afterStage, undefined, "pre-run has no afterStage");
+    assert.ok(notifications[0].message.includes("Mission brief finalized"));
+  });
+
+  it("/senai-brainstorm-approve warns before finalizing a brief with missing sections", async () => {
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    const briefPath = path.join(preDir, "mission-brief.md");
+    fs.writeFileSync(
+      briefPath,
+      [
+        "<!-- pi-senai mission-brief: draft -->",
+        "## Problem statement\nx",
+        // All other sections missing.
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(preDir, "discussion-01-test.md"), "t", "utf8");
+
+    registerBrainstormCommands(makeApi());
+    const ctx = makeCtx();
+    ctx.ui.confirm = async () => false;
+    notifications.length = 0;
+    await commandHandlers["senai-brainstorm-approve"]("", ctx);
+
+    // Marker stays because the user declined the missing-sections override.
+    assert.ok(fs.readFileSync(briefPath, "utf8").startsWith("<!-- pi-senai mission-brief: draft -->"));
+    assert.ok(
+      notifications.some((n) => n.message.includes("Cancelled")),
+      "declining the gaps override emits a Cancelled notify",
+    );
+    assert.ok((loadState(tmpDir).discussions ?? 0) === 0);
+  });
+
+  it("/senai-brainstorm-approve is idempotent — second call does not duplicate the event", async () => {
+    const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
+    fs.mkdirSync(preDir, { recursive: true });
+    const briefPath = path.join(preDir, "mission-brief.md");
+    fs.writeFileSync(
+      briefPath,
+      [
+        "<!-- pi-senai mission-brief: draft -->",
+        "## Problem statement\nx",
+        "## Mission type\nfeature",
+        "## Success criteria\n- ok",
+        "## Out-of-scope\n- n/a",
+        "## Open questions\n- none",
+        "## Refined mission\nm",
+      ].join("\n"),
+      "utf8",
+    );
+    fs.writeFileSync(path.join(preDir, "discussion-01-once.md"), "t", "utf8");
+
+    registerBrainstormCommands(makeApi());
+    notifications.length = 0;
+
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
+    const afterFirst = loadState(tmpDir);
+    assert.strictEqual(afterFirst.discussions, 1);
+
+    // Second call: marker is already gone, the most-recent event references
+    // this exact brief. The handler short-circuits with an info message and
+    // does NOT bump the counter.
+    notifications.length = 0;
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
+    const afterSecond = loadState(tmpDir);
+    assert.strictEqual(afterSecond.discussions, 1, "second call must not bump the counter");
+    assert.strictEqual(afterSecond.discussionEvents?.length, 1, "no duplicate event appended");
+    assert.ok(
+      notifications.some((n) => n.message.includes("already finalized")),
+      "second call emits an already-finalized info",
+    );
   });
 });

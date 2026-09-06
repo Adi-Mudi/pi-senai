@@ -13,6 +13,8 @@
 
 Senai runs software work as a sequence of gated stages. Each stage is one slash command. Each command launches a chain of specialized subagents. The parent Pi session owns every decision — no stage advances without approval. Once a stage is approved with `/senai-approve`, the next stage starts automatically.
 
+**Brainstorm entry point.** Before the Plan stage, a user can run `/senai-brainstorm "<topic>"` to refine the mission in a conversational pass (parent LLM only, no subagents). The brainstorm writes a draft `mission-brief.md` and a transcript (`discussions/discussion-NN-<slug>.md`); `/senai-brainstorm-approve` finalizes the brief. Brainstorms are orthogonal to the stage machine — they do NOT mutate `state.json.stage` and can be opened from any state (`none`, active stages, `delivered`). `/senai-plan` warns before replacing an active run and, when a pre-run brief exists, references it from `state.missionBriefPath`.
+
 ```
 ┌─────────┐     ┌─────────────┐     ┌─────────────┐     ┌───────────┐
 │  PLAN   │ ──▶ │  IMPLEMENT  │ ──▶ │  DOCUMENT   │ ──▶ │  DELIVER  │
@@ -34,7 +36,7 @@ Senai runs software work as a sequence of gated stages. Each stage is one slash 
 
 | Stage | Command | Purpose | Output |
 |-------|---------|---------|--------|
-| 1. Plan | `/senai-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` + user-facing `plan-overview.md` |
+| 1. Plan | `/senai-plan "<mission>"` | Research and plan before coding | Approved `.IDE_Plans/pi-senai/runs/<run-id>/plan/plan.md` + user-facing `plan-overview.md` |
 | 2. Implement | `/senai-implement` | Build and test the approved plan | Working, tested code |
 | 3. Document | `/senai-document` | Write all project docs | Updated README, CHANGELOG, API docs, etc. |
 | 4. Deliver | `/senai-deliver` | Security audit and package | `security-report.md` + `deliver-summary.md` |
@@ -58,6 +60,11 @@ Other commands:
 
 - `/senai-status` — show current stage, mission, run ID, artifacts, and next command.
 - `/senai-reset` — clear the active run state (artifacts are preserved).
+- `/senai-brainstorm "<topic>"` — open a conversational mission-refinement pass (parent LLM only, no subagents). Invocable from any state. Writes a draft `mission-brief.md` and a transcript `discussions/discussion-NN-<slug>.md`.
+- `/senai-brainstorm-approve` — finalize `mission-brief.md` (clears the draft marker) and append a `discussionEvents` entry to `state.json`. If the run is active, appends one `## Brainstorm — <date>` section to the run's `mission-brief.md`; if no run is active, writes to `.IDE_Plans/pi-senai/discussions/pre-run/mission-brief.md`.
+- `/senai-cadence-status` — show the current Plan-stage spawn cadence tier (read-only).
+- `/senai-cadence-reset` — reset the spawn cadence to tier A (with confirm dialog).
+- `/senai-lock-info` and `/senai-lock-force` — inspect or force-take the project-wide run lock.
 
 ---
 
@@ -175,22 +182,33 @@ Auto-starts Implement
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
-| 1 | scout-1 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_1.md` |
-| 1 | scout-2 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_2.md` |
-| 1 | scout-3 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_3.md` |
-| 1 | scout-4 | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/scouts/scout-angle_4.md` |
+| 1 | scout-1 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_1.md` |
+| 1 | scout-2 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_2.md` |
+| 1 | scout-3 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_3.md` |
+| 1 | scout-4 | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/scouts/scout-angle_4.md` |
 | 2 | discussion | lineage-only | Drafts interview questions for the user |
 | 3 | parent + user | main session | User answers via `AskUserQuestion` |
-| 4 | planner | lineage-only | `.IDE_Plans/senai/runs/<run-id>/plan/plan.md` |
-| 5 | plan-overview | lineage-only | `.IDE_Plans/senai/runs/<run-id>/plan/plan-overview.md` |
-| 6 | reviewer-correctness | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-correctness.md` |
-| 6 | reviewer-security | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-security.md` |
-| 6 | reviewer-tests | fresh | `.IDE_Plans/senai/runs/<run-id>/plan/reviews/review-tests.md` |
+| 4 | planner | lineage-only | `.IDE_Plans/pi-senai/runs/<run-id>/plan/plan.md` |
+| 5 | plan-overview | lineage-only | `.IDE_Plans/pi-senai/runs/<run-id>/plan/plan-overview.md` |
+| 6 | reviewer-correctness | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/review-correctness.md` |
+| 6 | reviewer-security | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/review-security.md` |
+| 6 | reviewer-tests | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/plan/reviews/review-tests.md` |
 
 ### Interview Step
 - The discussion agent reads all scout outputs and drafts 2-5 focused questions.
 - The main agent asks the user via the `AskUserQuestion` tool.
 - The main agent appends the user's answers to `discussion-notes.md`.
+
+### Spawn Cadence (adaptive)
+- The Plan stage runs four scouts in parallel and three reviewers in parallel. Burst-firing them all at once can trip provider 429 rate limits; firing them strictly serially is wasteful for users with healthy quotas.
+- An adaptive cadence module (`pi-extension/src/spawn-cadence.ts`) persists a per-project dispatch tier in `.IDE_Plans/pi-senai/spawn-cadence.json`. The Plan-stage prompt injects a `Spawn Cadence (adaptive)` block with the current tier's exact dispatch rule. Four tiers, in order of decreasing speed:
+  - **A (parallel burst, default start)** — launch all N at once.
+  - **B (staggered)** — launch one, sleep 5s, launch the next.
+  - **C (batch-2)** — launch 2, sleep 10s, launch next 2.
+  - **D (fully serial, floor)** — launch one, wait for artifact, launch next.
+- Demotion triggers: a rate-limit-style error in any extension steer (429 / 5xx / `stopReason:error` from pi-interactive-subagents v3.7.2+). Other errors (auth, network, tool bugs, missing artifacts) do NOT trigger demotion — slower spawning will not fix those.
+- Promotion: 3 consecutive clean Plan-stage approvals (counted automatically by `/senai-approve`). Tier D is the floor and requires 7 clean runs + a manual `/senai-cadence-reset` to escape.
+- The Document / Implement / Deliver stages are unchanged by this feature.
 
 ### Approval Gate
 - If the plan and reviews look good → run `/senai-approve`. This marks the plan approved and automatically starts the Implement stage.
@@ -238,19 +256,46 @@ Auto-starts Document
 |------|-------|---------|---------|
 | 1 | test-skeleton | lineage-only | Write test stubs and scaffolding first |
 | 2 | implementer | lineage-only | Implement the approved plan |
-| 3 | linter | fresh | Run linter and report style issues |
+| 3 | linter | fresh | Run linter and write the violations report to the run's implement directory |
 | 4 | test | fresh | Run unit tests |
 | 5 | code-review | fresh | Review the diff for correctness and regressions |
-| 6 | full-test | fresh | Run integration / e2e tests |
+| 6 | full-test | fresh | Run integration / e2e tests and write the results report to the run's implement directory |
 
 ### Hard Rules
 - Only the implementer edits source files.
 - One writer at a time.
 - The stage must not start until `plan.md` exists.
 
+### Testing discipline
+
+Every test written in this stage must follow these rules. The implementer and test-skeleton agents carry the same rules in their generated bodies; the orchestrator enforces them via the `senai_scan_test_smells` tool before the approval gate.
+
+- **AAA structure** — Arrange, Act, Assert, separated by blank lines or comments.
+- **Equivalence partitioning** — one representative value per input class.
+- **Boundary value analysis** — boundary, just-below, just-above for every numeric / length / range contract.
+- **Naming** — one convention everywhere (`should_<expected>_<when>_<condition>`).
+- **Table-driven / parameterized** cases for repeated logic.
+- **Property-based** tests for pure functions (Hypothesis, fast-check, jqwik, proptest, FsCheck).
+- **FIRST** quality — Fast, Independent, Repeatable, Self-validating, Timely.
+- **Coverage target** — 80% line + branch on changed files; 100% on security-critical paths.
+
+The deterministic scanner (`pi-extension/src/test-discipline.ts`) flags 8 anti-patterns:
+
+| # | Anti-pattern | Severity | Description |
+|---|---|---|---|
+| 1 | `zero-assertion` | blocking | Test runs but has no assert/expect/should |
+| 2 | `over-mocking` | blocking | More than 3 test doubles in one test |
+| 3 | `mirror-logic` | actionable | Assertion duplicates the production expression |
+| 4 | `flaky-timing` | actionable | `sleep`/`setTimeout` not wrapped in a polling helper |
+| 5 | `no-aaa` | informational | Test body has no blank lines or Arrange/Act/Assert comments |
+| 6 | `mystery-guest` | actionable | Test reads a file from outside the configured fixture paths |
+| 7 | `private-method` | actionable | Test calls a method starting with `_` or `@private` |
+| 8 | `god-test` | actionable | More than 5 asserts or body longer than 50 lines |
+
 ### Approval Gate
+- Before prompting, the orchestrator collects three signals: scan report + coverage (from `coverage/coverage-summary.json` if present) + mission verification re-run (parses `<plan>` `## Verification` and runs each step via `bash`).
 - If all checks pass → run `/senai-approve`. This marks implementation complete and automatically starts the Document stage.
-- If any check fails → fix and re-run the stage.
+- If any check fails → fix and re-run the stage. Failed required verification steps ALWAYS block; coverage and smell findings block only under `SENAI_TEST_DISCIPLINE_STRICT=1`.
 
 ---
 
@@ -259,15 +304,12 @@ Auto-starts Document
 **Command:** `/senai-document`
 
 ### Purpose
-Write and update all project documentation.
+Fill the documentation skeleton created by `/senai-generate-docs-structure`: few, short, standard-formatted docs with hard length caps.
 
 ### Sequence
 
 ```
-readme-writer      ──┐
-changelog-writer   ──┤
-api-docs-writer    ──┼──▶ All complete
-other-docs-writer  ──┘
+Batch 1 (≤4 writers) ──▶ all artifacts verified ──▶ Batch 2 ──▶ ...
          │
          ▼
   Parent approval gate (/senai-approve)
@@ -280,13 +322,16 @@ other-docs-writer  ──┘
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
-| 1 | readme-writer | fresh | `README.md` |
-| 1 | changelog-writer | fresh | `CHANGELOG.md` |
-| 1 | api-docs-writer | fresh | `docs/api/` |
-| 1 | other-docs-writer | fresh | `CONTRIBUTING.md`, `LICENSE`, etc. |
+| 1 | readme-writer | fresh | `README.md` (always selected; Standard Readme template, ≤150 lines) |
+| 1 | changelog-writer | fresh | `CHANGELOG.md` (versioned projects; Keep a Changelog, ~15 lines/entry) |
+| 1 | api-docs-writer | fresh | `docs/reference/` (packages with a public API surface; Google API style, ≤60 lines/symbol page) |
+| 1 | other-docs-writer | fresh | `CONTRIBUTING.md` (projects accepting contributions), `docs/explanation/architecture.md` (when an architecture exists), guides — each within its template cap |
 
 ### Notes
-- All four writers run in parallel because they write to different files.
+- A deterministic decision table (`doc-selection.ts`) selects which writers this project needs and injects a concrete write plan into the stage prompt: each task names its target path, template id, and length cap, grouped into explicit batches of max 4 writers.
+- Templates and caps live in the doc catalog (`doc-catalog.ts`), shared by selection, `/senai-generate-docs-structure`, the generated writer agents (documentation contract in their body, generator v4), and doctor (section/format validation).
+- Writers fill the existing template stub at their target path — they never invent new documents or sections, and never exceed the cap.
+- Batch N+1 waits until every batch-N artifact is verified on disk; enforcement is the stage prompt plus the completion guard — pi.dev has no official concurrency/locking. Spawns within a batch are staggered to avoid provider 429 rate limits.
 - No source code edits in this stage.
 
 ### Approval Gate
@@ -305,6 +350,9 @@ Final security check and packaging.
 ### Sequence
 
 ```
+mission verification
+    │
+    ▼
 security-gate
     │
     ▼
@@ -321,21 +369,23 @@ Run marked delivered
 
 | Step | Agent | Context | Output |
 |------|-------|---------|--------|
-| 1 | security-gate | fresh | `.IDE_Plans/senai/runs/<run-id>/deliver/security-report.md` |
-| 2 | archive | lineage-only | `.IDE_Plans/senai/runs/<run-id>/deliver/deliver-summary.md` + archive artifact |
+| 0 | mission verification (parent, blocking) | — | Runs every step of the plan's `## Verification` section via bash; any failure stops the stage before the security gate |
+| 1 | security-gate | fresh | `.IDE_Plans/pi-senai/runs/<run-id>/deliver/security-report.md` |
+| 2 | archive | lineage-only | `.IDE_Plans/pi-senai/runs/<run-id>/deliver/deliver-summary.md` (includes the verification outcome) + archive artifact |
 
 ### Approval Gate
-- If security gate passes → run `/senai-approve` to finish the run.
+- If verification and the security gate pass → run `/senai-approve` to finish the run.
+- If a verification step fails → stop and report it; the user decides to fix first or accept the failure explicitly.
 - If security issues found → fix and re-run.
 
 ---
 
 ## 8. Runtime Artifacts
 
-All auto-generated files go into `.IDE_Plans/senai/runs/<run-id>/`:
+All auto-generated files go into `.IDE_Plans/pi-senai/runs/<run-id>/`:
 
 ```text
-.IDE_Plans/senai/
+.IDE_Plans/pi-senai/
 ├── state.json
 └── runs/<run-id>/
     ├── plan/

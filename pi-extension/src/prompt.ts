@@ -1,17 +1,20 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadAgentConfig } from "./agent-config.js";
-import { buildAgentRegistryBlock } from "./agent-registry.js";
-import { SENAI_ROLES, ROLE_LABELS } from "./agent-suggestions.js";
+import { loadAgentConfig } from "./agents/config.js";
+import { buildAgentRegistryBlock } from "./agents/registry.js";
+import { SENAI_ROLES, ROLE_LABELS } from "./agents/suggestions.js";
 import {
   loadAgentsFilesConfig,
   type AgentsFilesConfig,
   type AgentFilesDocuments,
-} from "./agents-files-config.js";
-import { loadFilesConfig, type FilesConfig } from "./files-config.js";
-import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./constants.js";
-import type { SenaiState } from "./state.js";
+} from "./agents/agents-files-config.js";
+import { loadFilesConfig, type FilesConfig } from "./agents/files-config.js";
+import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./core/paths.js";
+import { buildDocSelectionBlock } from "./docs-factory/selection.js";
+import { atomicWriteFile } from "./io/atomic-write.js";
+import { buildCadenceBlock, loadCadenceState } from "./implement/cadence.js";
+import type { SenaiState } from "./core/state.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -47,6 +50,33 @@ export function loadSkill(stage: string): string {
     }
     throw err;
   }
+}
+
+// Artifact-path placeholders used in the stage skill files. Substituted with
+// real run paths so the orchestrator and approval gates never render literal
+// `<...>` tokens. `<mission>` is handled by missionLine; `<mapped X agent>`
+// tokens are filled by the LLM from the Agent Registry block and stay as-is.
+const ARTIFACT_PLACEHOLDERS: Array<[string, keyof StageArtifactPaths]> = [
+  ["<planOverview>", "planOverview"],
+  ["<discussionNotes>", "discussionNotes"],
+  ["<scoutAngle1>", "scoutAngle1"],
+  ["<scoutAngle2>", "scoutAngle2"],
+  ["<scoutAngle3>", "scoutAngle3"],
+  ["<scoutAngle4>", "scoutAngle4"],
+  ["<reviewCorrectness>", "reviewCorrectness"],
+  ["<reviewSecurity>", "reviewSecurity"],
+  ["<reviewTests>", "reviewTests"],
+  ["<securityReport>", "securityReport"],
+  ["<deliverSummary>", "deliverSummary"],
+  ["<plan>", "plan"], // last: prefix of <planOverview>
+];
+
+export function substituteArtifactPaths(text: string, artifacts: StageArtifactPaths): string {
+  let out = text;
+  for (const [token, key] of ARTIFACT_PLACEHOLDERS) {
+    out = out.split(token).join(artifacts[key]);
+  }
+  return out;
 }
 
 function formatAgentDocuments(docs: AgentFilesDocuments | undefined): string {
@@ -115,7 +145,7 @@ function missionLine(state: SenaiState, artifacts: StageArtifactPaths): string {
   const missionPath = path.join(artifacts.runDir, "mission.md");
   if (!fs.existsSync(missionPath)) {
     fs.mkdirSync(artifacts.runDir, { recursive: true });
-    fs.writeFileSync(missionPath, mission, "utf8");
+    atomicWriteFile(missionPath, mission, "utf8");
   }
   return (
     `Mission (preview): ${mission.slice(0, MISSION_PREVIEW_CHARS)}…\n` +
@@ -139,7 +169,7 @@ export function buildStagePrompt(
     artifacts,
   };
 
-  const skill = loadSkill(stage);
+  const skill = substituteArtifactPaths(loadSkill(stage), artifacts);
   const agentConfig = loadAgentConfig(cwd);
   const filesConfig = loadFilesConfig(cwd);
   const agentsFilesConfig = loadAgentsFilesConfig(cwd);
@@ -176,6 +206,8 @@ export function buildStagePrompt(
     registryBlock,
     ``,
     documentScopeBlock,
+    ...(stage === "planning" ? [``, buildCadenceBlock(loadCadenceState(cwd))] : []),
+    ...(stage === "document" ? [``, buildDocSelectionBlock(cwd)] : []),
     ``,
     skill,
   ].join("\n");

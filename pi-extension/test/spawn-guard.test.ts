@@ -3,9 +3,9 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { guardSpawnCall } from "../src/spawn-guard.js";
-import { saveAgentConfig } from "../src/agent-config.js";
-import { defaultState, saveState } from "../src/state.js";
+import { guardSpawnCall } from "../src/hooks/spawn-guard.js";
+import { saveAgentConfig } from "../src/agents/config.js";
+import { defaultState, saveState } from "../src/core/state.js";
 
 function makeTmp(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "spawn-guard-"));
@@ -99,8 +99,8 @@ describe("guardSpawnCall", () => {
 
   it("steps aside on corrupted state.json or missing agents.json", () => {
     const cwd = makeTmp();
-    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "senai"), { recursive: true });
-    fs.writeFileSync(path.join(cwd, ".IDE_Plans", "senai", "state.json"), "{not json", "utf8");
+    fs.mkdirSync(path.join(cwd, ".IDE_Plans", "pi-senai"), { recursive: true });
+    fs.writeFileSync(path.join(cwd, ".IDE_Plans", "pi-senai", "state.json"), "{not json", "utf8");
     assert.strictEqual(guardSpawnCall("subagent", { agent: "planner" }, cwd), undefined);
 
     const cwd2 = makeTmp();

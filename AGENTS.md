@@ -40,30 +40,112 @@ npm test
 
 ## Project structure
 
+The extension source lives in `pi-extension/src/` organized as **layered folders** that mirror Pi's own `packages/ai → agent-core → coding-agent` model. The flat layout of the early codebase was replaced by a folder structure in the `architecture-upgrade` branch.
+
 ```text
-.
-├── package.json
-├── tsconfig.json
-├── README.md
-├── CHANGELOG.md
-├── AGENTS.md            # this file
-├── .gitignore
-├── pi-extension/src/    # extension source
-│   ├── index.ts         # entry point: register commands, hooks, guards, tools
-│   ├── commands.ts      # slash command handlers
-│   ├── architect-tools.ts # deterministic tools for the architecture factory
-│   ├── state.ts         # read/write .IDE_Plans/senai/state.json
-│   ├── prompt.ts        # load stage skills and build prompts
-│   ├── constants.ts     # paths, stage enum, transitions, helpers
-│   ├── agent-discovery.ts   # discover project/user/built-in agents
-│   ├── agent-suggestions.ts # suggest agents per Senai role
-│   ├── agent-config.ts           # load/save/validate .pi/senai/agents.json
-│   ├── agent-registry.ts         # build agent registry prompt block
-│   ├── agent-generator.ts        # deterministic sub-agent generator (/senai-generate-sub-agents)
-│   ├── files-config.ts           # load/save/validate .pi/senai/files.json
-│   ├── agents-files-config.ts    # load/save/validate .pi/senai/agents_files.json
-│   └── compaction.ts             # deterministic compaction summary for active runs
-├── pi-extension/test/   # unit tests
+pi-extension/src/
+├── index.ts                  # entry point: wiring only (~50 lines)
+├── prompt.ts                 # stage prompt builder (single concern)
+│
+├── core/                     # DOMAIN layer
+│   ├── paths.ts              # paths, stage enum, transitions (was constants.ts)
+│   ├── state.ts              # state.json read/write
+│   ├── mission-brief.ts      # /senai-brainstorm helpers
+│   └── compaction-summary.ts # session_before_compact payload
+│
+├── io/                       # I/O layer
+│   ├── atomic-write.ts       # temp-file + fsync + atomic rename
+│   ├── lock.ts               # project-wide run lock
+│   └── migrate.ts            # legacy state migration
+│
+├── hooks/                    # Pi lifecycle event handlers (one per hook)
+│   ├── session-start.ts
+│   ├── session-before-compact.ts
+│   ├── tool-call.ts
+│   ├── input.ts
+│   ├── before-agent-start.ts
+│   └── index.ts              # composer
+│
+├── agents/                   # Sub-agent management
+│   ├── discovery.ts          # discover project/user/built-in agents
+│   ├── registry.ts           # build agent registry prompt block
+│   ├── suggestions.ts        # role→agent suggestion map
+│   ├── config.ts             # .pi/senai/agents.json load/save
+│   ├── generator.ts          # /senai-generate-sub-agents
+│   ├── agents-files-config.ts # .pi/senai/agents_files.json
+│   ├── files-config.ts       # .pi/senai/files.json
+│   ├── files-discovery.ts    # project deep scan
+│   └── document-suggestions.ts
+│
+├── architect/                # Architecture factory
+│   ├── index.ts              # composer
+│   ├── tools.ts              # deterministic LLM-callable tools
+│   ├── drivers.ts            # driver merging (was driver-extractor.ts)
+│   └── inputs-config.ts      # .pi/senai/architect-inputs.json
+│
+├── doctor/                   # Diagnostic (composer + check groups)
+│   ├── index.ts              # composer: runSenaiDiagnostic + formatDiagnosticReport (~220 lines)
+│   ├── _types.ts             # DiagnosticSection, ResolvedAgent, ROLE_REQUIRED_TOOLS, …
+│   ├── _helpers.ts           # artifactMissing, compareVersions, significantWords, …
+│   ├── checks-runstate.ts    # setup progress, lock, cadence, run artifacts, discussions
+│   ├── checks-config.ts      # config files, file scope, agents files
+│   ├── checks-agents.ts      # resolve agents, mappings, capabilities, skills, integrity
+│   ├── checks-architecture.ts # architecture setup, mapping, generated, drift, tech resources
+│   ├── checks-environment.ts # environment, subagent extension, stray files, secret scan
+│   └── checks-docs.ts        # testing discipline, docs factory, community research cache
+│
+├── docs-factory/             # Document factory
+│   ├── catalog.ts            # doc templates + length caps
+│   ├── selection.ts          # writer selection per project
+│   └── ingest.ts             # document ingestion helpers
+│
+├── implement/                # Implement stage
+│   ├── signals.ts            # collect + format
+│   ├── discipline.ts         # test anti-pattern scanner
+│   ├── discipline-tool.ts    # scanner tool wrapper
+│   └── cadence.ts            # adaptive spawn cadence
+│
+├── ui/                       # UI widgets
+│   ├── list-editor.ts
+│   ├── role-picker.ts
+│   └── simple-picker.ts
+│
+├── scouts/                   # Scout modules
+│   └── community-research.ts
+│
+├── commands/                 # COMMAND layer — one file per command group
+│   ├── index.ts              # composition root (~60 lines): registers + re-exports
+│   ├── _helpers.ts           # ensureStage, checkStageArtifact, ensureAgentConfig, …
+│   ├── _shared.ts            # picker helpers: browsePath, normalizePath, isPathConflict, …
+│   ├── _commands-constants.ts # NEXT_COMMAND, STAGE_COMMANDS, STAGE_SKILL
+│   ├── stage-commands.ts     # /senai-plan, -implement, -document, -deliver
+│   ├── approve.ts            # /senai-approve
+│   ├── status.ts             # /senai-status
+│   ├── ops.ts                # /senai-reset, -lock-info, -lock-force, -cadence-status, -cadence-reset
+│   ├── brainstorm.ts         # /senai-brainstorm, -brainstorm-approve
+│   ├── doctor.ts             # /senai-doctor
+│   ├── configure-agents.ts   # /senai-configure-agents, /senai-agents
+│   ├── configure-files.ts    # /senai-configure-files, /senai-files
+│   ├── configure-agents-files.ts     # /senai-configure-agents-files, /senai-agents-files
+│   ├── configure-architect-inputs.ts # /senai-configure-architect-inputs
+│   ├── generate-architect.ts         # /senai-generate-architect
+│   ├── generate-sub-agents.ts        # /senai-generate-sub-agents
+│   └── generate-docs-structure.ts    # /senai-generate-docs-structure
+```
+
+There are no re-export shims. `src/commands.ts` and `src/architect.ts` were removed
+once every importer pointed at `commands/index.ts` and `architect/index.ts`;
+`pi-extension/test/architecture.test.ts` fails the build if a new shim
+appears.
+
+**Test layout mirrors src/:** `test/core/`, `test/io/`, `test/agents/`, `test/architect/`, `test/doctor/`, `test/docs-factory/`, `test/implement/`, `test/ui/`. E2E tests live in `test/e2e/`.
+
+**Known follow-up (deferred):** `commands.ts` (2365 lines) and `architect.ts` (1150 lines) were left as single files because their cross-cutting dependencies make one-shot splitting unsafe (Phase 3 of the upgrade was abandoned after two failed attempts). Future work should split them incrementally, one function per commit, using the same `core/`, `io/`, `agents/` etc. layered pattern.
+
+Other top-level files and folders (unchanged):
+
+```text
+├── pi-extension/test/   # unit + E2E tests (mirrors src/)
 ├── skills/              # stage skill markdown files
 │   ├── senai-plan.md
 │   ├── senai-implement.md
@@ -78,10 +160,13 @@ npm test
 ## Key design principles
 
 1. **No duplicate subagent engine.** Do not add subagent spawning logic here. The extension injects prompts; the LLM calls the `subagent` tool provided by `pi-interactive-subagents`.
-2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/senai/`. Architecture factory state lives under `.pi/architect/`.
+2. **Local-only state.** Run state and run artifacts live under `.IDE_Plans/pi-senai/`. Architecture factory state lives under `.pi/architect/`.
 3. **Soft approval gates.** The extension enforces stage order and artifact existence; the user approves advancement.
-4. **Approve auto-runs the next stage.** `/senai-approve` advances the state and immediately sends the next stage prompt. Manual `/senai-XXX` commands remain available as overrides. When parent context usage is 50% or higher, approve also compacts the session first; a `session_before_compact` hook supplies a deterministic run-state summary (run id, stage, artifact paths), so compaction costs no LLM call and no run state is lost.
+4. **Approve auto-runs the next stage.** `/senai-approve` advances the state and immediately sends the next stage prompt. Manual `/senai-XXX` commands remain available as overrides. Before advancing, approve verifies the completed stage's artifacts; missing or empty artifacts trigger a warn-and-ask confirm instead of a hard block, and the outcome (approval time + artifact check) is recorded in `state.json` `stageResults`. When parent context usage is 50% or higher (or absolute tokens reach 40% of the context window, which covers the post-compaction window where `percent` is null), approve also compacts the session first; a `session_before_compact` hook supplies a deterministic run-state summary (run id, stage, artifact paths), so compaction costs no LLM call and no run state is lost.
 5. **Document scope is prompt-level guidance.** The extension injects a `## Document Scope` block into stage prompts. It does not enforce a filesystem sandbox; subagents still decide what to read.
+6. **Project-wide run lock.** `/senai-approve` and `/senai-brainstorm-approve` share a single advisory lock at `.IDE_Plans/pi-senai/.lock/meta.json` (PID + heartbeat). They mutually exclude each other so a double-click inside one session or two Pi sessions in the same project cannot race-write `state.json`. The lock is automatic: stale (dead pid or heartbeat older than `SENAI_LOCK_STALE_MS`, default 60s) locks are auto-stolen by the next acquire. Tunables: `SENAI_LOCK_TIMEOUT_MS` (default 5000), `SENAI_LOCK_STALE_MS` (default 60000), `SENAI_LOCK_HEARTBEAT_MS` (default 5000). `withRunLock(cwd, mode, fn)` is the only entry point — every new state-mutating command must wrap its body in it. `lockInfo(cwd)` is the read-only accessor used by doctor and the session-start hook. `/senai-brainstorm-approve` is also idempotent on the brief's draft marker: a second call short-circuits with an "already finalized" info message instead of bumping `discussions` or appending a duplicate event.
+7. **Atomic writes only.** Every file the extension owns must be written through `atomicWriteFile` / `atomicWriteJson` (`pi-extension/src/atomic-write.ts`). The pattern is temp file + `fsync` + atomic `rename`. `state.json`, the four `.pi/senai/*.json` config files, the architect outputs, `mission-brief.md`, the per-run `mission.md`, the docs factory manifest, and the doctor report all go through the helper. New writers must not call `fs.writeFileSync` directly; the helper guarantees a crash mid-write never leaves a half-written file. The session-start hook (`pi-extension/src/index.ts`) removes orphan `.tmp-*` files left behind by a previous crashed session.
+8. **Testing discipline.** The Implement stage enforces a testing discipline across all four stages. The deterministic scanner (`pi-extension/src/test-discipline.ts`) flags 8 anti-patterns (`zero-assertion`, `over-mocking`, `mirror-logic`, `flaky-timing`, `no-aaa`, `mystery-guest`, `private-method`, `god-test`) — the first two are blocking; the rest are actionable or informational. The scanner is exposed as the `senai_scan_test_smells` tool (registered in `pi-extension/src/index.ts`). The Implement stage's approval gate collects three signals before prompting the user: scan report + coverage (from `coverage/coverage-summary.json` if present) + mission verification re-run (parses `<plan>` `## Verification` and runs each step via `bash`). Strict mode is OFF by default (`SENAI_TEST_DISCIPLINE_STRICT=1` opts in); failed required verification steps ALWAYS block. Coverage floor defaults to 80% (`SENAI_TEST_DISCIPLINE_COVERAGE_FLOOR` overrides). The discipline shows up in five places: the three stage skills (`senai-implement.md`, `senai-document.md`, `senai-deliver.md`), the generated test-related agent bodies (`<project>-test-skeleton.md`, `<project>-linter.md`, `<project>-full-test.md`, all four doc-writers), the architecture-generated `implementer` / `reviewer-tests` / `reviewer-correctness` agents, and the two new `/senai-doctor` sections ("Testing discipline" + "Sub-agent generator completeness"). `GENERATOR_VERSION` is currently 6 — bumping it makes the existing doctor check flag stale generated agents as warnings so users regenerate and pick up the new sections.
 
 ## Document scope configuration
 
@@ -97,7 +182,13 @@ All three files are required before any stage command (`/senai-plan`, `/senai-im
 
 Every `.pi/senai/` config file (these three plus `architect-inputs.json`) starts with a `_comment` field: a one-line plain instruction saying what the file is for and which command manages it. Savers always write it; loaders strip it after parsing, so the in-memory shape and validation are unchanged.
 
-Use `/senai-doctor` to audit the full setup. Every report opens with a "Setup progress" section that marks the 7 setup steps done or pending and names the one next command, so a first-time user can follow it step by step. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs. Once an architecture exists, it also validates the architecture agent mapping (the seven architecture-bound roles must resolve to the generated agents (code-review shares the reviewer-correctness agent)), the generated agent file contents (tools, skill link, architecture.md/ADR references, forbidden patterns), and drift (content-hash manifest). Strict checks also cover generated team agents (mandate and technology craft), technology resources, every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), and a secret scan over agent, skill, and config files. Each run saves the report to `.IDE_Plans/senai/doctor-report.md`.
+Use `/senai-doctor` to audit the full setup. Every report opens with a "Setup progress" section that marks the 7 setup steps done or pending and names the one next command, so a first-time user can follow it step by step. It reports the exact source of every mapped agent (project, user, or built-in), checks whether each agent has the tools and mandate needed for its Senai role, validates file scopes and truth documents, verifies the runtime environment, and verifies the architecture factory outputs. Once an architecture exists, it also validates the architecture agent mapping (the seven architecture-bound roles must resolve to the generated agents (code-review shares the reviewer-correctness agent)), the generated agent file contents (tools, skill link, architecture.md/ADR references, forbidden patterns), and drift (content-hash manifest). Strict checks also cover generated team agents (mandate and technology craft), technology resources, every skill referenced by any agent (exists and is a valid SKILL.md), agent file integrity (name matches filename, no tool typos, valid thinking level, non-empty body), and a secret scan over agent, skill, and config files. A "Subagent extension" section audits pi's package list (pi-interactive-subagents present and >= 3.7.2, warnings for multiple subagent providers and dead package entries), a "Stray files" section flags leftover `tmp_*.sh`/`tmp_*.ts` helper scripts in the project root and run directories, and the environment section recommends `retry.maxRetries >= 5`, warns when compaction is disabled, and shows pi's auto-compact threshold. The run audit reports a delivered run with missing deliver artifacts, an empty `document/` directory, or implement-stage files inside `deliver/` as errors, and warns when plan.md exceeds 50KB. A "Documentation factory" section validates the docs skeleton from `/senai-generate-docs-structure` (missing stubs warn; filled docs must contain their template's required sections and stay within the catalog length cap; stray non-stub files in factory docs folders are info). Each run saves the report to `.IDE_Plans/pi-senai/doctor-report.md`.
+
+A "Discussions" section validates every `mission-brief.md` (pre-run and per-run) against the required section list (Problem statement, Mission type, Success criteria, Out-of-scope, Open questions, Refined mission), flags runs with multiple active `discussion-*` subfolders, and reports orphan pre-run transcripts with no brief. Setup progress gains one optional step noting `/senai-brainstorm` as a pre-Plan refinement pass.
+
+## Document factory
+
+`/senai-generate-docs-structure` reads the doc-selection write plan (architecture profile + package.json/manifest signals; project-wise only) and creates the docs skeleton: `docs/tutorials|how-to|reference|explanation|adr/` subfolders only for selected types, `README.md`/`CHANGELOG.md`/`CONTRIBUTING.md` at the root, one template stub per selected doc, and a manifest at `.pi/senai/docs-structure.json`. Existing non-stub docs are never overwritten (stubs carry a `<!-- pi-senai doc stub -->` marker). Templates and hard length caps live in `pi-extension/src/doc-catalog.ts` (Standard Readme, Keep a Changelog 1.1.0, Nygard ADR, Google API style, Diátaxis, arc42-lite) — the single source of truth shared by selection, the skeleton command, generated writer agents, and doctor. The Document stage fills the stubs batch-wise: max 4 concurrent writers, batch N+1 waits for batch N, enforced by the stage prompt plus the completion guard only (pi.dev has no official concurrency/locking).
 
 ## Architecture factory layout
 
@@ -134,11 +225,11 @@ The factory uses two deterministic tools to avoid LLM drift:
 
 ## Sub-agent generation
 
-`/senai-generate-sub-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context. Generated agents declare `session-mode: lineage-only`, `auto-exit: true`, and `spawning: false`; artifact-writing roles (scout-2/3/4, discussion, plan-overview, security-gate) carry the `write` tool; and every generated body ends with a completion contract (final message ≤ 10 lines: outcome + artifact path, never pasted content).
+`/senai-generate-sub-agents` deterministically generates sub-agents for the 14 non-architecture roles (the 7 architecture-bound roles belong to the architecture factory). Agent content is assembled, never LLM-generated: role template + technology resource + architect report context. Generated agents declare `session-mode: lineage-only`, `auto-exit: true`, and `spawning: false`; artifact-writing roles (scout-2/3/4, discussion, plan-overview, security-gate, and since generator v3 also linter and full-test, which write report artifacts) carry the `write` tool; and every generated body ends with a completion contract (final message ≤ 10 lines: outcome + artifact path, never pasted content). Doc-writer roles (readme-writer, changelog-writer, api-docs-writer, other-docs-writer) also carry a documentation contract from the doc catalog: default target path, template id, required sections, and the hard length cap.
 
 - Technology resources live in `resources/technologies/` (bundled) and `.pi/technologies/` (project overrides). Adding a technology means adding one markdown file with `id`, `name`, `keywords` frontmatter — no code change. When nothing matches, the user chooses: fetch the resource from official documentation (distilled into `.pi/technologies/<tech>.md`), use `generic`, or cancel — generic is never a silent default.
 - Every resource must be sourced from official documentation with cited URLs and carry the template sections (core rules, testing patterns, tooling/limits, common mistakes). Doctor validates all of this in the "Technology resources" section, plus keyword matchability.
-- Generation targets two groups: roles on built-in defaults (fresh) and roles already mapped to their generated name (regenerate). The confirmation dialog previews the exact write set before anything is written: create, regenerate in place, recreate (file missing but mapping exists), kept (user-edited), skipped (unknown origin). Overwriting happens only for files the generation manifest proves pi-senai wrote and the user never edited (sha256 match in `.pi/architect/generated-manifest.json`); user-edited files are kept and reported, and custom agents and mappings are never touched. Every generated footer carries the generator version (`generator v2`) so doctor can flag stale files; a deleted generated file with a surviving mapping is recreated automatically. After one confirmation, files land in `.pi/agents/` and `agents.json` is updated (created if missing — no prior configuration is needed).
+- Generation targets two groups: roles on built-in defaults (fresh) and roles already mapped to their generated name (regenerate). The confirmation dialog previews the exact write set before anything is written: create, regenerate in place, recreate (file missing but mapping exists), kept (user-edited), skipped (unknown origin). Overwriting happens only for files the generation manifest proves pi-senai wrote and the user never edited (sha256 match in `.pi/architect/generated-manifest.json`); user-edited files are kept and reported, and custom agents and mappings are never touched. Every generated footer carries the generator version (`generator v4`) so doctor can flag stale files; a deleted generated file with a surviving mapping is recreated automatically. After one confirmation, files land in `.pi/agents/` and `agents.json` is updated (created if missing — no prior configuration is needed).
 
 
 ### `files.json` schema (version 2)
@@ -173,13 +264,16 @@ Validation checks JSON shape and known role names. It does not require files to 
 State file:
 
 ```text
-.IDE_Plans/senai/state.json
+.IDE_Plans/pi-senai/state.json
 ```
+
+`state.json` schema (version 1): `version`, `mission`, `runId`, `currentStage`, `startedAt`, `updatedAt`, `stageResults`, plus (since the discussion entry point) the optional fields `discussions: number`, `discussionEvents: Array<{ts, transcriptPath, briefPath, afterStage?}>`, and `missionBriefPath?: string`. Legacy v1 states load with these fields undefined; `defaultState()` seeds `discussions: 0` and `discussionEvents: []` for fresh runs.
 
 Run artifacts:
 
 ```text
-.IDE_Plans/senai/runs/<run-id>/
+.IDE_Plans/pi-senai/runs/<run-id>/
+├── mission-brief.md          # living doc updated by /senai-brainstorm (when active run)
 ├── plan/
 │   ├── plan.md
 │   ├── plan-overview.md
@@ -195,9 +289,22 @@ Run artifacts:
 │       └── review-tests.md
 ├── implement/
 ├── document/
-└── deliver/
-    ├── security-report.md
-    └── deliver-summary.md
+├── deliver/
+│   ├── security-report.md
+│   └── deliver-summary.md
+└── discussions/              # per-run transcripts (monotonic NN)
+    ├── discussion-01-<slug>.md
+    ├── discussion-02-<slug>.md
+    └── …
+```
+
+Pre-run discussion folder (no run active yet):
+
+```text
+.IDE_Plans/pi-senai/discussions/pre-run/
+├── mission-brief.md          # consumed by /senai-plan on next start
+├── discussion-01-<slug>.md
+└── …
 ```
 
 Run ID format:
@@ -221,6 +328,8 @@ YYYY-MM-DD-HH-MM-<mission-slug>
 
 Stage transitions are defined in `constants.ts` as `STAGE_TRANSITIONS`.
 
+**Brainstorm is orthogonal.** `/senai-brainstorm` and `/senai-brainstorm-approve` are NOT stages — they do NOT appear in `STAGE_TRANSITIONS` and never mutate `state.json.stage`. The state machine stays linear. Brainstorms run from `none`, any active stage, or `delivered`. When a run is active, artifacts live under `.IDE_Plans/pi-senai/runs/<run-id>/`; otherwise under `.IDE_Plans/pi-senai/discussions/pre-run/`. Plan replacement uses an ADR-style supersede banner on `plan.md` rather than overwriting it.
+
 ## Coding conventions
 
 - Use TypeScript strict mode.
@@ -236,6 +345,7 @@ Stage transitions are defined in `constants.ts` as `STAGE_TRANSITIONS`.
 - Each test file focuses on one module.
 - Tests use temporary directories created with `fs.mkdtempSync`.
 - When testing commands, build the handler map by calling `registerCommands` with a mock `ExtensionAPI`.
+- End-to-end tests (RPC harness against `pi --mode rpc`) live in `pi-extension/test/e2e/` and require `pi` on PATH plus `RUN_E2E=1`. Run with `RUN_E2E=1 npm run test:e2e`; default `npm test` skips them. See `Doc/step-by-step-guide.md` → "Running E2E tests" for the snapshot workflow.
 
 ## Extension loading
 
