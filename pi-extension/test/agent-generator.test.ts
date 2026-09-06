@@ -279,6 +279,36 @@ describe("agent-generator", () => {
     }
   });
 
+  it("discussion role is the ONLY generated role with WebSearch + FetchURL", () => {
+    const WEB_TOOLS = new Set(["WebSearch", "FetchURL"]);
+    const withWebTools = GENERATED_ROLES.filter((r) =>
+      r.tools.some((t) => WEB_TOOLS.has(t)),
+    );
+    assert.deepStrictEqual(
+      withWebTools.map((r) => r.role),
+      ["discussion"],
+      `Web tool lock: only the discussion role may carry WebSearch/FetchURL. Found: ${withWebTools.map((r) => r.role).join(", ") || "(none)"}`,
+    );
+  });
+
+  it("discussion role has read, write, WebSearch, FetchURL (no bash — minimal surface)", () => {
+    const discussion = GENERATED_ROLES.find((r) => r.role === "discussion");
+    assert.ok(discussion, "discussion role must exist in GENERATED_ROLES");
+    assert.deepStrictEqual(
+      [...discussion.tools].sort(),
+      ["FetchURL", "WebSearch", "read", "write"],
+      `discussion role tools must be exactly [read, write, WebSearch, FetchURL]. Found: ${discussion.tools.join(", ")}`,
+    );
+  });
+
+  it("GENERATOR_VERSION is 7 (discussion role carries web tools)", () => {
+    assert.strictEqual(
+      GENERATOR_VERSION,
+      7,
+      `GENERATOR_VERSION must be 7. If you bumped it for another change, update this test and the v7 comment block in generator.ts.`,
+    );
+  });
+
   it("falls back to the filename when a resource has no id frontmatter", () => {
     const tmpDir = makeTmpDir("agent-gen-noid-");
     const dir = path.join(tmpDir, ".pi", "technologies");
@@ -496,17 +526,23 @@ describe("model inheritance", () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it("write-tool roles have exactly read+write and linter/full-test have read+bash+write", () => {
+  it("write-tool roles have exactly read+write and linter/full-test have read+bash+write (discussion has read+write+web tools — generator v7)", () => {
     const tmpDir = makeTmpDir("agent-gen-exacttools-");
     fs.writeFileSync(path.join(tmpDir, "package.json"), JSON.stringify({ name: "demo" }), "utf8");
     const resources = discoverTechnologyResources(tmpDir);
     const plans = planAgentGeneration(tmpDir, GENERATED_ROLES, resources, makeReport());
 
-    const writingRoles = ["scout-2", "scout-3", "scout-4", "discussion", "plan-overview", "security-gate"];
+    const writingRoles = ["scout-2", "scout-3", "scout-4", "plan-overview", "security-gate"];
     for (const role of writingRoles) {
       const frontmatter = plans.find((p) => p.role === role)?.content.split("---")[1] ?? "";
       assert.ok(/^tools: read, write$/m.test(frontmatter), `${role} must have exactly 'tools: read, write'`);
     }
+    // discussion (generator v7) is the ONE role allowed to carry WebSearch + FetchURL.
+    const discussionFrontmatter = plans.find((p) => p.role === "discussion")?.content.split("---")[1] ?? "";
+    assert.ok(
+      /^tools: read, write, WebSearch, FetchURL$/m.test(discussionFrontmatter),
+      `discussion must have exactly 'tools: read, write, WebSearch, FetchURL' (v7 web tool lock)`,
+    );
     for (const role of ["linter", "full-test"]) {
       const frontmatter = plans.find((p) => p.role === role)?.content.split("---")[1] ?? "";
       assert.ok(/^tools: read, bash, write$/m.test(frontmatter), `${role} must have exactly 'tools: read, bash, write'`);
@@ -1012,7 +1048,7 @@ describe("sub-agent regeneration", () => {
     }
   });
 
-  it("GENERATOR_VERSION is 6", () => {
-    assert.strictEqual(GENERATOR_VERSION, 6, "GENERATOR_VERSION must be 6 after the v6 follow-up");
+  it("GENERATOR_VERSION is 7 (discussion role carries WebSearch + FetchURL — web tool lock)", () => {
+    assert.strictEqual(GENERATOR_VERSION, 7, "GENERATOR_VERSION must be 7 after the v7 web tool lock");
   });
 });

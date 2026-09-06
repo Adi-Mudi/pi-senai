@@ -79,7 +79,7 @@ export const GENERATED_ROLES: GeneratedRoleDef[] = [
   {
     role: "discussion",
     label: "Discussion",
-    tools: ["read", "write"],
+    tools: ["read", "write", "WebSearch", "FetchURL"],
     interactive: true,
     mandate: "Interview the user, consolidate scout findings, and record decisions in discussion notes.",
     invocationHint: "Spawn in plan stage after scouts complete; consolidate scout findings and interview the user.",
@@ -244,7 +244,9 @@ export interface WriteAgentsResult {
 //     and an outOfScope section (boundary in the body).
 // v6: doc-writer roles' outOfScope now forbids modifying tests or tested
 //     code examples (prevents doc drift from breaking the test suite).
-export const GENERATOR_VERSION = 6;
+// v7: discussion role is the ONLY role with WebSearch + FetchURL (web tool
+//     lock). Used by /senai-discussion and the plan-stage consolidation.
+export const GENERATOR_VERSION = 7;
 
 // Returns the sha256 of a file, or null when it cannot be read.
 function hashFile(filePath: string): string | null {
