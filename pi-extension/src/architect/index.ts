@@ -897,6 +897,27 @@ function buildArchitectureMarkdown(profile: ArchitectProfile, report: ArchitectR
   lines.push(report.feasibilityReasoning || "Not provided.");
   lines.push("");
 
+  if (report.selectedArchitecture === "pi-architecture") {
+    lines.push("## Pi Extension Mandatory Rules");
+    lines.push("");
+    lines.push("This project follows Pi's official architecture. The generated agents and skills must obey these rules:");
+    lines.push("");
+    lines.push("1. Layered codebase: `ai` → `agent` → `coding-agent` → `tui`. Lower layers never import from higher layers.");
+    lines.push("2. Extensions import from `@mariozechner/pi-coding-agent` and `@sinclair/typebox` only, listed in `peerDependencies` with `\"*\"` range.");
+    lines.push("3. All session-related files are written through atomic helpers (temp + fsync + rename).");
+    lines.push("4. Every skill is a folder under `skills/` containing `SKILL.md` with required frontmatter (`name`, `description`).");
+    lines.push("5. Every agent is a `.md` file under `.pi/agents/` with required frontmatter (`name`, `description`, `tools`).");
+    lines.push("6. Extensions subscribe to lifecycle events via `pi.on(event, handler)` and may return `{ block: true, reason }` for `tool_call` only.");
+    lines.push("7. Tools use TypeBox `Type.Object({...})` parameters; never raw objects.");
+    lines.push("8. Long-running handlers use `ctx.signal` for cancellation parity.");
+    lines.push("9. Run state persists under `.IDE_Plans/<ext>/runs/<run-id>/`; never write outside the configured directories.");
+    lines.push("10. Commands are registered one per file under `commands/`; handlers stay thin.");
+    lines.push("11. The composition root (`src/index.ts`) only wires, never contains business logic.");
+    lines.push("12. Test layout mirrors source layout one-to-one; E2E tests live under `test/e2e/`.");
+    lines.push("");
+    lines.push("See `.pi/architecture-library/pi-architecture.md` for the full spec.");
+  }
+
   return lines.join("\n");
 }
 
@@ -1046,6 +1067,21 @@ function buildAgentMarkdown(
   lines.push("");
   lines.push("Before making decisions, read the full architecture description at `.pi/architect/architecture.md` and the relevant ADRs in `.pi/architect/adrs/`.");
 
+  if (architecture.id === "pi-architecture") {
+    lines.push("");
+    lines.push("## Pi Extension Tool Constraints");
+    lines.push("");
+    lines.push("This agent is part of a Pi extension project. Tool usage must obey:");
+    lines.push("");
+    lines.push(`- **Allowed**: ${roleTools[role] ?? "read, write, edit, bash"}`);
+    lines.push("- **Required**: every tool call uses `ctx.cwd` instead of `process.cwd()`.");
+    lines.push("- **Required**: long-running handlers pass `ctx.signal` to nested async work.");
+    lines.push("- **Required**: tools register with TypeBox schemas; never raw object params.");
+    lines.push("- **Forbidden**: direct `fs.writeFileSync` outside `io/atomic-write.ts` (use the extension's atomic writer).");
+    lines.push("- **Forbidden**: importing from a higher layer (`commands/` may not import from `core/`, etc.).");
+    lines.push("- **Reference**: https://pi.dev/docs/latest/skills for skill format, https://pi.dev/packages/pi-package-template for package layout.");
+  }
+
   lines.push("");
   lines.push("## Forbidden patterns");
   lines.push("");
@@ -1139,7 +1175,7 @@ function buildSkillMarkdown(
     deliver: "Run final checks and package the deliverable",
   };
 
-  return [
+  const baseLines = [
     "---",
     `name: ${skillName}`,
     `description: ${stageDescription[stage]} for ${profile.projectName}`,
@@ -1150,6 +1186,20 @@ function buildSkillMarkdown(
     `${stageDescription[stage]} for ${profile.projectName}.`,
     "",
     `Architecture: ${architecture.name}`,
+  ];
+
+  if (architecture.id === "pi-architecture") {
+    baseLines.push("");
+    baseLines.push("## Pi Extension Compliance");
+    baseLines.push("");
+    baseLines.push("This project follows Pi's official architecture. Before any action:");
+    baseLines.push("- Read the Pi extension docs at https://pi.dev/docs/latest/skills and https://app.unpkg.com/@mariozechner/pi-coding-agent@latest/files/docs/extensions.md.");
+    baseLines.push("- Use `ctx.cwd` not `process.cwd()` for all file operations.");
+    baseLines.push("- Respect the layered architecture: lower layers never import from higher layers.");
+    baseLines.push("- Run all writes through the extension's atomic-write helper.");
+  }
+
+  baseLines.push(
     "",
     "## Rules",
     "",
@@ -1157,5 +1207,7 @@ function buildSkillMarkdown(
     `- Respect the project constraints and quality attributes in .pi/architect/architectural-drivers.json.`,
     `- Read .pi/architect/architecture.md and relevant ADRs in .pi/architect/adrs/ before acting.`,
     `- Do not use patterns listed as forbidden in the architecture library.`,
-  ].join("\n");
+  );
+
+  return baseLines.join("\n");
 }

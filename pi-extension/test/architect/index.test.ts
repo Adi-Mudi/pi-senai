@@ -528,6 +528,150 @@ describe("architect", () => {
     assert.strictEqual(withContext?.name, "pi-architecture");
   });
 
+  it("generateArchitectureDocs emits Pi Extension Mandatory Rules when selectedArchitecture is pi-architecture", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-pi-rules-"));
+    const profile: ArchitectProfile = {
+      projectName: "Pi Extension Project",
+      projectSlug: "pi-extension-project",
+      selectedArchitecture: "pi-architecture",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const report: ArchitectReport = {
+      selectedArchitecture: "pi-architecture",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "Pi extension detection matched multiple high-confidence signals.",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: ["1. Set up package.json", "2. Write index.ts"],
+      feasibility: "feasible",
+      feasibilityReasoning: "All required Pi packages are available.",
+      techStack: ["TypeScript", "Node.js"],
+      atomicFunctions: ["registerTool wrapper", "atomic write helper"],
+      systemOverview: "A Pi extension that adds stage-gated orchestration.",
+      components: [
+        { name: "Core", responsibility: "Owns the state machine", dependencies: ["io"] },
+      ],
+      interfaces: [
+        { name: "/senai-plan", type: "external", description: "User-facing slash command" },
+      ],
+      dataFlow: "User -> commands -> state.json",
+      dataModel: "Single state.json with stage enum",
+      deployment: "npm install + symlink into ~/.pi/agent/extensions/",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    };
+
+    generateArchitectureDocs(tmpDir, profile, report);
+
+    const archPath = path.join(tmpDir, ".pi", "architect", "architecture.md");
+    const content = fs.readFileSync(archPath, "utf8");
+    assert.ok(content.includes("## Pi Extension Mandatory Rules"));
+    assert.ok(content.includes("`ai` → `agent` → `coding-agent` → `tui`"));
+    assert.ok(content.includes("peerDependencies"));
+    assert.ok(content.includes("TypeBox"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateArchitectureDocs omits Pi Extension rules for non-pi architecture", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-non-pi-"));
+    const profile: ArchitectProfile = {
+      projectName: "Generic App",
+      projectSlug: "generic-app",
+      selectedArchitecture: "modular-monolith",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const report: ArchitectReport = {
+      selectedArchitecture: "modular-monolith",
+      confidence: "high",
+      missingResources: [],
+      reasoning: "",
+      skillProfile: { recommendedAgents: [], forbiddenPatterns: [] },
+      developmentOrder: [],
+      feasibility: "feasible",
+      feasibilityReasoning: "",
+      techStack: [],
+      atomicFunctions: [],
+      systemOverview: "",
+      components: [],
+      interfaces: [],
+      dataFlow: "",
+      dataModel: "",
+      deployment: "",
+      qualityAttributeMapping: [],
+      adrs: [],
+      constraints: [],
+    };
+
+    generateArchitectureDocs(tmpDir, profile, report);
+
+    const archPath = path.join(tmpDir, ".pi", "architect", "architecture.md");
+    const content = fs.readFileSync(archPath, "utf8");
+    assert.ok(!content.includes("## Pi Extension Mandatory Rules"));
+
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateAgentFiles adds Pi Extension Tool Constraints block when architecture is pi-architecture", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-pi-agent-"));
+    const profile: ArchitectProfile = {
+      projectName: "Pi Ext",
+      projectSlug: "pi-ext",
+      selectedArchitecture: "pi-architecture",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const entry: ArchitectureLibraryEntry = {
+      id: "pi-architecture",
+      name: "pi-architecture",
+      filePath: "",
+      domain: [],
+      teamSize: "",
+      complexity: "",
+      bestForDrivers: [],
+      notForDrivers: [],
+      content: "# Pi Architecture\n\n## Core rules\n1. Layered codebase.\n",
+    };
+    const created = generateAgentFiles(tmpDir, profile, entry);
+    assert.ok(created.length > 0);
+    const agentContent = fs.readFileSync(created[0], "utf8");
+    assert.ok(agentContent.includes("## Pi Extension Tool Constraints"));
+    assert.ok(agentContent.includes("ctx.cwd"));
+    assert.ok(agentContent.includes("TypeBox"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("generateSkillFiles adds Pi Extension Compliance section when architecture is pi-architecture", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-pi-skill-"));
+    const profile: ArchitectProfile = {
+      projectName: "Pi Ext",
+      projectSlug: "pi-ext",
+      selectedArchitecture: "pi-architecture",
+      drivers: createEmptyDrivers(),
+      additionalConstraints: [],
+    };
+    const entry: ArchitectureLibraryEntry = {
+      id: "pi-architecture",
+      name: "pi-architecture",
+      filePath: "",
+      domain: [],
+      teamSize: "",
+      complexity: "",
+      bestForDrivers: [],
+      notForDrivers: [],
+      content: "",
+    };
+    const created = generateSkillFiles(tmpDir, profile, entry);
+    assert.ok(created.length > 0);
+    const skillContent = fs.readFileSync(created[0], "utf8");
+    assert.ok(skillContent.includes("## Pi Extension Compliance"));
+    assert.ok(skillContent.includes("ctx.cwd"));
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   it("generateAgentFiles creates files with correct names", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "arch-gen-"));
     const profile: ArchitectProfile = {
