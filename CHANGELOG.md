@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.6.0] - 2026-09-06
+
+### Added
+
 - **Architecture library + factory upgrade for Pi extension compliance** (8 phases, 8 commits). The architecture library grew from 17 to 36 entries. The factory now detects Pi extension projects and biases architecture selection toward `pi-architecture`. Generated architecture.md, agent files, and skill files include Pi extension mandatory rules when applicable. Doctor has two new sections: Pi Extension Conformance and Library Completeness. Four new skeleton templates ship under `resources/extension-templates/` (extension, skill, agent, package). New library categories: 10 Pi extension sub-patterns (orchestrator, subagent-delegator, memory, tool-provider, guard, compactor, theme, provider, mcp-bridge, rpc), 6 Pi official specs (package-manifest, lifecycle-events, api-surface, skill-format, agent-format, discovery-paths), and 3 Pi-aware project architectures (coding-agent, skill-package, rpc-host). The existing `pi-architecture.md` is enriched with the full Pi extension surface (mandatory imports, peerDependencies rule, lifecycle events, ExtensionAPI surface, package manifest schema, discovery paths, skill/agent format).
 
 - Consolidated installation guide: new `INSTALL.md` at the project root covers every install path (global, project-local, dev), verification, upgrade, uninstall, troubleshooting, side-by-side comparison, and maintainer publishing notes (including a GitHub Actions auto-publish workflow template). The README's old Install section is replaced with a one-liner + link to `INSTALL.md` so the docs have a single source of truth. `INSTALL.md` is added to the `package.json` `files` whitelist so it ships with the npm package.
