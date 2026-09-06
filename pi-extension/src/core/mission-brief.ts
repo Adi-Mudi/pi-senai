@@ -214,3 +214,45 @@ export function validateBriefSections(brief: string): string[] {
   }
   return missing;
 }
+
+/** Placeholder marker for unfilled brief sections. Recognized by
+ *  validateBriefContent below. */
+export const BRIEF_CONTENT_PLACEHOLDER = "_TBD_";
+
+/** True when the body between two section headers is empty or contains only
+ *  the placeholder marker. Pure — no side effects. */
+function bodyIsPlaceholder(body: string): boolean {
+  const lines = body
+    .split("\n")
+    .map((l) => l.trim())
+    .filter((l) => l.length > 0);
+  if (lines.length === 0) return true;
+  return lines.every((l) => l === BRIEF_CONTENT_PLACEHOLDER);
+}
+
+/** Validate that every required section has REAL content — not `_TBD_` and
+ *  not empty. Returns the list of unfilled section names; empty list = ok.
+ *  This is stricter than validateBriefSections, which only checks that the
+ *  section heading exists. The brainstorm guard layer (Phase 2) wraps this
+ *  to hard-reject finalize when the brief is still skeletal. */
+export function validateBriefContent(brief: string): string[] {
+  const unfilled: string[] = [];
+  for (const section of REQUIRED_BRIEF_SECTIONS) {
+    const idx = brief.indexOf(section);
+    if (idx === -1) {
+      // Missing heading is also "unfilled" — caller can decide whether to
+      // call this "missing" or "placeholder", but the user-facing guard
+      // treats both the same way.
+      unfilled.push(section);
+      continue;
+    }
+    const bodyStart = idx + section.length;
+    const nextHeader = brief.slice(bodyStart).match(/\n##\s/);
+    const bodyEnd = nextHeader ? bodyStart + nextHeader.index! : brief.length;
+    const body = brief.slice(bodyStart, bodyEnd);
+    if (bodyIsPlaceholder(body)) {
+      unfilled.push(section);
+    }
+  }
+  return unfilled;
+}

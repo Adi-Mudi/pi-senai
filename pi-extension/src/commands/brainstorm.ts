@@ -16,6 +16,7 @@ import { purgeCache as purgeCommunityCache } from "../scouts/community-research.
 import { SOURCE_PICKER_OPTIONS } from "../scouts/web-fetcher.js";
 import { loadSkill } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
+import { guardBriefContent, guardSeedInput } from "../brainstorm/guard.js";
 
 /** Resolve the brief path for the current brainstorm session. Brainstorm
  *  run id wins (new flow); then active run id (mid-run brainstorm);
@@ -54,6 +55,13 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 	pi.registerCommand("senai-brainstorm", {
 		description: "Open a brainstorm with the user to refine the mission: /senai-brainstorm <topic>",
 		handler: async (args, ctx) => {
+			// Phase 2 guard: refuse empty seed. The parent LLM needs at least
+			// one signal (topic, insight, goal, question) to anchor the Q&A.
+			const seedGuard = guardSeedInput(args);
+			if (!seedGuard.ok) {
+				ctx.ui.notify(seedGuard.reason!, "warning");
+				return;
+			}
 			const topic = args.trim();
 			const loaded = loadState(ctx.cwd);
 			// Mint (or resume) the brainstorm run id and persist it. The id is
@@ -161,6 +169,22 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 						}
 					}
 
+					// Phase 2 guard: HARD reject if any section is still a `_TBD_`
+					// placeholder or empty. This replaces the old soft "Finalize
+					// anyway?" dialog for placeholder content. The user MUST fill
+					// the gaps before approve succeeds.
+					const contentGuard = guardBriefContent(raw);
+					if (!contentGuard.ok) {
+						return {
+							kind: "rejected" as const,
+							reason: contentGuard.reason!,
+						};
+					}
+
+					// Legacy soft check: still warn-and-confirm when a section
+					// heading is missing entirely (separate from content gaps).
+					// Kept for backward compat — most real briefs hit the hard
+					// guard above before reaching this.
 					const missing = validateBriefSections(raw);
 					if (missing.length > 0) {
 						const proceed = await runSimpleConfirm(
@@ -225,6 +249,11 @@ export function registerBrainstormCommands(pi: ExtensionAPI) {
 			const outcome = lockResult.value;
 			if (outcome.kind === "missing") {
 				ctx.ui.notify("No mission-brief.md found. Run /senai-brainstorm first.", "warning");
+				return;
+			}
+			if (outcome.kind === "rejected") {
+				// Phase 2 hard reject — brief still has _TBD_ placeholders.
+				ctx.ui.notify(outcome.reason, "warning");
 				return;
 			}
 			if (outcome.kind === "cancelled") {

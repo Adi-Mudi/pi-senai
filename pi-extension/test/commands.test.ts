@@ -3414,7 +3414,10 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     assert.ok(notifications[0].message.includes("Mission brief finalized"));
   });
 
-  it("/senai-brainstorm-approve warns before finalizing a brief with missing sections", async () => {
+  it("/senai-brainstorm-approve hard-rejects a brief with missing sections (Phase 2 guard)", async () => {
+    // Phase 2: the soft "Finalize anyway?" dialog is removed. Missing or
+    // placeholder sections now hard-reject finalize — the user must fill
+    // them first. The draft marker stays; no discussion event is recorded.
     const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     const briefPath = path.join(preDir, "mission-brief.md");
@@ -3431,16 +3434,22 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
 
     registerBrainstormCommands(makeApi());
     const ctx = makeCtx();
-    ctx.ui.confirm = async () => false;
     notifications.length = 0;
     await commandHandlers["senai-brainstorm-approve"]("", ctx);
 
-    // Marker stays because the user declined the missing-sections override.
-    assert.ok(fs.readFileSync(briefPath, "utf8").startsWith("<!-- pi-senai mission-brief: draft -->"));
+    // Draft marker stays because the hard guard refused finalize.
     assert.ok(
-      notifications.some((n) => n.message.includes("Cancelled")),
-      "declining the gaps override emits a Cancelled notify",
+      fs.readFileSync(briefPath, "utf8").startsWith("<!-- pi-senai mission-brief: draft -->"),
+      "draft marker must stay when guard rejects",
     );
+    // The notify names the missing sections (no soft "Cancelled" message).
+    assert.ok(
+      notifications.some(
+        (n) => n.type === "warning" && n.message.includes("not ready to finalize"),
+      ),
+      "guard rejection emits a warning notify naming the missing sections",
+    );
+    // No discussion event was recorded.
     assert.ok((loadState(tmpDir).discussions ?? 0) === 0);
   });
 
