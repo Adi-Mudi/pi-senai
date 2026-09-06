@@ -25,6 +25,12 @@ export {
 	type ProjectRealtime,
 } from "./library-suggester.js";
 
+// Re-export codebase auto-discovery so commands can import via architect/index.js
+export {
+	createInputsConfigFromCodebase,
+	type CodebaseDiscoveryResult,
+} from "./inputs-config.js";
+
 export interface ArchitectureLibraryEntry {
   id: string;
   name: string;
