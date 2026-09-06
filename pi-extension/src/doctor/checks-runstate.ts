@@ -100,11 +100,11 @@ export function checkSetupProgress(cwd: string): DiagnosticSection {
 	});
 	items.push({
 		status: "info",
-		message: "8. Optional: /senai-discussion — refine the mission in a conversational pass before /senai-plan.",
+		message: "8. Optional: /senai-brainstorm — refine the mission in a conversational pass before /senai-plan.",
 	});
 
 	if (allDone) {
-		items.push({ status: "ok", message: "Setup complete — run /senai-plan <mission> to start your first run (or /senai-discussion first to refine the mission)." });
+		items.push({ status: "ok", message: "Setup complete — run /senai-plan <mission> to start your first run (or /senai-brainstorm first to refine the mission)." });
 	} else {
 		const next = steps.find((s) => !s.done)!;
 		items.push({ status: "info", message: `Setup progress: ${completed}/5 checks complete. Next: run ${next.command}.` });
@@ -130,7 +130,7 @@ export function checkSetupProgress(cwd: string): DiagnosticSection {
 
 /**
  * Report the project-wide run lock state. The lock is held by
- * `/senai-approve` and `/senai-discussion-approve` for the duration of
+ * `/senai-approve` and `/senai-brainstorm-approve` for the duration of
  * their mutation. A held lock with a live pid means another Pi session is
  * mid-flight; a held lock with a dead pid or stale heartbeat is recovered
  * automatically by the next acquire call.
@@ -163,7 +163,7 @@ export function checkLock(cwd: string): DiagnosticSection {
 	if (isStale) {
 		items.push({
 			status: "warning",
-			message: `Heartbeat is older than ${staleMs}ms — the next /senai-approve or /senai-discussion-approve will auto-steal this lock.`,
+			message: `Heartbeat is older than ${staleMs}ms — the next /senai-approve or /senai-brainstorm-approve will auto-steal this lock.`,
 		});
 	} else {
 		items.push({
@@ -450,7 +450,7 @@ export function checkDiscussions(cwd: string): DiagnosticSection {
 				items.push({
 					status: "warning",
 					message: `Mission brief in run ${path.basename(runDir)} is missing ${missing.length} required section(s)`,
-					details: [...missing.map((m) => `  ${m}`), "Run /senai-discussion to add the missing sections."],
+					details: [...missing.map((m) => `  ${m}`), "Run /senai-brainstorm to add the missing sections."],
 				});
 			}
 		}
@@ -472,7 +472,7 @@ export function checkDiscussions(cwd: string): DiagnosticSection {
 		items.push({
 			status: "info",
 			message: "Pre-run discussions exist but no mission-brief.md was written.",
-			details: ["Run /senai-discussion-approve to finalize the brief, or delete the orphan transcripts."],
+			details: ["Run /senai-brainstorm-approve to finalize the brief, or delete the orphan transcripts."],
 		});
 	}
 
@@ -483,7 +483,7 @@ export function checkDiscussions(cwd: string): DiagnosticSection {
 			items.push({
 				status: "warning",
 				message: `Pre-run mission brief is missing ${missing.length} required section(s)`,
-				details: [...missing.map((m) => `  ${m}`), "Run /senai-discussion to add the missing sections."],
+				details: [...missing.map((m) => `  ${m}`), "Run /senai-brainstorm to add the missing sections."],
 			});
 		}
 	}

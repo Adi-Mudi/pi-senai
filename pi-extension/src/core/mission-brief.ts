@@ -9,7 +9,7 @@ import {
 import { atomicWriteFile } from "../io/atomic-write.js";
 
 /** Marker written at the top of mission-brief.md while a brief is still
- *  being shaped — the /senai-discussion-approve command removes it. The
+ *  being shaped — the /senai-brainstorm-approve command removes it. The
  *  marker is a single line so it is robust to editors. */
 export const BRIEF_DRAFT_MARKER = "<!-- pi-senai mission-brief: draft -->\n";
 
@@ -74,7 +74,7 @@ export interface RecordDiscussionInput {
 /** Append a discussion transcript + a "## Discussion — <stamp>" section to
  *  the brief, then return the absolute paths the caller records into
  *  state.discussionEvents. The brief is created on first call; the draft
- *  marker stays at the top until /senai-discussion-approve clears it. */
+ *  marker stays at the top until /senai-brainstorm-approve clears it. */
 export function recordDiscussion(input: RecordDiscussionInput): DiscussionLocation {
   const runId = input.runId;
   const transcriptsDir = runId
@@ -130,7 +130,7 @@ export function recordDiscussion(input: RecordDiscussionInput): DiscussionLocati
 
 /**
  * Clear the draft marker (first line) of mission-brief.md, leaving the
- * rest intact. Called by /senai-discussion-approve.
+ * rest intact. Called by /senai-brainstorm-approve.
  *
  * Idempotent: if the marker is already gone (the brief was finalized on a
  * previous call), this is a no-op. Before rewriting, the function copies

@@ -373,7 +373,7 @@ export function checkAgentFileIntegrity(
  * web-capable agents confuses the orchestra about who owns external research.
  *
  * Missing web tools on the discussion role is also an ERROR (post-generator
- * v7) — without them, /senai-discussion cannot do real web research.
+ * v7) — without them, /senai-brainstorm cannot do real web research.
  *
  * Architecture-bound roles (scout-1, planner, three reviewers, implementer,
  * code-review) are skipped here because they are owned by the architecture

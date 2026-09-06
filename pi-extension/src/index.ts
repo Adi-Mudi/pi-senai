@@ -1,5 +1,5 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { registerAgentCommands, registerAgentGeneratorCommand, registerAgentsFilesCommands, registerArchitectCommand, registerArchitectInputsCommands, registerCommands, registerDiscussionCommands, registerDoctorCommand, registerDocsStructureCommand, registerFilesCommands } from "./commands/index.js";
+import { registerAgentCommands, registerAgentGeneratorCommand, registerAgentsFilesCommands, registerArchitectCommand, registerArchitectInputsCommands, registerCommands, registerBrainstormCommands, registerDoctorCommand, registerDocsStructureCommand, registerFilesCommands } from "./commands/index.js";
 import { migrateLegacyArchitectState } from "./architect/index.js";
 import { migrateLegacyOrchestraDirs } from "./io/migrate.js";
 import { registerArchitectTools } from "./architect/tools.js";
@@ -25,7 +25,7 @@ export default function piSenaiExtension(pi: ExtensionAPI) {
 	}
 
 	registerCommands(pi);
-	registerDiscussionCommands(pi);
+	registerBrainstormCommands(pi);
 	registerAgentCommands(pi);
 	registerFilesCommands(pi);
 	registerAgentsFilesCommands(pi);

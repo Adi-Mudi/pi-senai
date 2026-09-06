@@ -16,23 +16,23 @@ import { SOURCE_PICKER_OPTIONS } from "../scouts/web-fetcher.js";
 import { loadSkill } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
 
-export function registerDiscussionCommands(pi: ExtensionAPI) {
-	// /senai-discussion is conversational: the parent LLM runs the
-	// AskUserQuestion loops driven by skills/senai-discussion.md, then
+export function registerBrainstormCommands(pi: ExtensionAPI) {
+	// /senai-brainstorm is conversational: the parent LLM runs the
+	// AskUserQuestion loops driven by skills/senai-brainstorm.md, then
 	// calls recordDiscussion from mission-brief.ts. This slash command
 	// emits the stage prompt that loads the skill; the parent does the
 	// actual Q&A and writes the brief via its own tool calls.
-	pi.registerCommand("senai-discussion", {
-		description: "Open a discussion with the user to refine the mission: /senai-discussion <topic>",
+	pi.registerCommand("senai-brainstorm", {
+		description: "Open a brainstorm with the user to refine the mission: /senai-brainstorm <topic>",
 		handler: async (args, ctx) => {
 			const topic = args.trim();
 			const state = loadState(ctx.cwd);
 			const location = state.runId ? `run ${state.runId}` : "pre-run";
 			const stage = state.currentStage;
 			ctx.ui.notify(
-				`Opening /senai-discussion (${location}, stage '${stage}').\n` +
+				`Opening /senai-brainstorm (${location}, stage '${stage}').\n` +
 					`The parent will ask the mission-type question first, then 2-5 focused questions.\n` +
-					`Use /senai-discussion-approve to finalize the mission-brief.md.`,
+					`Use /senai-brainstorm-approve to finalize the mission-brief.md.`,
 				"info",
 			);
 			const briefLocation = state.runId
@@ -46,7 +46,7 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 				`Brief location: ${briefLocation}`,
 				`</pi-senai>`,
 				``,
-				loadSkill("discussion"),
+				loadSkill("brainstorm"),
 				// Community-research is an optional side-channel inside discussion.
 				// The parent loads this skill on demand when a trigger path matches.
 				loadSkill("community-research"),
@@ -65,7 +65,7 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 		},
 	});
 
-	pi.registerCommand("senai-discussion-approve", {
+	pi.registerCommand("senai-brainstorm-approve", {
 		description: "Finalize the current mission-brief.md (clears the draft marker, logs the event)",
 		handler: async (_args, ctx) => {
 			const state = loadState(ctx.cwd);
@@ -75,7 +75,7 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 
 			if (!fs.existsSync(briefPath)) {
 				ctx.ui.notify(
-					"No mission-brief.md found. Run /senai-discussion first.",
+					"No mission-brief.md found. Run /senai-brainstorm first.",
 					"warning",
 				);
 				return;
@@ -104,8 +104,8 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 			const lockResult = await withRunLock(
 				{
 					cwd: ctx.cwd,
-					mode: "discussion-approve",
-					command: "/senai-discussion-approve",
+					mode: "brainstorm-approve",
+					command: "/senai-brainstorm-approve",
 					runId: state.runId,
 				},
 				async () => {
@@ -195,12 +195,12 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 
 			const outcome = lockResult.value;
 			if (outcome.kind === "missing") {
-				ctx.ui.notify("No mission-brief.md found. Run /senai-discussion first.", "warning");
+				ctx.ui.notify("No mission-brief.md found. Run /senai-brainstorm first.", "warning");
 				return;
 			}
 			if (outcome.kind === "cancelled") {
 				ctx.ui.notify(
-					"Cancelled. Fill the missing sections, then re-run /senai-discussion-approve.",
+					"Cancelled. Fill the missing sections, then re-run /senai-brainstorm-approve.",
 					"info",
 				);
 				return;
@@ -235,7 +235,7 @@ export function registerDiscussionCommands(pi: ExtensionAPI) {
 			const lockResult = await withRunLock(
 				{
 					cwd: ctx.cwd,
-					mode: "discussion-research",
+					mode: "brainstorm-research",
 					command: "/senai-purge-community-cache",
 					runId: state.runId,
 				},

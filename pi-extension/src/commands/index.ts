@@ -29,7 +29,7 @@ export {
 	registerCadenceResetCommand,
 } from "./ops.js";
 
-export { registerDiscussionCommands } from "./discussion.js";
+export { registerBrainstormCommands } from "./brainstorm.js";
 
 export { registerAgentCommands } from "./configure-agents.js";
 

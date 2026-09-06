@@ -1,5 +1,5 @@
 /**
- * Community Research Scout (standalone, one-shot, run from /senai-discussion only).
+ * Community Research Scout (standalone, one-shot, run from /senai-brainstorm only).
  *
  * Pure function: takes a topic + project keywords + source choice, returns a
  * structured result with up to 5 entries per category (community / official /

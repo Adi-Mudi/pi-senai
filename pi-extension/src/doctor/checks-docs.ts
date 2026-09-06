@@ -283,7 +283,7 @@ export function checkCommunityResearchCache(cwd: string): DiagnosticSection {
 	if (size === 0) {
 		items.push({
 			status: "info",
-			message: "Community research cache: empty (no /senai-discussion scout runs yet).",
+			message: "Community research cache: empty (no /senai-brainstorm scout runs yet).",
 		});
 		return { title: "Community research cache", items };
 	}

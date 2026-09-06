@@ -6,7 +6,7 @@ import { atomicWriteJson } from "./atomic-write.js";
 /**
  * Project-wide run lock.
  *
- * Three Senai commands (`/senai-approve`, `/senai-discussion-approve`,
+ * Three Senai commands (`/senai-approve`, `/senai-brainstorm-approve`,
  * `/senai-purge-community-cache`) share one lock file so they mutually
  * exclude each other. A second Pi session in the same project, or a
  * double-click inside one session, both surface as
@@ -30,7 +30,7 @@ import { atomicWriteJson } from "./atomic-write.js";
  *      rm the lock dir.
  */
 
-export type LockMode = "approve" | "discussion-approve" | "discussion-research";
+export type LockMode = "approve" | "brainstorm-approve" | "brainstorm-research";
 
 export interface LockMeta {
   pid: number;
@@ -95,7 +95,7 @@ function readMeta(filePath: string): LockMeta | null {
       typeof parsed.command === "string" &&
       typeof parsed.startedAt === "string" &&
       typeof parsed.heartbeatAt === "string" &&
-      (parsed.mode === "approve" || parsed.mode === "discussion-approve" || parsed.mode === "discussion-research")
+      (parsed.mode === "approve" || parsed.mode === "brainstorm-approve" || parsed.mode === "brainstorm-research")
     ) {
       return parsed;
     }

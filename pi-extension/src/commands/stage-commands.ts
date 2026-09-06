@@ -39,11 +39,11 @@ export function registerPlanCommand(pi: ExtensionAPI) {
 					"Active run in progress",
 					`Run "${existing.mission}" (${existing.runId}) is in stage '${activeStage}'.\n\n` +
 						`Starting /senai-plan will REPLACE state.json with a new run.\n` +
-						`To refine the active run without replacing it, run /senai-discussion instead.\n\n` +
+						`To refine the active run without replacing it, run /senai-brainstorm instead.\n\n` +
 						`Start a new run anyway?`,
 				);
 				if (!proceed) {
-					ctx.ui.notify("Cancelled. Run /senai-discussion to update the active run.", "info");
+					ctx.ui.notify("Cancelled. Run /senai-brainstorm to update the active run.", "info");
 					return;
 				}
 			}

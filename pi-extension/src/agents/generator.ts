@@ -244,8 +244,8 @@ export interface WriteAgentsResult {
 //     and an outOfScope section (boundary in the body).
 // v6: doc-writer roles' outOfScope now forbids modifying tests or tested
 //     code examples (prevents doc drift from breaking the test suite).
-// v7: discussion role is the ONLY role with WebSearch + FetchURL (web tool
-//     lock). Used by /senai-discussion and the plan-stage consolidation.
+// v7: brainstorm role is the ONLY role with WebSearch + FetchURL (web tool
+//     lock). Used by /senai-brainstorm and the plan-stage consolidation.
 export const GENERATOR_VERSION = 7;
 
 // Returns the sha256 of a file, or null when it cannot be read.

@@ -56,7 +56,7 @@ export const ROLE_REQUIRED_TOOLS: Partial<Record<SenaiRole, string[]>> = {
 export const READONLY_ROLES: SenaiRole[] = [];
 
 // Strict web-tool lock. Only the discussion role is allowed to carry
-// WebSearch + FetchURL. Used by /senai-discussion and the plan-stage
+// WebSearch + FetchURL. Used by /senai-brainstorm and the plan-stage
 // consolidation. Any other role with web tools is an ERROR — having two
 // agents reach the web confuses the orchestra about who is responsible for
 // external knowledge. The lock is enforced by `checkWebToolLock` below.

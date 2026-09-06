@@ -9,7 +9,7 @@ import {
 } from "../core/paths.js";
 import { atomicWriteJson } from "../io/atomic-write.js";
 
-/** One recorded /senai-discussion event. `afterStage` is the stage that
+/** One recorded /senai-brainstorm event. `afterStage` is the stage that
  *  was active when the discussion ran; undefined for discussions recorded
  *  before any run started (pre-run / .IDE_Plans/pi-senai/discussions/pre-run/). */
 export interface DiscussionEvent {
