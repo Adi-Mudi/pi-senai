@@ -145,6 +145,26 @@ describe("architecture library content", () => {
 		}
 	});
 
+	it("pi-architecture.md is enriched with full Pi spec sections", () => {
+		const content = readEntry("pi-architecture");
+		const requiredEnrichedSections = [
+			"## Mandatory imports",
+			"## Peer dependencies rule",
+			"## Lifecycle event catalog",
+			"## ExtensionAPI surface",
+			"## Package manifest schema",
+			"## Discovery paths",
+			"## Skill format",
+			"## Agent format",
+		];
+		for (const section of requiredEnrichedSections) {
+			assert.ok(
+				content.includes(section),
+				`pi-architecture.md missing enriched section "${section}"`,
+			);
+		}
+	});
+
 	it("every Pi extension entry references at least one Pi-specific concept", () => {
 		const entries = discoverArchitectureLibrary(PROJECT_ROOT);
 		const piEntries = entries.filter((e) => e.domain.some((d) => d.startsWith("pi-extension")));
