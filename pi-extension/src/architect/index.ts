@@ -13,6 +13,18 @@ import { atomicWriteFile, atomicWriteJson } from "../io/atomic-write.js";
 export const ARCHITECT_PROFILE_FILE = "architect-profile.json";
 export const ARCHITECT_REPORT_FILE = "architect-report.json";
 
+// Re-export library suggester so commands can import via architect/index.js
+// without adding a new top-level barrel.
+export {
+	suggestArchitectures,
+	type LibrarySuggestion,
+	type ProjectAnswers,
+	type ProjectPurpose,
+	type ProjectScale,
+	type ProjectDeployment,
+	type ProjectRealtime,
+} from "./library-suggester.js";
+
 export interface ArchitectureLibraryEntry {
   id: string;
   name: string;
