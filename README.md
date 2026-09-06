@@ -303,7 +303,13 @@ Pi Senai can generate project-specific architecture agents and skills from your 
    - `senai_merge_architect_drivers` — merges per-document map outputs into the final drivers file.
    - `senai_finalize_architecture` — generates docs, agents, and skills with exact names.
 
-   The architecture library includes common patterns such as monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, Pi's own layered monorepo, and Google Apps Script spreadsheet automation.
+   The architecture library includes 36 entries grouped into three categories:
+   - **Application architectures** (17): monolith, modular monolith, microservices, event-driven, serverless, layered, clean, SOA, hexagonal, CQRS, pipeline, microkernel, space-based, embedded-iot, plc-scada, and Google Apps Script spreadsheet automation.
+   - **Pi extension sub-patterns** (10): orchestrator, subagent-delegator, memory, tool-provider, guard, compactor, theme, provider, mcp-bridge, rpc.
+   - **Pi official specs** (6): package-manifest, lifecycle-events, api-surface, skill-format, agent-format, discovery-paths.
+   - **Pi-aware project architectures** (3): coding-agent, skill-package, rpc-host.
+
+   When `/senai-generate-architect` runs on a project whose `package.json` imports from `@mariozechner/pi-*` or has a `pi-package` keyword, the factory detects the Pi extension shape (4 signal sources: drivers, inputsConfig, packageJson, agent files), biases architecture selection toward `pi-architecture`, and emits a "Pi Extension Mandatory Rules" section in the generated `architecture.md` (12 official rules covering layered deps, peerDependencies, atomic writes, skill/agent frontmatter, lifecycle event handlers, TypeBox schemas, `ctx.signal` use, and run state paths). Generated agents carry a "Pi Extension Tool Constraints" block; generated skills carry a "Pi Extension Compliance" pointer. The architecture library itself is shipped at `.pi/architecture-library/` and is project-overridable: copy any entry into the project's `.pi/architecture-library/` to shadow the bundled version without forking.
 
    Generated state and artifacts (kept in `.pi/architect/`):
 
