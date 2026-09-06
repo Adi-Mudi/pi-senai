@@ -1,5 +1,5 @@
 {
-  "name": "pi-senai",
+  "name": "@adi-mudi/pi-senai",
   "version": "0.1.0",
   "description": "Senai — stage-gated agent orchestration extension for Pi — Plan → Implement → Document → Deliver",
   "type": "module",
@@ -18,6 +18,9 @@
     "url": "https://github.com/Adi-Mudi/pi-senai/issues"
   },
   "homepage": "https://github.com/Adi-Mudi/pi-senai#readme",
+  "publishConfig": {
+    "access": "public"
+  },
   "files": [
     "dist/pi-extension/src",
     "dist/index.js",
