@@ -6,7 +6,7 @@ import * as path from "node:path";
 import {
   checkStageArtifact,
   registerCommands,
-  registerDiscussionCommands,
+  registerBrainstormCommands,
   registerAgentCommands,
   registerFilesCommands,
   registerAgentsFilesCommands,
@@ -128,7 +128,7 @@ describe("commands", () => {
 
   it("registerCommands registers all senai commands", () => {
     registerCommands(makeApi());
-    registerDiscussionCommands(makeApi());
+    registerBrainstormCommands(makeApi());
 
     [
       "senai-plan",
@@ -138,8 +138,8 @@ describe("commands", () => {
       "senai-status",
       "senai-approve",
       "senai-reset",
-      "senai-discussion",
-      "senai-discussion-approve",
+      "senai-brainstorm",
+      "senai-brainstorm-approve",
     ].forEach((cmd) => assert.ok(commandHandlers[cmd], `missing ${cmd}`));
   });
 
@@ -967,10 +967,10 @@ describe("commands", () => {
         JSON.stringify({
           pid: process.pid, // live, fresh heartbeat → must block, not steal
           host: "test",
-          command: "/senai-discussion-approve",
+          command: "/senai-brainstorm-approve",
           startedAt: now,
           heartbeatAt: now,
-          mode: "discussion-approve",
+          mode: "brainstorm-approve",
           runId: "other-run",
         }),
         "utf8",
@@ -984,7 +984,7 @@ describe("commands", () => {
       const errorMsg = notifications.find((n) => n.type === "error");
       assert.ok(errorMsg, "expected an error notification");
       assert.match(errorMsg!.message, /Lock busy/);
-      assert.match(errorMsg!.message, /\/senai-discussion-approve/);
+      assert.match(errorMsg!.message, /\/senai-brainstorm-approve/);
       const stateAfter = loadState(tmpDir);
       assert.strictEqual(stateAfter.currentStage, stateBefore.currentStage);
       assert.strictEqual(stateAfter.stageResults["planning"], stateBefore.stageResults["planning"]);
@@ -3275,7 +3275,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     );
   });
 
-  // /senai-discussion command cases — share closure with the main describe so
+  // /senai-brainstorm command cases — share closure with the main describe so
   // tmpDir / makeApi / makeCtx / commandHandlers / notifications / sentMessages
   // are all in scope.
   it("/senai-plan does NOT warn when state is none", async () => {
@@ -3353,29 +3353,29 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     );
   });
 
-  it("/senai-discussion with no active run emits the skill and pre-run notify", async () => {
-    registerDiscussionCommands(makeApi());
+  it("/senai-brainstorm with no active run emits the skill and pre-run notify", async () => {
+    registerBrainstormCommands(makeApi());
     notifications.length = 0;
     sentMessages.length = 0;
 
-    await commandHandlers["senai-discussion"]("refine", makeCtx());
+    await commandHandlers["senai-brainstorm"]("refine", makeCtx());
 
     assert.ok(notifications[0].message.includes("pre-run"));
     assert.strictEqual(sentMessages.length, 1);
-    assert.ok(sentMessages[0].includes("Discussion Stage"));
+    assert.ok(sentMessages[0].includes("Brainstorm Stage"));
     assert.ok(sentMessages[0].includes("Brief location:"));
   });
 
-  it("/senai-discussion-approve with no brief warns and skips", async () => {
-    registerDiscussionCommands(makeApi());
+  it("/senai-brainstorm-approve with no brief warns and skips", async () => {
+    registerBrainstormCommands(makeApi());
     notifications.length = 0;
 
-    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
 
     assert.ok(notifications[0].message.includes("No mission-brief.md found"));
   });
 
-  it("/senai-discussion-approve finalizes a brief and appends a discussionEvents entry", async () => {
+  it("/senai-brainstorm-approve finalizes a brief and appends a discussionEvents entry", async () => {
     // Pre-create a brief AND a transcript file under pre-run, so the
     // approve command has something to record against.
     const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
@@ -3396,9 +3396,9 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     );
     fs.writeFileSync(path.join(preDir, "discussion-01-refine.md"), "t", "utf8");
 
-    registerDiscussionCommands(makeApi());
+    registerBrainstormCommands(makeApi());
     notifications.length = 0;
-    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
 
     const after = fs.readFileSync(briefPath, "utf8");
     assert.ok(!after.startsWith("<!-- pi-senai mission-brief: draft -->"));
@@ -3410,7 +3410,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     assert.ok(notifications[0].message.includes("Mission brief finalized"));
   });
 
-  it("/senai-discussion-approve warns before finalizing a brief with missing sections", async () => {
+  it("/senai-brainstorm-approve warns before finalizing a brief with missing sections", async () => {
     const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     const briefPath = path.join(preDir, "mission-brief.md");
@@ -3425,11 +3425,11 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     );
     fs.writeFileSync(path.join(preDir, "discussion-01-test.md"), "t", "utf8");
 
-    registerDiscussionCommands(makeApi());
+    registerBrainstormCommands(makeApi());
     const ctx = makeCtx();
     ctx.ui.confirm = async () => false;
     notifications.length = 0;
-    await commandHandlers["senai-discussion-approve"]("", ctx);
+    await commandHandlers["senai-brainstorm-approve"]("", ctx);
 
     // Marker stays because the user declined the missing-sections override.
     assert.ok(fs.readFileSync(briefPath, "utf8").startsWith("<!-- pi-senai mission-brief: draft -->"));
@@ -3440,7 +3440,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     assert.ok((loadState(tmpDir).discussions ?? 0) === 0);
   });
 
-  it("/senai-discussion-approve is idempotent — second call does not duplicate the event", async () => {
+  it("/senai-brainstorm-approve is idempotent — second call does not duplicate the event", async () => {
     const preDir = path.join(tmpDir, ".IDE_Plans/pi-senai/discussions/pre-run");
     fs.mkdirSync(preDir, { recursive: true });
     const briefPath = path.join(preDir, "mission-brief.md");
@@ -3459,10 +3459,10 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     );
     fs.writeFileSync(path.join(preDir, "discussion-01-once.md"), "t", "utf8");
 
-    registerDiscussionCommands(makeApi());
+    registerBrainstormCommands(makeApi());
     notifications.length = 0;
 
-    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
     const afterFirst = loadState(tmpDir);
     assert.strictEqual(afterFirst.discussions, 1);
 
@@ -3470,7 +3470,7 @@ describe("senai-fix v1.1 approve/docs-structure coverage", () => {
     // this exact brief. The handler short-circuits with an info message and
     // does NOT bump the counter.
     notifications.length = 0;
-    await commandHandlers["senai-discussion-approve"]("", makeCtx());
+    await commandHandlers["senai-brainstorm-approve"]("", makeCtx());
     const afterSecond = loadState(tmpDir);
     assert.strictEqual(afterSecond.discussions, 1, "second call must not bump the counter");
     assert.strictEqual(afterSecond.discussionEvents?.length, 1, "no duplicate event appended");

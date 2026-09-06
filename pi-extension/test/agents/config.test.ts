@@ -32,7 +32,7 @@ describe("agent-config", () => {
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "agent-cfg-"));
     const config: AgentConfig = {
       version: 1,
-      agents: { discussion: "senai-discussion", implementer: "gas-coder" },
+      agents: { discussion: "senai-brainstorm", implementer: "gas-coder" },
     };
     saveAgentConfig(tmpDir, config);
 

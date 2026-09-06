@@ -19,8 +19,8 @@ describe("agent-suggestions", () => {
   }
 
   it("suggests discussion agent", () => {
-    const agents = [agent("senai-discussion", "Discussion agent")];
-    assert.strictEqual(suggestAgentForRole("discussion", agents), "senai-discussion");
+    const agents = [agent("my-discussion-helper", "Discussion assistant")];
+    assert.strictEqual(suggestAgentForRole("discussion", agents), "my-discussion-helper");
   });
 
   it("suggests planner agent", () => {
@@ -115,11 +115,11 @@ describe("agent-suggestions", () => {
 
   it("buildSuggestionMap returns a map with all matched roles", () => {
     const agents = [
-      agent("senai-discussion", "Discussion"),
+      agent("my-discussion-helper", "Discussion assistant"),
       agent("gas-coder", "Coder"),
     ];
     const map = buildSuggestionMap(agents);
-    assert.strictEqual(map.discussion, "senai-discussion");
+    assert.strictEqual(map.discussion, "my-discussion-helper");
     assert.strictEqual(map.implementer, "gas-coder");
   });
 

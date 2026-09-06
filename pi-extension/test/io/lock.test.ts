@@ -186,17 +186,17 @@ describe("lock", () => {
     const meta = {
       pid: 999,
       host: "host-A",
-      command: "/senai-discussion-approve",
+      command: "/senai-brainstorm-approve",
       startedAt: now,
       heartbeatAt: now,
-      mode: "discussion-approve" as const,
+      mode: "brainstorm-approve" as const,
       runId: "r-2",
     };
     const text = describeHolder(meta);
     assert.match(text, /pid=999/);
     assert.match(text, /host=host-A/);
-    assert.match(text, /command=\/senai-discussion-approve/);
-    assert.match(text, /mode=discussion-approve/);
+    assert.match(text, /command=\/senai-brainstorm-approve/);
+    assert.match(text, /mode=brainstorm-approve/);
     assert.match(text, /runId=r-2/);
     assert.match(text, /startedAt=/);
     assert.match(text, /heartbeatAt=/);
@@ -257,10 +257,10 @@ describe("lock", () => {
     // First, acquire as 'approve'.
     const first = acquireLock(baseOpts({ cwd, mode: "approve", timeoutMs: 500 }));
     assert.ok(first.ok);
-    // Now try to acquire as 'discussion-approve' — should fail because the
+    // Now try to acquire as 'brainstorm-approve' — should fail because the
     // lock file is the same regardless of mode.
     const second = acquireLock(
-      baseOpts({ cwd, mode: "discussion-approve", timeoutMs: 80, staleMs: 60_000 }),
+      baseOpts({ cwd, mode: "brainstorm-approve", timeoutMs: 80, staleMs: 60_000 }),
     );
     assert.strictEqual(second.ok, false);
     if (first.ok) first.release();

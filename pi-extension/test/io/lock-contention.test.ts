@@ -127,9 +127,9 @@ describe("lock cross-process contention", () => {
 				"--staleMs",
 				"60000",
 				"--command",
-				"/senai-discussion-approve",
+				"/senai-brainstorm-approve",
 				"--mode",
-				"discussion-approve",
+				"brainstorm-approve",
 				"--runId",
 				"second-run",
 			]);

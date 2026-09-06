@@ -41,9 +41,9 @@ if (!cwd) {
 }
 const action = arg("--action");
 const command = arg("--command", "/senai-approve")!;
-const mode = (arg("--mode", "approve") === "discussion-approve"
-	? "discussion-approve"
-	: "approve") as "approve" | "discussion-approve";
+const mode = (arg("--mode", "approve") === "brainstorm-approve"
+	? "brainstorm-approve"
+	: "approve") as "approve" | "brainstorm-approve";
 const runId = arg("--runId", "child-run")!;
 const holdMs = Number.parseInt(arg("--holdMs", "0")!, 10);
 const timeoutMs = Number.parseInt(arg("--timeoutMs", "500")!, 10);
