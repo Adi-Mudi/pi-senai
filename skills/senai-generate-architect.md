@@ -14,7 +14,7 @@ Generate a project-specific architecture agent and matching skills.
 
 ## Step 1 — Read inputs
 
-Read `.pi/senai/architect-inputs.json`.
+Read `.pi/senai/architect-inputs.json` if it exists. If it does not exist and this looks like a Pi extension project (per `detectPiExtension`), recommend `/senai-suggest-architect` to the user — it picks architecture from the library without requiring authored input documents.
 
 Note:
 - `documents` — files the user selected.
@@ -102,6 +102,25 @@ Create `.pi/architect/architect-profile.json`:
 ```
 
 Use the project name from the closest `package.json`, folder name, or ask the user if unclear.
+
+## Pi Extension Mode
+
+After step 5, check whether the project is detected as a Pi extension. Detection signals (any of):
+
+- `package.json` imports from `@mariozechner/pi-*`, `@earendil-works/pi-*`, or `@sinclair/typebox`
+- `package.json` has a `pi` manifest key or `keywords: ["pi-package", "pi-extension"]`
+- `.pi/agents/` or `extensions/` contains Pi agent files
+- Drivers or `architect-inputs.json` mention `pi-coding-agent`, `extensionapi`, `registertool`, `registercommand`, `registerprovider`, or `subagent delegation`
+
+If detected (confidence >= 0.5):
+
+1. Force `selectedArchitecture: "pi-architecture"` (override the score sort).
+2. Read the full Pi spec from `.pi/architecture-library/pi-architecture.md` (mandatory imports, peerDependencies rule, lifecycle events, ExtensionAPI surface, package manifest schema, discovery paths, skill/agent format).
+3. In step 9, append a "Pi Extension Mandatory Rules" section to the generated `architecture.md` (12 rules: layered deps, peerDependencies, atomic writes, skill/agent frontmatter, lifecycle event handlers, TypeBox schemas, `ctx.signal` use, run state paths).
+4. In step 10, generated agents carry a "Pi Extension Tool Constraints" block (allowed tools, `ctx.cwd`, `ctx.signal`, TypeBox, atomic-write requirements, forbidden direct fs writes).
+5. Generated skills carry a "Pi Extension Compliance" pointer to the official Pi docs.
+
+If not detected, follow the regular flow.
 
 ## Step 5 — Select architecture
 

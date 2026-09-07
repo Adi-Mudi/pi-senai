@@ -130,7 +130,8 @@ pi-extension/src/
 │   ├── configure-architect-inputs.ts # /senai-configure-architect-inputs
 │   ├── generate-architect.ts         # /senai-generate-architect
 │   ├── generate-sub-agents.ts        # /senai-generate-sub-agents
-│   └── generate-docs-structure.ts    # /senai-generate-docs-structure
+│   ├── generate-docs-structure.ts    # /senai-generate-docs-structure
+│   └── suggest-architect.ts          # /senai-suggest-architect (interactive library pick)
 ```
 
 There are no re-export shims. `src/commands.ts` and `src/architect.ts` were removed
@@ -192,7 +193,7 @@ A "Discussions" section validates every `mission-brief.md` (pre-run and per-run)
 
 ## Architecture factory layout
 
-The `/senai-generate-architect` command produces a one-time architecture for the project.
+The `/senai-generate-architect` command produces a one-time architecture for the project. The `/senai-suggest-architect` command is the input-docs-free alternative: 4 AskUserQuestion rounds + library scoring + top-3 picker, falling back to a new-entry template when no library entry fits.
 
 **Input config (stays in `.pi/senai/`):**
 

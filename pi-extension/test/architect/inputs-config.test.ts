@@ -5,6 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import {
   createDefaultArchitectInputsConfig,
+  createInputsConfigFromCodebase,
   getArchitectInputsConfigPath,
   getSelectedInputPaths,
   isArchitectDocumentType,
@@ -192,6 +193,92 @@ describe("config _comment instructions", () => {
     assert.ok(loaded);
     assert.strictEqual(Object.prototype.hasOwnProperty.call(loaded, "_comment"), false);
     assert.deepStrictEqual(loaded, config);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+});
+
+describe("createInputsConfigFromCodebase", () => {
+  it("returns empty config when project has no recognized files", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auto-empty-"));
+    const result = createInputsConfigFromCodebase(tmpDir);
+    assert.strictEqual(result.discovered.packageJson, false);
+    assert.strictEqual(result.discovered.readme, false);
+    assert.deepStrictEqual(result.discovered.agents, []);
+    assert.deepStrictEqual(result.discovered.skills, []);
+    assert.deepStrictEqual(result.discovered.extensions, []);
+    assert.strictEqual(result.config.documents.length, 0);
+    assert.strictEqual(result.config.additionalConstraints.length, 0);
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("captures package.json description, keywords, and Pi peer deps", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auto-pkg-"));
+    fs.writeFileSync(
+      path.join(tmpDir, "package.json"),
+      JSON.stringify({
+        name: "@scope/test",
+        version: "1.0.0",
+        description: "A test extension",
+        keywords: ["pi-package", "extension"],
+        peerDependencies: {
+          "@mariozechner/pi-coding-agent": "*",
+          "@sinclair/typebox": "*",
+        },
+      }),
+    );
+    const result = createInputsConfigFromCodebase(tmpDir);
+    assert.strictEqual(result.discovered.packageJson, true);
+    assert.ok(
+      result.config.additionalConstraints.some((c) => c.includes("A test extension")),
+      "missing description constraint",
+    );
+    assert.ok(
+      result.config.additionalConstraints.some((c) => c.includes("pi-package")),
+      "missing keyword constraint",
+    );
+    assert.ok(
+      result.config.additionalConstraints.some((c) => c.includes("@mariozechner/pi-coding-agent")),
+      "missing Pi peer dep constraint",
+    );
+    assert.strictEqual(
+      result.config.additionalConstraints.some((c) => c.includes("@sinclair/typebox")),
+      false,
+      "non-Pi peer dep should be excluded",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("captures README first heading", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auto-readme-"));
+    fs.writeFileSync(
+      path.join(tmpDir, "README.md"),
+      "# My Awesome Extension\n\nSome description here.\n",
+    );
+    const result = createInputsConfigFromCodebase(tmpDir);
+    assert.strictEqual(result.discovered.readme, true);
+    assert.ok(
+      result.config.additionalConstraints.some((c) => c.includes("My Awesome Extension")),
+      "missing README heading constraint",
+    );
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("captures agents, skills, and extensions as documents", () => {
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "auto-files-"));
+    fs.mkdirSync(path.join(tmpDir, ".pi", "agents"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "skills", "my-skill"), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, ".pi", "extensions"), { recursive: true });
+    fs.writeFileSync(path.join(tmpDir, ".pi", "agents", "planner.md"), "---\nname: planner\ndescription: test\n---\n");
+    fs.writeFileSync(path.join(tmpDir, ".pi", "skills", "my-skill", "SKILL.md"), "# My Skill\n");
+    fs.writeFileSync(path.join(tmpDir, ".pi", "extensions", "index.ts"), "export default function () {}");
+    const result = createInputsConfigFromCodebase(tmpDir);
+    assert.deepStrictEqual(result.discovered.agents, [path.join(".pi", "agents", "planner.md")]);
+    assert.deepStrictEqual(result.discovered.skills, [path.join(".pi", "skills", "my-skill", "SKILL.md")]);
+    assert.deepStrictEqual(result.discovered.extensions, [path.join(".pi", "extensions", "index.ts")]);
+    assert.strictEqual(result.config.documents.length, 3);
+    for (const doc of result.config.documents) {
+      assert.strictEqual(doc.type, "code");
+    }
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 });

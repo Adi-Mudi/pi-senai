@@ -34,6 +34,7 @@ const EXPECTED_COMMANDS = [
 	"senai-lock-force",
 	"senai-cadence-status",
 	"senai-cadence-reset",
+	"senai-suggest-architect",
 ];
 
 describe("e2e/01-registration", () => {
