@@ -1,6 +1,10 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { suggestArchitectures } from "../../src/architect/library-suggester.js";
+import {
+	PI_EXTENSION_PRESET,
+	isPiExtensionPreset,
+	suggestArchitectures,
+} from "../../src/architect/library-suggester.js";
 import type { ArchitectureLibraryEntry } from "../../src/architect/index.js";
 
 function makeEntry(overrides: Partial<ArchitectureLibraryEntry>): ArchitectureLibraryEntry {
@@ -113,6 +117,36 @@ describe("library suggester", () => {
 		assert.deepStrictEqual(
 			first.map((s) => s.entry.id),
 			second.map((s) => s.entry.id),
+		);
+	});
+
+	it("PI_EXTENSION_PRESET is the canonical Pi extension answer set", () => {
+		assert.deepStrictEqual(PI_EXTENSION_PRESET, {
+			purpose: "extension",
+			scale: "small-team",
+			deployment: "local",
+			realtime: "no",
+		});
+		assert.ok(isPiExtensionPreset(PI_EXTENSION_PRESET));
+	});
+
+	it("isPiExtensionPreset returns false when any field differs", () => {
+		assert.strictEqual(isPiExtensionPreset(PI_EXTENSION_PRESET), true);
+		assert.strictEqual(
+			isPiExtensionPreset({ ...PI_EXTENSION_PRESET, purpose: "web-app" }),
+			false,
+		);
+		assert.strictEqual(
+			isPiExtensionPreset({ ...PI_EXTENSION_PRESET, scale: "single-user" }),
+			false,
+		);
+		assert.strictEqual(
+			isPiExtensionPreset({ ...PI_EXTENSION_PRESET, deployment: "cloud" }),
+			false,
+		);
+		assert.strictEqual(
+			isPiExtensionPreset({ ...PI_EXTENSION_PRESET, realtime: "yes" }),
+			false,
 		);
 	});
 });

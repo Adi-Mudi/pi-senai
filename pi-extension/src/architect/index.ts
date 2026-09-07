@@ -17,6 +17,8 @@ export const ARCHITECT_REPORT_FILE = "architect-report.json";
 // without adding a new top-level barrel.
 export {
 	suggestArchitectures,
+	PI_EXTENSION_PRESET,
+	isPiExtensionPreset,
 	type LibrarySuggestion,
 	type ProjectAnswers,
 	type ProjectPurpose,
