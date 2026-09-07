@@ -8,7 +8,7 @@ The extension source is organised in 4 layers, mirroring Pi's own `core → mode
 
 | Layer | Folder | Purpose | May import from |
 |---|---|---|---|
-| 0 — Domain | `core/`, `io/` | Stage state, paths, mission-brief, atomic-write, lock, migration | nothing else in `src/` |
+| 0 — Domain | `core/`, `core/agents-config/`, `io/` | Stage state, paths, mission-brief, atomic-write, lock, migration, plus the Senai config domain (agents/files/agents_files JSON schemas + load/save) | nothing else in `src/` |
 | 1 — Stage logic | `architect/`, `doctor/`, `docs-factory/`, `implement/`, `scouts/`, `brainstorm/` | Architecture factory, diagnostic, doc selection, implement signals, scouts, brainstorm | Layer 0 |
 | 2 — Presentation | `agents/`, `ui/`, `hooks/` | Sub-agent discovery, UI widgets, Pi lifecycle hooks | Layer 0, 1 |
 | 3 — Composition | `commands/` | 18 slash commands + shared helpers | Layer 0, 1, 2 |

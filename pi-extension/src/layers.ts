@@ -11,8 +11,11 @@
 // ------------------------------------------------------------------------
 // Layer 0 — Domain primitives (no other layer depends on this one)
 // ------------------------------------------------------------------------
-//   core/        state, paths, mission-brief, compaction-summary
-//   io/          atomic-write, project lock, legacy migration
+//   core/              state, paths, mission-brief, compaction-summary
+//   core/agents-config/ Senai config domain: agents.json, files.json, agents_files.json
+//                        (config types + load/save; presentation-side discovery/registry stays
+//                        in agents/ at Layer 2)
+//   io/                atomic-write, project lock, legacy migration, package-dir helper
 //
 // ------------------------------------------------------------------------
 // Layer 1 — Stage logic (depends only on Layer 0)
