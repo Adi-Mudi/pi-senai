@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.7.0] - 2026-09-06
+
+### Added
+
+- **New `/senai-suggest-architect` command** for interactive library pick. Asks 4 project questions (purpose, scale, deployment, real-time), scores the 36-entry `.pi/architecture-library/` deterministically, shows the top 3 matches with rationale, and runs the factory with the chosen entry. No input docs required. If no entry fits, displays a new-entry template guide (frontmatter + 5 sections + commit instructions). No flags, no auto-yes, no force — pure Q&A flow per the user's design preference.
+- **`library-suggester.ts`** module: deterministic scoring (best-for-drivers +1, not-for-drivers -2, domain alignment +3), top-N selection, alphabetical tie-break. Pure function — same answers always yield same suggestions.
+- **`createInputsConfigFromCodebase()`** in `inputs-config.ts`: auto-discovers drivers from `package.json` (description, keywords, Pi peerDependencies, Pi dependencies), `README.md` first heading, `.pi/agents/*.md`, `.pi/skills/*/SKILL.md`, `.pi/extensions/`. Only Pi packages are surfaced.
+- **Auto-trigger from `/senai-generate-architect`**: when no `architect-inputs.json` is configured AND the project is detected as a Pi extension, the command notifies the user about `/senai-suggest-architect` instead of failing with the generic "run /senai-configure-architect-inputs first" message. Non-Pi projects keep the existing message.
+- **Doctor Library Completeness**: new info item that points to `/senai-suggest-architect` when no `architect-inputs.json` exists on a Pi extension project. Non-Pi projects are unaffected.
+
+### Changed
+
+- `pi-extension/src/architect/index.ts` re-exports `suggestArchitectures`,` `detectPiExtension`, and `createInputsConfigFromCodebase` so the command layer imports via the standard path (no new top-level barrel).
+- `/senai-generate-architect` handler now consults `detectPiExtension` before showing the "no inputs" message, but the command's contract is otherwise unchanged.
+
+### Notes
+
+- 15 new unit tests added (1648/1648 pass). All phases shipped via 7 separate commits on the `dev` branch.
+
+## [1.6.0] - 2026-09-06
+
+### Added
+
+- **Architecture library + factory upgrade for Pi extension compliance** (8 phases, 8 commits). The architecture library grew from 17 to 36 entries. The factory now detects Pi extension projects and biases architecture selection toward `pi-architecture`. Generated architecture.md, agent files, and skill files include Pi extension mandatory rules when applicable. Doctor has two new sections: Pi Extension Conformance and Library Completeness. Four new skeleton templates ship under `resources/extension-templates/` (extension, skill, agent, package). New library categories: 10 Pi extension sub-patterns (orchestrator, subagent-delegator, memory, tool-provider, guard, compactor, theme, provider, mcp-bridge, rpc), 6 Pi official specs (package-manifest, lifecycle-events, api-surface, skill-format, agent-format, discovery-paths), and 3 Pi-aware project architectures (coding-agent, skill-package, rpc-host). The existing `pi-architecture.md` is enriched with the full Pi extension surface (mandatory imports, peerDependencies rule, lifecycle events, ExtensionAPI surface, package manifest schema, discovery paths, skill/agent format).
+
 - Consolidated installation guide: new `INSTALL.md` at the project root covers every install path (global, project-local, dev), verification, upgrade, uninstall, troubleshooting, side-by-side comparison, and maintainer publishing notes (including a GitHub Actions auto-publish workflow template). The README's old Install section is replaced with a one-liner + link to `INSTALL.md` so the docs have a single source of truth. `INSTALL.md` is added to the `package.json` `files` whitelist so it ships with the npm package.
 
 - Officially packaged for Pi: installable via `pi install npm:pi-senai`. The `package.json` declares the full Pi-core `peerDependencies` (`pi-ai`, `pi-agent-core`, `pi-coding-agent`, `pi-tui`, `@sinclair/typebox`), adds the `pi-package` keyword for gallery discoverability, ships a top-level `index.ts` entry that re-exports `pi-extension/src/index.ts`, points `pi.extensions` at the pre-compiled `./dist/index.js` (built via the new `prepare` script), and includes an MIT `LICENSE`. A new `.npmignore` plus the `files` field ensure only `dist/`, `skills/`, `resources/`, `README.md`, `CHANGELOG.md`, and `LICENSE` ship to npm. `prepublishOnly` blocks any publish that does not pass `npm test`. Verified via `npm pack --dry-run` (no source, tests, `.git`, `.IDE_Plans`, or session HTML leak in). README documents the new install flow.

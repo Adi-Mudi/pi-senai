@@ -27,7 +27,45 @@ Before running `/senai-generate-architect`:
 No other configuration is required up front: the command creates or updates
 `.pi/senai/agents.json` itself and auto-maps the seven architecture-bound roles.
 
-If architect inputs are missing, the command tells the user to run `/senai-configure-architect-inputs` first.
+If architect inputs are missing, the command tells the user to run `/senai-configure-architect-inputs` first. For Pi extension projects, the message suggests `/senai-suggest-architect` instead — the new command picks architecture from the library without requiring authored input documents.
+
+---
+
+## Step 1a — Suggest architecture from library (alternative to step 1)
+
+### Command
+```
+/senai-suggest-architect
+```
+
+### What it does
+
+1. Loads `.pi/architecture-library/` (36 entries bundled in v1.6.0+).
+2. Asks 4 project questions via `AskUserQuestion`:
+ - **Purpose** — extension / coding-agent / web-app / api / library
+ - **Scale** — single-user / small-team / medium-team / large-org
+ - **Deployment** — cloud / on-premise / local / edge
+ - **Real-time** — yes / no
+3. Scores library entries deterministically (`suggestArchitectures` in `library-suggester.ts`).
+4. Shows the top 3 matches with rationale (matched drivers, domain alignment).
+5. User picks one — or selects "None fit" to see the new-entry template guide.
+6. Auto-discovers drivers from `package.json` + `README.md` + `.pi/agents/` + `.pi/skills/` + `.pi/extensions/` (per `createInputsConfigFromCodebase`).
+7. Runs the factory with the chosen library entry as `selectedArchitecture`.
+
+### When to use
+
+- The project is brand new and you have no PRD/NFR documents.
+- You want the LLM to skip the document-extraction step.
+- You're a Pi extension author and want a Pi-aware recommendation.
+- You want to see which architecture patterns match your project's shape.
+
+### Auto-trigger
+
+`/senai-generate-architect` suggests this command when no `architect-inputs.json` is configured AND the project is detected as a Pi extension. The doctor also surfaces the suggestion in the Library Completeness section.
+
+### When none fit
+
+The "None fit" option displays a copy-paste template (frontmatter + 5 sections) and the path to add it (`.pi/architecture-library/<your-name>.md`). New entries are picked up on the next run without any code change.
 
 ---
 
@@ -543,6 +581,19 @@ Next: run /senai-generate-sub-agents to generate the remaining roles. Then make 
 | Feasibility is risky or not-feasible | Ask the user before continuing. |
 | Input documents, document list, or constraints changed since last run | Ask the user whether to re-run the full architecture factory. Re-runs discard stale map files, remove agents/skills from previous architectures, and regenerate the ADR set. |
 | Generated agent validation fails | Report errors and stop before using generated agents. |
+
+---
+
+## Pi Extension Mode
+
+When `/senai-generate-architect` runs on a project whose `package.json` imports from `@mariozechner/pi-*` or has a `pi-package` keyword, the factory enters **Pi Extension Mode**:
+
+1. **Detection** — `pi-extension-detector.ts` scores signals from drivers, inputsConfig, package.json dependencies/peerDependencies/keywords/`pi` key, and `.pi/agents/` directory. Confidence >= 0.5 triggers the mode.
+2. **Architecture bias** — `selectArchitectureWithContext` adds a +10 × confidence bonus to `pi-architecture` so it wins over general-purpose patterns (layered, monolith, etc.).
+3. **Output enrichment** — the generated `architecture.md` includes a "Pi Extension Mandatory Rules" section with 12 rules. Generated agent files include a "Pi Extension Tool Constraints" block listing allowed tools and forbidden patterns. Generated skill files include a "Pi Extension Compliance" section pointing to official Pi docs.
+4. **Doctor integration** — `checkPiExtensionConformance` validates that the resulting project follows Pi conventions (peerDependencies coverage, agent/skill frontmatter, presence of `pi-architecture` in the library). `checkLibraryCompleteness` validates the library has at least one entry per required Pi extension domain.
+
+The architecture library itself ships 36 entries (17 application architectures + 10 Pi extension sub-patterns + 6 Pi official specs + 3 Pi-aware project architectures). New entries can be added by dropping a `.md` file with the standard frontmatter into `.pi/architecture-library/` (project overrides the bundled library without forking).
 
 ---
 

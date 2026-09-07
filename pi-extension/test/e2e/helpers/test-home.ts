@@ -75,16 +75,23 @@ export function shouldRunLLME2E(): boolean {
 	return hasRealLlmKey();
 }
 
-/** Walk up from this helper file until we find a package.json with name
- *  "pi-senai". Returns the absolute path to that project root, or null. */
+/** Walk up from this helper file until we find a package.json with the
+ *  pi-senai name (scoped or unscoped). Returns the absolute path to that
+ *  project root, or null. */
 function findProjectRoot(start: string): string | null {
 	let dir = start;
 	for (let i = 0; i < 16; i++) {
 		const pkg = path.join(dir, "package.json");
 		if (fs.existsSync(pkg)) {
 			try {
-				const json = JSON.parse(fs.readFileSync(pkg, "utf8"));
-				if (json && json.name === "pi-senai") return dir;
+				const json = JSON.parse(fs.readFileSync(pkg, "utf8")) as { name?: string };
+				if (
+					json &&
+					typeof json.name === "string" &&
+					(json.name === "pi-senai" || json.name.endsWith("/pi-senai") || json.name.endsWith("/pi-senai-x"))
+				) {
+					return dir;
+				}
 			} catch { /* keep walking */ }
 		}
 		const parent = path.dirname(dir);

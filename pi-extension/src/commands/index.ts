@@ -4,6 +4,7 @@ import * as StageCmds from "./stage-commands.js";
 import * as StatusCmds from "./status.js";
 import * as ApproveCmds from "./approve.js";
 import * as OpsCmds from "./ops.js";
+import { registerSuggestArchitectCommand } from "./suggest-architect.js";
 
 export function registerCommands(pi: ExtensionAPI) {
 	StageCmds.registerPlanCommand(pi);
@@ -19,6 +20,8 @@ export function registerCommands(pi: ExtensionAPI) {
 	OpsCmds.registerLockForceCommand(pi);
 	OpsCmds.registerCadenceStatusCommand(pi);
 	OpsCmds.registerCadenceResetCommand(pi);
+
+	registerSuggestArchitectCommand(pi);
 }
 
 export {
@@ -84,3 +87,5 @@ export { SUGGESTION_PAGE_SIZE, browsePath, normalizePath, isFolderLike, isPathCo
 export { buildCategoryItems, matchesFilter, buildDocumentCandidates } from "./configure-files.js";
 
 export { registerAgentGeneratorCommand } from "./generate-sub-agents.js";
+
+export { registerSuggestArchitectCommand, buildNewEntryGuide } from "./suggest-architect.js";
