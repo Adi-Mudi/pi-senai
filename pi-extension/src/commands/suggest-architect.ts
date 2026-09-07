@@ -4,6 +4,8 @@ import {
 	discoverArchitectureLibrary,
 	suggestArchitectures,
 	createInputsConfigFromCodebase,
+	detectPiExtension,
+	PI_EXTENSION_PRESET,
 } from "../architect/index.js";
 import { resolveSkillPath } from "../prompt.js";
 import type {
@@ -65,9 +67,60 @@ const REALTIME_MAP: Record<string, ProjectRealtime> = {
 	"Yes (live updates, events)": "yes",
 };
 
+export interface AskQuestionsFn {
+	(): Promise<ProjectAnswers | null>;
+}
+
+/** Asks the 4 lifestyle questions and returns the answers, or null if the user cancelled. */
+export async function askFourQuestions(
+	ctx: { ui: { select: (title: string, options: string[]) => Promise<string | undefined> } },
+): Promise<ProjectAnswers | null> {
+	const purposeLabel = await ctx.ui.select("What is the primary purpose of this project?", PURPOSE_OPTIONS);
+	if (!purposeLabel) return null;
+
+	const scaleLabel = await ctx.ui.select("What is the expected scale?", SCALE_OPTIONS);
+	if (!scaleLabel) return null;
+
+	const deploymentLabel = await ctx.ui.select("Where will it run?", DEPLOYMENT_OPTIONS);
+	if (!deploymentLabel) return null;
+
+	const realtimeLabel = await ctx.ui.select("Does it need real-time features?", REALTIME_OPTIONS);
+	if (!realtimeLabel) return null;
+
+	return {
+		purpose: PURPOSE_MAP[purposeLabel] ?? "extension",
+		scale: SCALE_MAP[scaleLabel] ?? "small-team",
+		deployment: DEPLOYMENT_MAP[deploymentLabel] ?? "local",
+		realtime: REALTIME_MAP[realtimeLabel] ?? "no",
+	};
+}
+
+/** Resolves the project answers: preset for Pi extension, 4 questions otherwise. */
+export async function resolveProjectAnswers(
+	cwd: string,
+	ctx: { ui: { select: (title: string, options: string[]) => Promise<string | undefined> } },
+): Promise<{ answers: ProjectAnswers; isPiExtension: boolean }> {
+	let isPiExtension = false;
+	try {
+		isPiExtension = detectPiExtension(cwd, null, null).isPiExtension;
+	} catch {
+		isPiExtension = false;
+	}
+	if (isPiExtension) {
+		return { answers: PI_EXTENSION_PRESET, isPiExtension: true };
+	}
+	const answers = await askFourQuestions(ctx);
+	if (!answers) {
+		// Cancellation is encoded as a sentinel via a throw-free contract:
+		// callers check for null and return early.
+		return { answers: PI_EXTENSION_PRESET, isPiExtension: false };
+	}
+	return { answers, isPiExtension: false };
+}
+
 export function registerSuggestArchitectCommand(pi: ExtensionAPI) {
 	pi.registerCommand("senai-suggest-architect", {
-		description: "Pick architecture from library via 4 questions (no input docs needed)",
+		description: "Pick architecture from library (auto-detects Pi extension projects, no questions)",
 		handler: async (_args, ctx) => {
 			const cwd = ctx.cwd;
 
@@ -80,36 +133,13 @@ export function registerSuggestArchitectCommand(pi: ExtensionAPI) {
 				return;
 			}
 
-			const purposeLabel = await ctx.ui.select(
-				"What is the primary purpose of this project?",
-				PURPOSE_OPTIONS,
-			);
-			if (!purposeLabel) return;
-
-			const scaleLabel = await ctx.ui.select(
-				"What is the expected scale?",
-				SCALE_OPTIONS,
-			);
-			if (!scaleLabel) return;
-
-			const deploymentLabel = await ctx.ui.select(
-				"Where will it run?",
-				DEPLOYMENT_OPTIONS,
-			);
-			if (!deploymentLabel) return;
-
-			const realtimeLabel = await ctx.ui.select(
-				"Does it need real-time features?",
-				REALTIME_OPTIONS,
-			);
-			if (!realtimeLabel) return;
-
-			const answers: ProjectAnswers = {
-				purpose: PURPOSE_MAP[purposeLabel] ?? "extension",
-				scale: SCALE_MAP[scaleLabel] ?? "small-team",
-				deployment: DEPLOYMENT_MAP[deploymentLabel] ?? "local",
-				realtime: REALTIME_MAP[realtimeLabel] ?? "no",
-			};
+			const { answers, isPiExtension } = await resolveProjectAnswers(cwd, ctx);
+			if (isPiExtension) {
+				ctx.ui.notify(
+					"Detected Pi extension project — using canonical answers (no questions).",
+					"info",
+				);
+			}
 
 			const suggestions = suggestArchitectures(answers, library, 3);
 
@@ -120,7 +150,8 @@ export function registerSuggestArchitectCommand(pi: ExtensionAPI) {
 			pickerOptions.push("None fit — show me how to add one");
 
 			const selected = await ctx.ui.select(
-				`Top ${suggestions.length} architecture match${suggestions.length === 1 ? "" : "es"}:`,
+				`Top ${suggestions.length} architecture match${suggestions.length === 1 ? "" : "es"}:` +
+					(isPiExtension ? " (Pi extension detected)" : ""),
 				pickerOptions,
 			);
 

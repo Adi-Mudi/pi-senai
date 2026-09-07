@@ -1,6 +1,6 @@
-import { describe, it } from "node:test";
+import { describe, it, mock } from "node:test";
 import assert from "node:assert";
-import { buildNewEntryGuide } from "../../src/commands/suggest-architect.js";
+import { buildNewEntryGuide, resolveProjectAnswers } from "../../src/commands/suggest-architect.js";
 
 describe("/senai-suggest-architect", () => {
 	it("buildNewEntryGuide produces a guide string with the new-entry template", () => {
@@ -32,5 +32,28 @@ describe("/senai-suggest-architect", () => {
 		for (const section of requiredSections) {
 			assert.ok(guide.includes(section), `guide missing section "${section}"`);
 		}
+	});
+});
+
+describe("resolveProjectAnswers", () => {
+	it("skips all 4 questions when the project is a Pi extension (uses preset)", async () => {
+		// Use the actual pi-senai project root — it is a Pi extension.
+		const selectCalls: string[] = [];
+		const ctx = {
+			ui: {
+				select: mock.fn(async (_title: string) => {
+					selectCalls.push(_title);
+					return undefined as unknown as string; // should never be called
+				}),
+			},
+		};
+		// The project root (this file lives inside it) is a Pi extension.
+		const result = await resolveProjectAnswers(process.cwd(), ctx);
+		assert.strictEqual(result.isPiExtension, true);
+		assert.strictEqual(result.answers.purpose, "extension");
+		assert.strictEqual(result.answers.scale, "small-team");
+		assert.strictEqual(result.answers.deployment, "local");
+		assert.strictEqual(result.answers.realtime, "no");
+		assert.strictEqual(selectCalls.length, 0, "ui.select must not be called for Pi extension projects");
 	});
 });
