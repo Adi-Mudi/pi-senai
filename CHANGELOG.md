@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.7.1] - 2026-09-07
+
+### Added
+
+- **Pi extension auto-path for `/senai-suggest-architect`**: when the project is detected as a Pi extension (via `detectPiExtension`), the command skips all 4 lifestyle questions and uses the canonical `PI_EXTENSION_PRESET` answers. The result is **1 dialog instead of 8** for Pi extension projects. Non-Pi projects keep the existing 4-question flow.
+- **Pi extension auto-path for `/senai-generate-architect`**: when no `.pi/senai/architect-inputs.json` exists AND the project is a Pi extension, the command auto-creates the file from the canonical preset + codebase discovery (no dialog). The previous notify-and-return behaviour is replaced by an auto-create-and-continue flow.
+- **`PI_EXTENSION_PRESET` and `isPiExtensionPreset`** in `library-suggester.ts`: single source of truth for the canonical Pi extension answer set.
+- **`maybeAutoCreatePiExtensionInputs(cwd)`** in `generate-architect.ts`: pure helper that returns the created config or `null`. Used by the handler and by the new test.
+- **`src/layers.ts`**: documents the 4-layer architecture (domain → stage logic → presentation → composition) in code, matching Pi's own `core → modes → cli → main` pattern.
+- **`src/AGENTS.md`**: layer contract for future contributors. Lists the dependency rule, the two composition roots (`src/index.ts` wiring only, `src/commands/index.ts` command registration), and file conventions.
+
+### Changed
+
+- **`pi-extension/src/architect/index.ts` slimmed to a thin barrel** (~100 lines, re-exports only). The previous 1234-line god module is split into 13 per-concern files: `profile.ts`, `report.ts`, `manifest.ts`, `library-scan.ts`, `library-select.ts`, `cleanup.ts`, `generate-agents.ts`, `generate-skills.ts`, `generate-docs.ts`, `prompt.ts`, `feasibility.ts`, `diagram.ts`, `helpers.ts`. One concern per file, matching the pattern from Pi's `extensions.md` and the community reference (`tintinweb/pi-subagents` and `rytswd/pi-agent-extensions`).
+- Bug fix: `buildSequenceMermaid` now emits the correct mermaid reply arrow (`-->>`) instead of the malformed (`--->`).
+
+### Notes
+
+- 6 new unit tests added. 1654/1654 unit tests pass; 26/26 e2e suites pass (matches baseline). All changes shipped via 5 separate commits on the `dev` branch.
+
 ## [1.7.0] - 2026-09-06
 
 ### Added

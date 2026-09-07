@@ -53,7 +53,8 @@ Configuration commands:
 - `/senai-configure-agents-files` — interactively assign truth and comparison documents per role in `.pi/senai/agents_files.json`.
 - `/senai-agents-files` — show configured document assignments per role.
 - `/senai-configure-architect-inputs` — select the documents and constraints the architect agent reads (`.pi/senai/architect-inputs.json`).
-- `/senai-generate-architect` — generate the project architecture, five architecture agents, and four architecture skills; creates or updates `.pi/senai/agents.json` and auto-maps the seven architecture-bound roles.
+- `/senai-suggest-architect` — pick an architecture from the library without writing input docs. For **Pi extension projects** the command auto-detects via `detectPiExtension` and skips all 4 lifestyle questions (1 dialog total: confirm the top-1 match). For non-Pi projects, it asks the 4 questions and shows the top 3 matches with rationale. The chosen entry is then passed to `/senai-generate-architect` via a `pi.sendUserMessage` payload.
+- `/senai-generate-architect` — generate the project architecture, five architecture agents, and four architecture skills; creates or updates `.pi/senai/agents.json` and auto-maps the seven architecture-bound roles. When `.pi/senai/architect-inputs.json` is missing on a Pi extension project, the command auto-creates the file from the canonical `PI_EXTENSION_PRESET` + codebase discovery (no dialog).
 - `/senai-doctor` — run a full diagnostic on Senai configuration, agent-role fit, file scope, runtime environment, and the architecture factory output (agent mapping, generated agent content, drift).
 - `/senai-generate-sub-agents` — generate project-specific sub-agents for the 14 non-architecture roles from bundled technology resources (basic mode: 3–4 questions). Only roles on built-in defaults are generated; one confirmation before writing and mapping.
 
