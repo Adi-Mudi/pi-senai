@@ -13,9 +13,11 @@ import { fileURLToPath } from "node:url";
 
 export function getPackageAssetDir(): string {
 	const here = path.dirname(fileURLToPath(import.meta.url));
-	const distLayout = path.resolve(here, "..", "..");
+	// dist layout: dist/pi-extension/src/io/ -> up 4 -> package root
+	const distLayout = path.resolve(here, "..", "..", "..", "..");
 	if (fs.existsSync(path.join(distLayout, "package.json"))) {
 		return distLayout;
 	}
+	// source layout: pi-extension/src/io/ -> up 3 -> package root
 	return path.resolve(here, "..", "..", "..");
 }
