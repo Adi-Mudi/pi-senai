@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { SENAI_ROLES, type SenaiRole } from "./suggestions.js";
-import { atomicWriteJson } from "../io/atomic-write.js";
+import { atomicWriteJson } from "../../io/atomic-write.js";
 
 export const AGENTS_FILES_CONFIG_FILE = "agents_files.json";
 

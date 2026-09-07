@@ -1,15 +1,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { loadAgentConfig } from "./agents/config.js";
+import { loadAgentConfig } from "./core/agents-config/config.js";
 import { buildAgentRegistryBlock } from "./agents/registry.js";
-import { SENAI_ROLES, ROLE_LABELS } from "./agents/suggestions.js";
+import { SENAI_ROLES, ROLE_LABELS } from "./core/agents-config/suggestions.js";
 import {
   loadAgentsFilesConfig,
   type AgentsFilesConfig,
   type AgentFilesDocuments,
-} from "./agents/agents-files-config.js";
-import { loadFilesConfig, type FilesConfig } from "./agents/files-config.js";
+} from "./core/agents-config/agents-files-config.js";
+import { loadFilesConfig, type FilesConfig } from "./core/agents-config/files-config.js";
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./core/paths.js";
 import { buildDocSelectionBlock } from "./docs-factory/selection.js";
 import { atomicWriteFile } from "./io/atomic-write.js";

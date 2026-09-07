@@ -1,19 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { getAgentDir, parseFrontmatter } from "@mariozechner/pi-coding-agent";
+import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 
-export type AgentSource = "project" | "user" | "builtin";
-
-export interface DiscoveredAgent {
-  name: string;
-  description: string;
-  source: AgentSource;
-  filePath?: string;
-}
-
-export function getUserAgentsDir(): string {
-  return path.join(getAgentDir(), "agents");
-}
+// Types and the pure path helper live in core/agents-config/ (Layer 0).
+// Re-exported here for backwards compatibility with existing call sites
+// that import them from agents/discovery.js.
+import {
+  getUserAgentsDir,
+  type AgentSource,
+  type DiscoveredAgent,
+} from "../core/agents-config/discovery.js";
+export { getUserAgentsDir, type AgentSource, type DiscoveredAgent };
 
 function isDirectory(p: string): boolean {
   try {

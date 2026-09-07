@@ -1,19 +1,15 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-export interface FileDiscoveryResult {
-  codeFolders: SuggestedFolder[];
-  codeFiles: string[];
-  documentFolders: SuggestedFolder[];
-  documentFiles: string[];
-  testFolders: SuggestedFolder[];
-  testFiles: string[];
-}
-
-export interface SuggestedFolder {
-  path: string;
-  reason: string;
-}
+// Types and the pure regex helper live in core/agents-config/ (Layer 0).
+// Re-exported here for backwards compatibility with existing call sites
+// that import them from agents/files-discovery.js.
+import {
+  type FileDiscoveryResult,
+  type SuggestedFolder,
+  looksLikeTestPath,
+} from "../core/agents-config/files-types.js";
+export { type FileDiscoveryResult, type SuggestedFolder, looksLikeTestPath };
 
 const CODE_EXTENSIONS = new Set([
   ".ts", ".js", ".tsx", ".jsx", ".py", ".java", ".go", ".rs", ".c", ".cpp", ".h",
@@ -48,13 +44,6 @@ const PROJECT_ROOT_MARKERS = new Set([
   "tsconfig.json", "jsconfig.json", "requirements.txt",
   "pnpm-workspace.yaml", "lerna.json", "nx.json",
 ]);
-
-const TEST_PATTERNS = /(^|[._\-/])(test|tests|testing|spec|specs|__tests__)(?=[._\-/]|$)/i;
-
-/** True when a path looks test-related (segment/delimiter aware). */
-export function looksLikeTestPath(p: string): boolean {
-  return TEST_PATTERNS.test(p.toLowerCase());
-}
 
 export function discoverProjectFiles(
   cwd: string,
@@ -117,7 +106,7 @@ function classifyFolder(
 ): void {
   const lower = name.toLowerCase();
 
-  if (TEST_FOLDER_NAMES.has(lower) || TEST_PATTERNS.test(lower)) {
+  if (TEST_FOLDER_NAMES.has(lower) || looksLikeTestPath(lower)) {
     result.testFolders.push({ path: relative, reason: "test folder" });
     return;
   }
@@ -160,7 +149,7 @@ function classifyFile(relative: string, result: FileDiscoveryResult): void {
   const lower = relative.toLowerCase();
   const ext = path.extname(relative).toLowerCase();
 
-  if (TEST_PATTERNS.test(lower)) {
+  if (looksLikeTestPath(lower)) {
     result.testFiles.push(relative);
     return;
   }

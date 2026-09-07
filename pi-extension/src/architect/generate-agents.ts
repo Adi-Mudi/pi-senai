@@ -4,8 +4,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { atomicWriteFile } from "../io/atomic-write.js";
-import { loadAgentConfig, resolveAgentName, saveAgentConfig } from "../agents/config.js";
-import { DEFAULT_AGENTS, type SenaiRole } from "../agents/suggestions.js";
+import { loadAgentConfig, resolveAgentName, saveAgentConfig } from "../core/agents-config/config.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "../core/agents-config/suggestions.js";
 import { extractArchitectureRules, slugify } from "./helpers.js";
 import { ARCHITECT_ROLES, ARCHITECT_ROLE_STAGE, ARCHITECTURE_AGENT_MAPPING } from "./cleanup.js";
 import type { ArchitectProfile } from "./profile.js";

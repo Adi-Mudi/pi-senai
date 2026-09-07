@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { type FilesConfig } from "../agents/files-config.js";
+import { type FilesConfig } from "../core/agents-config/files-config.js";
 import { GENERATOR_VERSION } from "../agents/generator.js";
 import { DOC_TYPES, isDocStub, type DocTypeId } from "../docs-factory/catalog.js";
 import { cacheSize, oldestCacheTimestamp } from "../scouts/community-research.js";

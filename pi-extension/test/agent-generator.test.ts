@@ -18,7 +18,7 @@ import {
 } from "../src/agents/generator.js";
 import { addToGeneratedManifest, loadGeneratedManifest, saveArchitectReport, slugify, writeGeneratedManifest } from "../src/architect/index.js";
 import { runSenaiDiagnostic } from "../src/doctor/index.js";
-import { saveAgentConfig } from "../src/agents/config.js";
+import { saveAgentConfig } from "../src/core/agents-config/config.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

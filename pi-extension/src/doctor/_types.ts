@@ -1,11 +1,11 @@
 import type { AgentFrontmatter } from "../agents/discovery.js";
-import { DEFAULT_AGENTS } from "../agents/suggestions.js";
+import { DEFAULT_AGENTS } from "../core/agents-config/suggestions.js";
 
 // Re-export so doctor checks can compare against the canonical default
 // without re-importing from suggestions.ts in every file.
 export { DEFAULT_AGENTS };
 import { GENERATED_ROLES } from "../agents/generator.js";
-import { type SenaiRole } from "../agents/suggestions.js";
+import { type SenaiRole } from "../core/agents-config/suggestions.js";
 
 export type DiagnosticStatus = "ok" | "warning" | "error" | "info";
 

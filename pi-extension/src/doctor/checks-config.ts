@@ -1,16 +1,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { type AgentConfig } from "../agents/config.js";
-import { type FilesConfig } from "../agents/files-config.js";
-import { type AgentsFilesConfig } from "../agents/agents-files-config.js";
+import { type AgentConfig } from "../core/agents-config/config.js";
+import { type FilesConfig } from "../core/agents-config/files-config.js";
+import { type AgentsFilesConfig } from "../core/agents-config/agents-files-config.js";
 import {
 	DOCUMENT_ROLES,
 	ROLE_LABELS,
 	SENAI_ROLES,
 	type SenaiRole,
-} from "../agents/suggestions.js";
-import { suggestTruthDocuments } from "../agents/document-suggestions.js";
+} from "../core/agents-config/suggestions.js";
+import { suggestTruthDocuments } from "../core/agents-config/document-suggestions.js";
 
 import {
 	documentSignalWords,

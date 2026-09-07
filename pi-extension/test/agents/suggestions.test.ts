@@ -10,7 +10,7 @@ import {
   SENAI_ROLES,
   SEQUENCE_ROLES,
   suggestAgentForRole,
-} from "../../src/agents/suggestions.js";
+} from "../../src/core/agents-config/suggestions.js";
 import type { DiscoveredAgent } from "../../src/agents/discovery.js";
 
 describe("agent-suggestions", () => {

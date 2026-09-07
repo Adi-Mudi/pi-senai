@@ -1,13 +1,13 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { loadAgentConfig, resolveAgentName } from "../agents/config.js";
+import { loadAgentConfig, resolveAgentName } from "../core/agents-config/config.js";
 import {
 	loadAgentsFilesConfig,
 	saveAgentsFilesConfig,
 	type AgentFilesDocuments,
 	type AgentsFilesConfig,
-} from "../agents/agents-files-config.js";
-import { roleDocumentNeed, suggestTruthDocuments } from "../agents/document-suggestions.js";
-import { loadFilesConfig } from "../agents/files-config.js";
+} from "../core/agents-config/agents-files-config.js";
+import { roleDocumentNeed, suggestTruthDocuments } from "../core/agents-config/document-suggestions.js";
+import { loadFilesConfig } from "../core/agents-config/files-config.js";
 import { buildDocumentCandidates } from "./configure-files.js";
 import {
 	PICKER_ROLES,
@@ -15,7 +15,7 @@ import {
 	ROLE_LABELS,
 	SENAI_ROLES,
 	type SenaiRole,
-} from "../agents/suggestions.js";
+} from "../core/agents-config/suggestions.js";
 import { runListEditor, type ListEditorCustomAction, type ListEditorItem } from "../ui/list-editor.js";
 import { runRolePicker, type RolePickerItem } from "../ui/role-picker.js";
 import { runSimplePicker, type SimplePickerItem } from "../ui/simple-picker.js";

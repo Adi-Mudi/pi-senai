@@ -6,7 +6,7 @@ import * as path from "node:path";
 import { createHash } from "node:crypto";
 import { getArchitectStateDir } from "../core/paths.js";
 import { loadGeneratedManifest } from "./manifest.js";
-import type { SenaiRole } from "../agents/suggestions.js";
+import type { SenaiRole } from "../core/agents-config/suggestions.js";
 import type { ArchitectProfile } from "./profile.js";
 
 export const ARCHITECT_ROLES = [

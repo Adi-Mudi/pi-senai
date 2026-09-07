@@ -4,7 +4,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { runSenaiDiagnostic } from "../../src/doctor/index.js";
-import { saveAgentConfig } from "../../src/agents/config.js";
+import { saveAgentConfig } from "../../src/core/agents-config/config.js";
 
 function makeTmpDir(prefix: string): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), prefix));

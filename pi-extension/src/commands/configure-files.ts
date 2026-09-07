@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { discoverProjectFiles } from "../agents/files-discovery.js";
-import { loadFilesConfig, saveFilesConfig, type FilesConfig } from "../agents/files-config.js";
+import { loadFilesConfig, saveFilesConfig, type FilesConfig } from "../core/agents-config/files-config.js";
 import { runListEditor, type ListEditorItem } from "../ui/list-editor.js";
 import { runSimplePicker } from "../ui/simple-picker.js";
 import {

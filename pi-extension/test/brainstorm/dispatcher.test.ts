@@ -12,7 +12,7 @@ import {
 	enforceReadOnlyTools,
 	FORBIDDEN_TOOLS,
 	READ_ONLY_ALLOWED_TOOLS,
-} from "../../src/agents/suggestions.js";
+} from "../../src/core/agents-config/suggestions.js";
 import { BRAINSTORM_DISPATCH_CAP, guardArtifactPath, guardDispatchCount } from "../../src/brainstorm/guard.js";
 
 const BRAINSTORM_RUN_ID = "2026-09-06-19-30-brainstorm-test";

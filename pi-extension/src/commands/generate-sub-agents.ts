@@ -4,8 +4,8 @@ import {
 	loadAgentConfig,
 	resolveAgentName,
 	saveAgentConfig,
-} from "../agents/config.js";
-import { DEFAULT_AGENTS, type SenaiRole } from "../agents/suggestions.js";
+} from "../core/agents-config/config.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "../core/agents-config/suggestions.js";
 import {
 	discoverTechnologyResources,
 	GENERATED_ROLES,
