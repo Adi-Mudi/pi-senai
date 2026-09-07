@@ -9,6 +9,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { getPackageAssetDir } from "../io/package-dir.js";
 
 /** Filename of the canonical agent body shipped with the extension. */
 export const WEB_RESEARCHER_BODY_FILENAME = "web-researcher-body.md";
@@ -17,18 +18,14 @@ export const WEB_RESEARCHER_BODY_FILENAME = "web-researcher-body.md";
  *  but does NOT copy the .md sibling, so we resolve via process.cwd()
  *  to the source tree (pi-extension/src/agents/...). */
 export function getWebResearcherBodyPath(): string {
-	const sourcePath = path.join(
-		process.cwd(),
+	// body lives at pi-extension/src/agents/<name>.md inside the package
+	return path.join(
+		getPackageAssetDir(),
 		"pi-extension",
 		"src",
 		"agents",
 		WEB_RESEARCHER_BODY_FILENAME,
 	);
-	if (fs.existsSync(sourcePath)) return sourcePath;
-	// Fallback: sibling of the compiled file (works when the .md is
-	// copied alongside, e.g. by a future build pipeline).
-	const here = path.dirname(new URL(import.meta.url).pathname);
-	return path.join(here, WEB_RESEARCHER_BODY_FILENAME);
 }
 
 export interface WebResearcherFrontmatter {

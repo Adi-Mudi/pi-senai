@@ -1,7 +1,6 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { createHash } from "node:crypto";
-import { fileURLToPath } from "node:url";
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 import {
   addToGeneratedManifest,
@@ -11,8 +10,7 @@ import {
 } from "../architect/index.js";
 import { getDocType, type DocTypeId } from "../docs-factory/catalog.js";
 import { atomicWriteFile } from "../io/atomic-write.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { getPackageAssetDir } from "../io/package-dir.js";
 
 export interface GeneratedRoleDef {
   role: string;
@@ -287,13 +285,8 @@ function hashFile(filePath: string): string | null {
 }
 
 export function getBundledTechnologiesDir(): string {
-  // resources/ is at repo root. From src/agents/generator.ts: up 3 levels in source
-  // layout (agents/ → src/ → repo root), up 4 levels in dist layout.
-  const sourceLayout = path.resolve(__dirname, "../../..", "resources", "technologies");
-  if (fs.existsSync(path.join(sourceLayout, "generic.md"))) {
-    return sourceLayout;
-  }
-  return path.resolve(__dirname, "../../../..", "resources", "technologies");
+  // resources/technologies/ sits at the package root (the parent of pi-extension/).
+  return path.resolve(getPackageAssetDir(), "resources", "technologies");
 }
 
 /** Locate the canonical body file for a GeneratedRoleDef.bodyFile entry.
@@ -303,9 +296,11 @@ export function getBundledTechnologiesDir(): string {
  *  Returns null when the file cannot be found — the caller falls back to
  *  the standard template body. */
 export function resolveBodyFilePath(bodyFile: string): string | null {
+  // bodyFile paths are relative to pi-extension/src/agents/ in the source
+  // layout. From the package root: pi-extension/src/agents/<bodyFile>.
+  const root = getPackageAssetDir();
   const candidates = [
-    path.resolve(__dirname, bodyFile),
-    path.resolve(process.cwd(), "pi-extension", "src", "agents", bodyFile),
+    path.resolve(root, "pi-extension", "src", "agents", bodyFile),
   ];
   for (const c of candidates) {
     if (fs.existsSync(c)) return c;

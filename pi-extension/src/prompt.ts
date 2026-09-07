@@ -1,6 +1,5 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { fileURLToPath } from "node:url";
 import { loadAgentConfig } from "./core/agents-config/config.js";
 import { buildAgentRegistryBlock } from "./agents/registry.js";
 import { SENAI_ROLES, ROLE_LABELS } from "./core/agents-config/suggestions.js";
@@ -13,10 +12,9 @@ import { loadFilesConfig, type FilesConfig } from "./core/agents-config/files-co
 import { getArtifactPaths, getDefaultArtifactPaths, type StageArtifactPaths } from "./core/paths.js";
 import { buildDocSelectionBlock } from "./docs-factory/selection.js";
 import { atomicWriteFile } from "./io/atomic-write.js";
+import { getPackageAssetDir } from "./io/package-dir.js";
 import { buildCadenceBlock, loadCadenceState } from "./implement/cadence.js";
 import type { SenaiState } from "./core/state.js";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export interface StageContext {
   mission: string;
@@ -26,10 +24,10 @@ export interface StageContext {
 }
 
 export function resolveSkillPath(stage: string): string {
-  // dist layout: dist/pi-extension/src -> repo root; source layout: pi-extension/src -> repo root
+  // package root is the parent of pi-extension/ in both dist and source layouts
+  const root = getPackageAssetDir();
   const candidates = [
-    path.resolve(__dirname, "../../..", "skills", `senai-${stage}.md`),
-    path.resolve(__dirname, "../..", "skills", `senai-${stage}.md`),
+    path.resolve(root, "skills", `senai-${stage}.md`),
   ];
   for (const candidate of candidates) {
     if (fs.existsSync(candidate)) return candidate;
