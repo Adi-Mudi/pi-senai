@@ -9,7 +9,7 @@ import {
 	parseWebResearcherFrontmatter,
 	WEB_RESEARCHER_BODY_FILENAME,
 } from "../../src/agents/web-researcher-loader.js";
-import { isBrainstormEligible } from "../../src/agents/suggestions.js";
+import { isBrainstormEligible } from "../../src/core/agents-config/suggestions.js";
 import { prepareDispatch } from "../../src/brainstorm/dispatcher.js";
 import { guardArtifactPath } from "../../src/brainstorm/guard.js";
 

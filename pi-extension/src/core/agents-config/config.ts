@@ -7,7 +7,7 @@ import {
   type SenaiRole,
   DEFAULT_AGENTS,
 } from "./suggestions.js";
-import { atomicWriteJson } from "../io/atomic-write.js";
+import { atomicWriteJson } from "../../io/atomic-write.js";
 
 export const CONFIG_DIR = ".pi/senai";
 export const CONFIG_FILE = "agents.json";

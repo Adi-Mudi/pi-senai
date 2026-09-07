@@ -15,14 +15,14 @@
  * Pure where possible; loadBrainstormRegistry is the only I/O entry point.
  */
 
-import { loadAgentConfig, type AgentConfig } from "../agents/config.js";
+import { loadAgentConfig, type AgentConfig } from "../core/agents-config/config.js";
 import { discoverAgents } from "../agents/discovery.js";
 import {
 	BRAINSTORM_ELIGIBLE_ROLES,
 	BRAINSTORM_ROLE_KEYWORDS,
 	DEFAULT_AGENTS,
 	type SenaiRole,
-} from "../agents/suggestions.js";
+} from "../core/agents-config/suggestions.js";
 
 /** One brainstorm-eligible agent, ready to be dispatched. */
 export interface BrainstormEligibleAgent {

@@ -10,8 +10,8 @@ import {
   saveFilesConfig,
   validateFilesConfig,
   FILES_CONFIG_COMMENT,
-} from "../../src/agents/files-config.js";
-import type { FilesConfig, FilesConfigV1 } from "../../src/agents/files-config.js";
+} from "../../src/core/agents-config/files-config.js";
+import type { FilesConfig, FilesConfigV1 } from "../../src/core/agents-config/files-config.js";
 
 function makeV2Config(overrides?: Partial<FilesConfig>): FilesConfig {
   return {

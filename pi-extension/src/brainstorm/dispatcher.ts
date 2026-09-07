@@ -29,7 +29,7 @@ import {
 	enforceReadOnlyTools,
 	isBrainstormEligible,
 	type SenaiRole,
-} from "../agents/suggestions.js";
+} from "../core/agents-config/suggestions.js";
 import {
 	guardArtifactPath,
 	guardDispatchCount,

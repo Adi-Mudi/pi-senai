@@ -9,16 +9,16 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import type { ExtensionContext } from "@mariozechner/pi-coding-agent";
-import { loadAgentConfig, validateMappedAgents } from "../agents/config.js";
+import { loadAgentConfig, validateMappedAgents } from "../core/agents-config/config.js";
 import {
 	loadAgentsFilesConfig,
 	validateAgentsFilesConfig,
 	type AgentsFilesConfig,
-} from "../agents/agents-files-config.js";
-import { loadFilesConfig, validateFilesConfig } from "../agents/files-config.js";
+} from "../core/agents-config/agents-files-config.js";
+import { loadFilesConfig, validateFilesConfig } from "../core/agents-config/files-config.js";
 import { getArtifactPaths } from "../core/paths.js";
 import type { SenaiState } from "../core/state.js";
-import { SENAI_ROLES, ROLE_LABELS } from "../agents/suggestions.js";
+import { SENAI_ROLES, ROLE_LABELS } from "../core/agents-config/suggestions.js";
 
 const REQUIRED_STAGE_FOR_MANUAL_COMMAND: Record<"planned" | "implemented" | "documented", SenaiState["currentStage"]> = {
 	planned: "planned",

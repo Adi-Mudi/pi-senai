@@ -10,7 +10,7 @@ import {
 	BRAINSTORM_ELIGIBLE_ROLES,
 	isBrainstormEligible,
 	type SenaiRole,
-} from "../../src/agents/suggestions.js";
+} from "../../src/core/agents-config/suggestions.js";
 
 /** Minimal in-memory registry for unit tests — bypasses loadBrainstormRegistry's
  *  filesystem dependency so we can test pure matching/rendering logic. */

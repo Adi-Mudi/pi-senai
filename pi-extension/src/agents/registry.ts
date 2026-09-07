@@ -1,5 +1,5 @@
-import type { AgentConfig } from "./config.js";
-import { SENAI_ROLES, DEFAULT_AGENTS, ROLE_LABELS } from "./suggestions.js";
+import type { AgentConfig } from "../core/agents-config/config.js";
+import { SENAI_ROLES, DEFAULT_AGENTS, ROLE_LABELS } from "../core/agents-config/suggestions.js";
 
 export function buildAgentRegistryBlock(config: AgentConfig | null): string {
   const lines = [

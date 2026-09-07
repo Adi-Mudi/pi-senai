@@ -10,8 +10,8 @@ import {
   recordSpawnArtifacts,
   resetCompletionGuard,
 } from "../src/hooks/completion-guard.js";
-import { saveAgentConfig } from "../src/agents/config.js";
-import { SENAI_ROLES, DEFAULT_AGENTS } from "../src/agents/suggestions.js";
+import { saveAgentConfig } from "../src/core/agents-config/config.js";
+import { SENAI_ROLES, DEFAULT_AGENTS } from "../src/core/agents-config/suggestions.js";
 import { defaultState, saveState } from "../src/core/state.js";
 import { runSenaiDiagnostic } from "../src/doctor/index.js";
 import { buildDocWritePlan, generateDocsStructure } from "../src/docs-factory/selection.js";

@@ -1,5 +1,5 @@
-import { loadAgentConfig } from "../agents/config.js";
-import { DEFAULT_AGENTS, SENAI_ROLES } from "../agents/suggestions.js";
+import { loadAgentConfig } from "../core/agents-config/config.js";
+import { DEFAULT_AGENTS, SENAI_ROLES } from "../core/agents-config/suggestions.js";
 import { loadState } from "../core/state.js";
 
 /** Tool calls that spawn or re-spawn subagents. */

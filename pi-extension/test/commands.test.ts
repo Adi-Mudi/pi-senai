@@ -27,9 +27,9 @@ import { loadState, startRun, advanceStage } from "../src/core/state.js";
 import type { SenaiState } from "../src/core/state.js";
 import type { Stage } from "../src/core/paths.js";
 import type { ExtensionContext, ExtensionAPI } from "@mariozechner/pi-coding-agent";
-import { saveAgentConfig, CONFIG_COMMENT } from "../src/agents/config.js";
-import { saveFilesConfig, loadFilesConfig, FILES_CONFIG_COMMENT } from "../src/agents/files-config.js";
-import { saveAgentsFilesConfig, loadAgentsFilesConfig, AGENTS_FILES_CONFIG_COMMENT } from "../src/agents/agents-files-config.js";
+import { saveAgentConfig, CONFIG_COMMENT } from "../src/core/agents-config/config.js";
+import { saveFilesConfig, loadFilesConfig, FILES_CONFIG_COMMENT } from "../src/core/agents-config/files-config.js";
+import { saveAgentsFilesConfig, loadAgentsFilesConfig, AGENTS_FILES_CONFIG_COMMENT } from "../src/core/agents-config/agents-files-config.js";
 import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,
@@ -37,7 +37,7 @@ import {
 } from "../src/architect/inputs-config.js";
 import { saveArchitectReport, slugify } from "../src/architect/index.js";
 import { resolveSkillPath } from "../src/prompt.js";
-import { DEFAULT_AGENTS, type SenaiRole } from "../src/agents/suggestions.js";
+import { DEFAULT_AGENTS, type SenaiRole } from "../src/core/agents-config/suggestions.js";
 
 describe("commands", () => {
   let tmpDir: string;
