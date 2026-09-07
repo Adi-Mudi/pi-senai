@@ -9,6 +9,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.7.2] - 2026-09-07
+
+### Added
+
+- **`core/agents-config/`** — new Layer 0 home for the Senai config domain. The 5 config files (`config.ts`, `files-config.ts`, `agents-files-config.ts`, `suggestions.ts`, `document-suggestions.ts`) plus the Layer-0 helpers extracted from `agents/discovery.ts` (`getUserAgentsDir`, types) and `agents/files-discovery.ts` (`looksLikeTestPath`, types) live here. Fixes the layer-ordering audit partial: Layer 1 (`doctor/`, `architect/`, `brainstorm/`) no longer imports from Layer 2 (`agents/`) for config data.
+- **`io/package-dir.ts`** — new `getPackageAssetDir()` helper. Replaces the 3 `__dirname` / `import.meta.url` call sites with one canonical dual-path resolver that handles both the dist layout (`dist/pi-extension/src/io/`) and the source layout (`pi-extension/src/io/`). Aligns with Pi's `docs/development.md:47` rule "Never use `__dirname` for package assets."
+
+### Changed
+
+- `agents/discovery.ts` and `agents/files-discovery.ts` now re-export the pure types and helpers from `core/agents-config/` (backwards compatible).
+- `agents/registry.ts` and `src/prompt.ts` updated to import from `core/agents-config/`.
+- 20 import sites in `architect/`, `brainstorm/`, `commands/`, `doctor/`, `hooks/`, `ui/`, and `src/` updated to point at the new Layer 0 location.
+- Test files updated to match (24 import sites in `test/`).
+
+### Notes
+
+- 0 new tests added (refactor only; behavior preserved by tests already in place).
+- 1654/1654 unit tests pass; 26/26 e2e suites pass.
+- v1.7.1 audit (sub-agent) went from 7/9 MATCH (2 PARTIAL) to 9/9 MATCH.
+- 3 commits: `core/agents-config/` move → `io/package-dir.ts` helper → `__dirname` replacement.
+
 ## [1.7.1] - 2026-09-07
 
 ### Added
