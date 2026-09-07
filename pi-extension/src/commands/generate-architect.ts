@@ -3,27 +3,53 @@ import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { loadDrivers } from "../architect/drivers.js";
 import {
 	areDriversStale,
+	createInputsConfigFromCodebase,
 	detectPiExtension,
 } from "../architect/index.js";
-import { loadArchitectInputsConfig, getSelectedInputPaths } from "../architect/inputs-config.js";
+import {
+	loadArchitectInputsConfig,
+	getSelectedInputPaths,
+	saveArchitectInputsConfig,
+} from "../architect/inputs-config.js";
 import { resolveSkillPath } from "../prompt.js";
 import { runSimpleConfirm } from "../ui/simple-picker.js";
+
+/** For Pi extension projects, auto-create a minimal architect-inputs.json
+ *  from the canonical preset + codebase discovery, so generation can
+ *  proceed without prompting the user. Returns the created config, or null
+ *  if the project is not a Pi extension (or detection failed).
+ *  No-op if inputs already exist. */
+export function maybeAutoCreatePiExtensionInputs(cwd: string) {
+	if (loadArchitectInputsConfig(cwd)) return null;
+	let detection;
+	try {
+		detection = detectPiExtension(cwd, null, null);
+	} catch {
+		return null;
+	}
+	if (!detection?.isPiExtension) return null;
+
+	const discovery = createInputsConfigFromCodebase(cwd);
+	const config: NonNullable<ReturnType<typeof loadArchitectInputsConfig>> = {
+		version: 1,
+		documents: [],
+		additionalConstraints: discovery.config.additionalConstraints,
+	};
+	saveArchitectInputsConfig(cwd, config);
+	return config;
+}
 
 export function registerArchitectCommand(pi: ExtensionAPI) {
 	pi.registerCommand("senai-generate-architect", {
 		description: "Generate a project-specific architecture agent and skills",
 		handler: async (_args, ctx) => {
-			const inputsConfig = loadArchitectInputsConfig(ctx.cwd);
+			let inputsConfig = loadArchitectInputsConfig(ctx.cwd);
 			if (!inputsConfig) {
-				let detection;
-				try {
-					detection = detectPiExtension(ctx.cwd, null, null);
-				} catch {
-					detection = null;
-				}
-				if (detection?.isPiExtension) {
+				const created = maybeAutoCreatePiExtensionInputs(ctx.cwd);
+				if (created) {
+					inputsConfig = created;
 					ctx.ui.notify(
-						"No architect-inputs.json found, but this looks like a Pi extension project.\n\nRecommended: run /senai-suggest-architect — it picks the right architecture from the library by asking 4 project questions, no input docs required.\n\nOther options:\n  /senai-configure-architect-inputs — pick documents manually (existing flow)",
+						"Detected Pi extension project — auto-created architect-inputs.json from canonical preset.",
 						"info",
 					);
 				} else {
@@ -31,8 +57,8 @@ export function registerArchitectCommand(pi: ExtensionAPI) {
 						"No architect inputs configured. Run /senai-configure-architect-inputs first.",
 						"warning",
 					);
+					return;
 				}
-				return;
 			}
 
 			const skillPath = resolveSkillPath("generate-architect");

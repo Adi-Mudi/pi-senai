@@ -4,8 +4,8 @@ import { createHash } from "node:crypto";
 
 import { parseFrontmatter } from "@mariozechner/pi-coding-agent";
 
-import { resolveAgentName, type AgentConfig } from "../agents/config.js";
-import { type SenaiRole } from "../agents/suggestions.js";
+import { resolveAgentName, type AgentConfig } from "../core/agents-config/config.js";
+import { type SenaiRole } from "../core/agents-config/suggestions.js";
 import {
   GENERATED_ROLES,
   GENERATOR_VERSION,

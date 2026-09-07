@@ -9,6 +9,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+## [1.7.2] - 2026-09-07
+
+### Added
+
+- **`core/agents-config/`** — new Layer 0 home for the Senai config domain. The 5 config files (`config.ts`, `files-config.ts`, `agents-files-config.ts`, `suggestions.ts`, `document-suggestions.ts`) plus the Layer-0 helpers extracted from `agents/discovery.ts` (`getUserAgentsDir`, types) and `agents/files-discovery.ts` (`looksLikeTestPath`, types) live here. Fixes the layer-ordering audit partial: Layer 1 (`doctor/`, `architect/`, `brainstorm/`) no longer imports from Layer 2 (`agents/`) for config data.
+- **`io/package-dir.ts`** — new `getPackageAssetDir()` helper. Replaces the 3 `__dirname` / `import.meta.url` call sites with one canonical dual-path resolver that handles both the dist layout (`dist/pi-extension/src/io/`) and the source layout (`pi-extension/src/io/`). Aligns with Pi's `docs/development.md:47` rule "Never use `__dirname` for package assets."
+
+### Changed
+
+- `agents/discovery.ts` and `agents/files-discovery.ts` now re-export the pure types and helpers from `core/agents-config/` (backwards compatible).
+- `agents/registry.ts` and `src/prompt.ts` updated to import from `core/agents-config/`.
+- 20 import sites in `architect/`, `brainstorm/`, `commands/`, `doctor/`, `hooks/`, `ui/`, and `src/` updated to point at the new Layer 0 location.
+- Test files updated to match (24 import sites in `test/`).
+
+### Notes
+
+- 0 new tests added (refactor only; behavior preserved by tests already in place).
+- 1654/1654 unit tests pass; 26/26 e2e suites pass.
+- v1.7.1 audit (sub-agent) went from 7/9 MATCH (2 PARTIAL) to 9/9 MATCH.
+- 3 commits: `core/agents-config/` move → `io/package-dir.ts` helper → `__dirname` replacement.
+
+## [1.7.1] - 2026-09-07
+
+### Added
+
+- **Pi extension auto-path for `/senai-suggest-architect`**: when the project is detected as a Pi extension (via `detectPiExtension`), the command skips all 4 lifestyle questions and uses the canonical `PI_EXTENSION_PRESET` answers. The result is **1 dialog instead of 8** for Pi extension projects. Non-Pi projects keep the existing 4-question flow.
+- **Pi extension auto-path for `/senai-generate-architect`**: when no `.pi/senai/architect-inputs.json` exists AND the project is a Pi extension, the command auto-creates the file from the canonical preset + codebase discovery (no dialog). The previous notify-and-return behaviour is replaced by an auto-create-and-continue flow.
+- **`PI_EXTENSION_PRESET` and `isPiExtensionPreset`** in `library-suggester.ts`: single source of truth for the canonical Pi extension answer set.
+- **`maybeAutoCreatePiExtensionInputs(cwd)`** in `generate-architect.ts`: pure helper that returns the created config or `null`. Used by the handler and by the new test.
+- **`src/layers.ts`**: documents the 4-layer architecture (domain → stage logic → presentation → composition) in code, matching Pi's own `core → modes → cli → main` pattern.
+- **`src/AGENTS.md`**: layer contract for future contributors. Lists the dependency rule, the two composition roots (`src/index.ts` wiring only, `src/commands/index.ts` command registration), and file conventions.
+
+### Changed
+
+- **`pi-extension/src/architect/index.ts` slimmed to a thin barrel** (~100 lines, re-exports only). The previous 1234-line god module is split into 13 per-concern files: `profile.ts`, `report.ts`, `manifest.ts`, `library-scan.ts`, `library-select.ts`, `cleanup.ts`, `generate-agents.ts`, `generate-skills.ts`, `generate-docs.ts`, `prompt.ts`, `feasibility.ts`, `diagram.ts`, `helpers.ts`. One concern per file, matching the pattern from Pi's `extensions.md` and the community reference (`tintinweb/pi-subagents` and `rytswd/pi-agent-extensions`).
+- Bug fix: `buildSequenceMermaid` now emits the correct mermaid reply arrow (`-->>`) instead of the malformed (`--->`).
+
+### Notes
+
+- 6 new unit tests added. 1654/1654 unit tests pass; 26/26 e2e suites pass (matches baseline). All changes shipped via 5 separate commits on the `dev` branch.
+
 ## [1.7.0] - 2026-09-06
 
 ### Added

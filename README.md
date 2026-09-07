@@ -64,7 +64,7 @@ Run these commands in order. The generate commands create your sub-agent team an
    /senai-configure-agents-files
    ```
 
-   **Alternative to step 3** — if you don't have PRD/NFR documents and just want to pick an architecture from the library, use `/senai-suggest-architect`. It asks 4 project questions (purpose, scale, deployment, real-time), shows the top 3 matches from the 36-entry library with rationale, and runs the factory with your chosen architecture. No input docs needed. The doctor also points to this command for Pi extension projects.
+   **Alternative to step 3** — if you don't have PRD/NFR documents and just want to pick an architecture from the library, use `/senai-suggest-architect`. For **Pi extension projects** it auto-detects and skips all questions (1 dialog total). For other projects, it asks 4 project questions (purpose, scale, deployment, real-time), shows the top 3 matches from the 36-entry library with rationale, and runs the factory with your chosen architecture. No input docs needed. The doctor also points to this command for Pi extension projects.
 
 Optionally, create the documentation skeleton up front — otherwise the Document stage will ask for it when it runs:
 

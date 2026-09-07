@@ -10,8 +10,8 @@ import {
   saveAgentsFilesConfig,
   validateAgentsFilesConfig,
   AGENTS_FILES_CONFIG_COMMENT,
-} from "../../src/agents/agents-files-config.js";
-import type { AgentsFilesConfig } from "../../src/agents/agents-files-config.js";
+} from "../../src/core/agents-config/agents-files-config.js";
+import type { AgentsFilesConfig } from "../../src/core/agents-config/agents-files-config.js";
 
 describe("agents-files-config", () => {
   it("getAgentsFilesConfigPath returns correct path", () => {

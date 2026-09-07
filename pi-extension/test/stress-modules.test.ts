@@ -8,17 +8,17 @@ import { performance } from "node:perf_hooks";
 import { discoverProjectFiles, isExcluded } from "../src/agents/files-discovery.js";
 import { discoverAgents, parseAgentFile } from "../src/agents/discovery.js";
 import { defaultState, loadState, saveState } from "../src/core/state.js";
-import { loadAgentConfig, saveAgentConfig } from "../src/agents/config.js";
+import { loadAgentConfig, saveAgentConfig } from "../src/core/agents-config/config.js";
 import {
   loadFilesConfig,
   saveFilesConfig,
   type FilesConfig,
-} from "../src/agents/files-config.js";
+} from "../src/core/agents-config/files-config.js";
 import {
   loadAgentsFilesConfig,
   saveAgentsFilesConfig,
   type AgentsFilesConfig,
-} from "../src/agents/agents-files-config.js";
+} from "../src/core/agents-config/agents-files-config.js";
 import {
   loadArchitectInputsConfig,
   saveArchitectInputsConfig,

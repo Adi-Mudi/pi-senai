@@ -1,6 +1,6 @@
-import { loadAgentConfig, type AgentConfig } from "../agents/config.js";
-import { loadFilesConfig, type FilesConfig } from "../agents/files-config.js";
-import { loadAgentsFilesConfig, type AgentsFilesConfig } from "../agents/agents-files-config.js";
+import { loadAgentConfig, type AgentConfig } from "../core/agents-config/config.js";
+import { loadFilesConfig, type FilesConfig } from "../core/agents-config/files-config.js";
+import { loadAgentsFilesConfig, type AgentsFilesConfig } from "../core/agents-config/agents-files-config.js";
 
 import { type DiagnosticSection, type DiagnosticReport } from "./_types.js";
 

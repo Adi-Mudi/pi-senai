@@ -4,11 +4,11 @@ import { parseFrontmatter, getAgentDir } from "@mariozechner/pi-coding-agent";
 
 import { loadArchitectInputsConfig } from "../architect/inputs-config.js";
 import { GENERATED_ROLES, getBundledTechnologiesDir } from "../agents/generator.js";
-import { ROLE_LABELS } from "../agents/suggestions.js";
+import { ROLE_LABELS } from "../core/agents-config/suggestions.js";
 
 import type { ResolvedAgent } from "./_types.js";
 import { KNOWN_TOOL_NAMES, MANDATE_STOPWORDS } from "./_types.js";
-import type { SenaiRole } from "../agents/suggestions.js";
+import type { SenaiRole } from "../core/agents-config/suggestions.js";
 
 /** True if the file is missing or zero bytes. */
 export function artifactMissing(filePath: string): boolean {

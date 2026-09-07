@@ -5,9 +5,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
 import { loadSkill, buildStagePrompt, resolveSkillPath, substituteArtifactPaths } from "../src/prompt.js";
-import { saveAgentConfig } from "../src/agents/config.js";
-import { saveFilesConfig } from "../src/agents/files-config.js";
-import { saveAgentsFilesConfig } from "../src/agents/agents-files-config.js";
+import { saveAgentConfig } from "../src/core/agents-config/config.js";
+import { saveFilesConfig } from "../src/core/agents-config/files-config.js";
+import { saveAgentsFilesConfig } from "../src/core/agents-config/agents-files-config.js";
 import type { SenaiState } from "../src/core/state.js";
 
 describe("prompt", () => {

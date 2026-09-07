@@ -40,7 +40,7 @@ npm test
 
 ## Project structure
 
-The extension source lives in `pi-extension/src/` organized as **layered folders** that mirror Pi's own `packages/ai → agent-core → coding-agent` model. The flat layout of the early codebase was replaced by a folder structure in the `architecture-upgrade` branch.
+The extension source lives in `pi-extension/src/` organized as **layered folders** that mirror Pi's own `packages/ai → agent-core → coding-agent` model. The flat layout of the early codebase was replaced by a folder structure in the `architecture-upgrade` branch. For the per-folder layer contract, dependency rules, and how to add new code, see [`pi-extension/src/AGENTS.md`](pi-extension/src/AGENTS.md) and [`pi-extension/src/layers.ts`](pi-extension/src/layers.ts).
 
 ```text
 pi-extension/src/

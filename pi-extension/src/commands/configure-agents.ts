@@ -1,7 +1,7 @@
 import type { ExtensionAPI } from "@mariozechner/pi-coding-agent";
 import { discoverAgents } from "../agents/discovery.js";
-import { buildSuggestionMap, DEFAULT_AGENTS, ROLE_LABELS, SENAI_ROLES, type SenaiRole } from "../agents/suggestions.js";
-import { loadAgentConfig, saveAgentConfig, validateMappedAgents } from "../agents/config.js";
+import { buildSuggestionMap, DEFAULT_AGENTS, ROLE_LABELS, SENAI_ROLES, type SenaiRole } from "../core/agents-config/suggestions.js";
+import { loadAgentConfig, saveAgentConfig, validateMappedAgents } from "../core/agents-config/config.js";
 import { runRolePicker, type RolePickerItem } from "../ui/role-picker.js";
 import { runSimplePicker, type SimplePickerItem } from "../ui/simple-picker.js";
 

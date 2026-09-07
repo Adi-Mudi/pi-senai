@@ -18,7 +18,7 @@ import {
   type ArchitectureLibraryEntry,
 } from "./index.js";
 import { getArchitectMapDir, getArchitectStateDir } from "../core/paths.js";
-import { loadAgentConfig } from "../agents/config.js";
+import { loadAgentConfig } from "../core/agents-config/config.js";
 import { atomicWriteJson } from "../io/atomic-write.js";
 import {
   DOCUMENT_MANIFEST_FILE,

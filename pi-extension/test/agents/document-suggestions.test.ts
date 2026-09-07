@@ -3,10 +3,10 @@ import assert from "node:assert";
 import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { suggestTruthDocuments, roleDocumentNeed } from "../../src/agents/document-suggestions.js";
-import { SENAI_ROLES } from "../../src/agents/suggestions.js";
+import { suggestTruthDocuments, roleDocumentNeed } from "../../src/core/agents-config/document-suggestions.js";
+import { SENAI_ROLES } from "../../src/core/agents-config/suggestions.js";
 import { saveArchitectInputsConfig } from "../../src/architect/inputs-config.js";
-import { saveFilesConfig } from "../../src/agents/files-config.js";
+import { saveFilesConfig } from "../../src/core/agents-config/files-config.js";
 
 function makeTmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), "doc-suggest-"));

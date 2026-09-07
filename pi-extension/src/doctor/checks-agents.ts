@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 
-import { resolveAgentName, type AgentConfig } from "../agents/config.js";
+import { resolveAgentName, type AgentConfig } from "../core/agents-config/config.js";
 import {
 	findNearestProjectAgentsDir,
 	getUserAgentsDir,
@@ -12,7 +12,7 @@ import {
 	ROLE_LABELS,
 	SENAI_ROLES,
 	type SenaiRole,
-} from "../agents/suggestions.js";
+} from "../core/agents-config/suggestions.js";
 
 import {
 	BUILTIN_AGENT_NAMES,

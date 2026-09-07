@@ -140,3 +140,22 @@ export const ALL_PROJECT_ANSWERS_KEYS: ReadonlyArray<keyof ProjectAnswers> = [
 	"deployment",
 	"realtime",
 ];
+
+/** Canonical answers for Pi extension projects.
+ *  Used by /senai-suggest-architect and /senai-generate-architect to skip
+ *  the 4 user questions when the project is detected as a Pi extension. */
+export const PI_EXTENSION_PRESET: ProjectAnswers = {
+	purpose: "extension",
+	scale: "small-team",
+	deployment: "local",
+	realtime: "no",
+};
+
+export function isPiExtensionPreset(answers: ProjectAnswers): boolean {
+	return (
+		answers.purpose === PI_EXTENSION_PRESET.purpose &&
+		answers.scale === PI_EXTENSION_PRESET.scale &&
+		answers.deployment === PI_EXTENSION_PRESET.deployment &&
+		answers.realtime === PI_EXTENSION_PRESET.realtime
+	);
+}

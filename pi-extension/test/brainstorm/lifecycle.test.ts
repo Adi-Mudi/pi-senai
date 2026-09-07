@@ -54,10 +54,10 @@ import {
 import { registerBrainstormCommands } from "../../src/commands/brainstorm.js";
 import { registerPlanCommand } from "../../src/commands/stage-commands.js";
 import { registerCommands } from "../../src/commands/index.js";
-import { saveAgentConfig } from "../../src/agents/config.js";
-import { saveFilesConfig } from "../../src/agents/files-config.js";
-import { saveAgentsFilesConfig } from "../../src/agents/agents-files-config.js";
-import { DEFAULT_AGENTS } from "../../src/agents/suggestions.js";
+import { saveAgentConfig } from "../../src/core/agents-config/config.js";
+import { saveFilesConfig } from "../../src/core/agents-config/files-config.js";
+import { saveAgentsFilesConfig } from "../../src/core/agents-config/agents-files-config.js";
+import { DEFAULT_AGENTS } from "../../src/core/agents-config/suggestions.js";
 
 interface TestHarness {
 	tmpDir: string;

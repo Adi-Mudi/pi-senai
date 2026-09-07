@@ -1,6 +1,6 @@
 import type { ExtensionAPI, ExtensionContext } from "@mariozechner/pi-coding-agent";
 import { discoverProjectFiles } from "../agents/files-discovery.js";
-import { loadFilesConfig } from "../agents/files-config.js";
+import { loadFilesConfig } from "../core/agents-config/files-config.js";
 import {
 	createDefaultArchitectInputsConfig,
 	loadArchitectInputsConfig,
