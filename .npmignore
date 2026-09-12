@@ -1,0 +1,29 @@
+# npm-specific exclusions (defense in depth alongside the 'files' field in
+# package.json). Anything matched here is excluded from the published tarball.
+# Keep this list in sync with .gitignore for source-only artifacts.
+
+# Source files (only dist/ ships)
+pi-extension/
+index.ts
+tsconfig.json
+
+# Dev / local
+node_modules/
+*.log
+.DS_Store
+.IDE_Plans/
+.pi/senai
+.pi/tasks
+.vscode/
+
+# Session / debug artifacts
+*.html
+Context.png
+Sub_agent_relaunch.png
+Sug_agent_report_missing.png
+
+# Git + CI
+.git/
+.github/
+.gitignore
+.npmignore

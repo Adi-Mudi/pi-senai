@@ -1,0 +1,29 @@
+{
+	"name": "@scope/my-pi-extension",
+	"version": "0.1.0",
+	"description": "A Pi extension that does X",
+	"type": "module",
+	"license": "MIT",
+	"keywords": [
+		"pi-package",
+		"pi-extension"
+	],
+	"scripts": {
+		"build": "tsc",
+		"prepare": "npm run build",
+		"test": "npm run build && node --test $(find dist/test -name '*.test.js')"
+	},
+	"pi": {
+		"extensions": [
+			"./dist/index.js"
+		]
+	},
+	"peerDependencies": {
+		"@mariozechner/pi-coding-agent": "*",
+		"@sinclair/typebox": "*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"typescript": "^5.4.0"
+	}
+}

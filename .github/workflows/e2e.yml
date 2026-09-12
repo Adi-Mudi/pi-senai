@@ -1,0 +1,128 @@
+name: e2e
+
+on:
+  pull_request:
+    branches: [development, senai-discussion]
+  push:
+    branches: [development]
+  schedule:
+    # Nightly at 06:00 UTC. Tier 2 only — Tier 1 already runs on every PR.
+    - cron: "0 6 * * *"
+  workflow_dispatch:
+    inputs:
+      tier2:
+        description: "Run Tier 2 (real LLM, slower, costs API credits)"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  tier1:
+    name: Tier 1 E2E (no LLM)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Install pi
+        run: npm install -g @mariozechner/pi-coding-agent@0.84.3
+
+      - name: Verify pi is reachable
+        run: pi --version
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Tier 1 E2E
+        # A dummy key keeps pi happy at startup; the Tier 1 tests don't
+        # actually call any LLM. Tests that would skip gracefully when
+        # the pi 0.84.3 RPC prompt-handler bug is present (per
+        # helpers/rpc-client.ts:isPiRpcPromptBug) do so via t.skip().
+        run: RUN_E2E=1 npm run test:e2e
+        env:
+          ANTHROPIC_API_KEY: "sk-ant-e2e-dummy-not-used"
+
+      - name: Upload doctor report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctor-report
+          path: |
+            .IDE_Plans/senai/doctor-report.md
+            .IDE_Plans/senai/lock-info.log
+
+  tier2:
+    name: Tier 2 E2E (real LLM)
+    # Only run on nightly schedule, manual dispatch with tier2=true, or
+    # when the PR carries the `e2e:llm` label. Never on every push.
+    if: |
+      github.event_name == 'schedule' ||
+      (github.event_name == 'workflow_dispatch' && inputs.tier2) ||
+      (github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'e2e:llm'))
+    needs: tier1
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        provider: [anthropic]
+        # Haiku is the cheapest model that reliably handles scout/reviewer
+        # prompts. Bigger models blow the $0.50-per-run budget.
+        model: [claude-haiku-4-5]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build TypeScript
+        run: npm run build
+
+      - name: Install pi
+        run: npm install -g @mariozechner/pi-coding-agent@0.84.3
+
+      - name: Tier 2 E2E
+        run: RUN_LLM_E2E=1 npm run test:e2e:tier2
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PI_PROVIDER: ${{ matrix.provider }}
+          PI_MODEL: ${{ matrix.model }}
+
+      - name: Upload run artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: tier2-failures-${{ matrix.provider }}-${{ matrix.model }}
+          path: |
+            .IDE_Plans/senai/runs/
+            .IDE_Plans/senai/spawn-cadence.json
+
+      - name: Notify on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1
+        with:
+          payload: |
+            {
+              "text": ":alert: pi-senai Tier 2 E2E failed on ${{ github.workflow }} (${{ github.run_id }}). See the workflow run for details: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+            }
+          env:
+            SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        continue-on-error: true

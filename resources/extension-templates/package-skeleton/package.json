@@ -1,0 +1,40 @@
+{
+	"name": "@scope/my-pi-package",
+	"version": "0.1.0",
+	"description": "A Pi package bundling extensions, skills, prompts, or themes",
+	"type": "module",
+	"license": "MIT",
+	"keywords": [
+		"pi-package"
+	],
+	"scripts": {
+		"build": "tsc",
+		"prepare": "npm run build",
+		"test": "npm run build && node --test $(find dist/test -name '*.test.js')"
+	},
+	"pi": {
+		"extensions": [
+			"./dist/index.js"
+		],
+		"skills": [
+			"./skills"
+		],
+		"prompts": [
+			"./prompts"
+		],
+		"themes": [
+			"./themes"
+		]
+	},
+	"peerDependencies": {
+		"@mariozechner/pi-coding-agent": "*",
+		"@mariozechner/pi-ai": "*",
+		"@mariozechner/pi-agent-core": "*",
+		"@mariozechner/pi-tui": "*",
+		"@sinclair/typebox": "*"
+	},
+	"devDependencies": {
+		"@types/node": "^22.0.0",
+		"typescript": "^5.4.0"
+	}
+}
